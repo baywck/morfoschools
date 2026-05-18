@@ -117,7 +117,7 @@ export default function TenantsPage() {
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
             <div className="divide-y divide-[var(--border)]">
               {tenants.map((t) => (
-                <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--muted)]/50 transition-colors">
+                <div key={t.id} className="flex items-center gap-3 px-3 py-3 hover:bg-[var(--muted)]/50 transition-colors">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)]">
                     <Building2 size={16} />
                   </div>

@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Moon, Sun, LogOut, ChevronDown } from "lucide-react";
+import { Moon, Sun, LogOut, ChevronDown, Home as HomeIcon } from "lucide-react";
 import { useTheme } from "@/lib/use-theme";
 import { useAuth } from "@/lib/auth-provider";
 import { cn } from "@/lib/cn";
@@ -55,7 +55,10 @@ export function Topbar() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href="/app">Morfoschools</BreadcrumbLink>
+              <BreadcrumbLink href="/app">
+                <HomeIcon size={14} />
+                <span className="sr-only">Home</span>
+              </BreadcrumbLink>
             </BreadcrumbItem>
             {displaySegments.map((segment, index) => (
               <span key={segment} className="contents">
