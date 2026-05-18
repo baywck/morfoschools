@@ -8,7 +8,7 @@ export function Topbar() {
   const { dark, toggle } = useTheme();
 
   return (
-    <header className="flex h-[var(--header-height)] items-center gap-3 px-5 md:pl-3 md:pr-4">
+    <header className="flex h-[var(--header-height)] items-center gap-3 px-5">
       {/* Left — title/breadcrumb area */}
       <div className="min-w-0 flex-1">
         <span className="text-[13px] font-semibold text-[var(--shell-foreground)]">
