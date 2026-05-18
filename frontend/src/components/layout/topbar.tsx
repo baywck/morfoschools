@@ -1,32 +1,40 @@
-// Morfosis — Topbar (dark shell area: breadcrumb + search + theme)
+// Morfosis — Topbar (dark shell: logo + user button)
 "use client";
 
-import { Search, Moon, Sun } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Moon, Sun, LogOut, ChevronDown } from "lucide-react";
 import { useTheme } from "@/lib/use-theme";
+import { useAuth } from "@/lib/auth-provider";
+import { cn } from "@/lib/cn";
 
 export function Topbar() {
   const { dark, toggle } = useTheme();
+  const { session, logout } = useAuth();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   return (
-    <header className="flex h-[var(--header-height)] items-center gap-3 pl-1 pr-5">
-      {/* Left — title/breadcrumb area */}
-      <div className="min-w-0 flex-1">
-        <span className="text-[13px] font-semibold text-[var(--shell-foreground)]">
+    <header className="flex h-[var(--header-height)] items-center gap-3 pl-2 pr-4">
+      {/* Left — Logo */}
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <img src="/logo.png" alt="Morfoschools" className="h-6 w-6 md:hidden" />
+        <span className="text-[13px] font-semibold text-[var(--shell-foreground)] hidden md:inline">
           Morfoschools
         </span>
       </div>
 
-      {/* Actions */}
+      {/* Right — actions */}
       <div className="flex items-center gap-1.5">
-        {/* Search */}
-        <button className="flex h-8 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-[12px] text-[var(--shell-muted)] hover:bg-white/[0.1] hover:text-[var(--shell-foreground)] transition-all">
-          <Search size={13} strokeWidth={2} />
-          <span className="hidden sm:inline">Search...</span>
-          <kbd className="hidden sm:inline-flex h-[18px] items-center rounded border border-white/10 bg-white/[0.06] px-1 text-[10px] font-medium ml-2">
-            ⌘K
-          </kbd>
-        </button>
-
         {/* Theme toggle */}
         <button
           onClick={toggle}
@@ -35,6 +43,54 @@ export function Topbar() {
         >
           {dark ? <Sun size={14} strokeWidth={2} /> : <Moon size={14} strokeWidth={2} />}
         </button>
+
+        {/* User button */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setDropdownOpen((v) => !v)}
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.06] transition-colors"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-[var(--shell-foreground)]">
+              {session?.user.displayName?.charAt(0) || "?"}
+            </div>
+            <span className="hidden sm:inline text-[12px] font-medium text-[var(--shell-foreground)]">
+              {session?.user.displayName}
+            </span>
+            <ChevronDown
+              size={12}
+              className={cn(
+                "text-[var(--shell-muted)] transition-transform hidden sm:inline",
+                dropdownOpen && "rotate-180"
+              )}
+            />
+          </button>
+
+          {/* Dropdown */}
+          {dropdownOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg z-50">
+              {/* User info */}
+              <div className="px-3 py-2.5 border-b border-[var(--border)]">
+                <p className="text-[12px] font-medium text-[var(--foreground)]">
+                  {session?.user.displayName}
+                </p>
+                <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">
+                  {session?.user.email}
+                </p>
+              </div>
+
+              {/* Logout */}
+              <div className="pt-1">
+                <button
+                  onClick={() => { logout(); setDropdownOpen(false); }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[11px] font-medium text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors"
+                >
+                  <LogOut size={13} />
+                  Log out
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
