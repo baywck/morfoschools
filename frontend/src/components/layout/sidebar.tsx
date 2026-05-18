@@ -23,7 +23,7 @@ export function Sidebar({ navigation, brand }: SidebarProps) {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-width)] flex-col items-center bg-[var(--shell)] px-2.5 py-4 md:flex">
       {/* Brand */}
-      <Link href="/app" className="mb-6 -mt-1" aria-label="Home">
+      <Link href="/app" className="mb-6" aria-label="Home">
         {brand || (
           <img src="/logo.png" alt="Morfoschools" className="h-7 w-7" />
         )}

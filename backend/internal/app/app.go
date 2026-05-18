@@ -54,6 +54,9 @@ func (a *App) Handler() http.Handler {
 	// Auth routes
 	a.registerAuthRoutes(mux)
 
+	// Tenant switch
+	mux.HandleFunc("POST /api/v1/tenants/switch", a.SwitchTenant)
+
 	return a.applyMiddleware(mux)
 }
 
