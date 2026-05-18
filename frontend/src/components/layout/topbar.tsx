@@ -26,7 +26,7 @@ export function Topbar() {
   const roleLabel = session?.roles?.[0]?.replace("_", " ") || "User";
 
   return (
-    <header className="flex h-[var(--header-height)] items-center gap-3 px-4">
+    <header className="flex h-[var(--header-height)] items-center gap-3 px-4 pl-1">
       {/* Left — Logo */}
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <img src="/logo.png" alt="Morfoschools" className="h-6 w-6 md:hidden" />
