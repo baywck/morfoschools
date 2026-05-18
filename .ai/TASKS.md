@@ -1,20 +1,13 @@
 # Tasks — Morfoschools
 
-## Current Phase: Phase 0 — Project Scaffold
+## Current Phase: Phase 4 — Backend Architecture Patterns
 
 ### Active
-- [x] Create .ai/ directory structure
-- [x] Write CONTEXT.md (domain glossary)
-- [x] Write PROJECT_MEMORY.md (stack, conventions, decisions)
-- [ ] Write TASKS.md (this file)
-- [ ] Write ADRs for critical decisions
-- [ ] Create AGENTS.md at project root
-- [ ] Scaffold Docker Compose
-- [ ] Scaffold Go backend skeleton
-- [ ] Scaffold Next.js frontend skeleton
-- [ ] Verify `docker compose up` boots all services
-- [ ] Verify backend `/healthz` and `/readyz`
-- [ ] Verify frontend dev server boots
+- [ ] Middleware stack completion (tenant resolution, RBAC authorization)
+- [ ] Standard pagination/filter/sort pattern
+- [ ] Test helpers (auth, tenant, RBAC, DB, handlers)
+- [ ] OpenAPI documentation convention
+- [ ] AI Tool Manifest convention
 
 ## Backlog
 
@@ -127,4 +120,7 @@
 - [ ] Memory (tenant-scoped, redacted)
 
 ## Completed
-- [x] Phase 0: .ai/ memory files (CONTEXT.md, PROJECT_MEMORY.md, TASKS.md)
+- [x] Phase 0: .ai/ memory files, ADRs, AGENTS.md, standards
+- [x] Phase 1: Docker Compose (6 services), migrations (6), backend skeleton, frontend skeleton
+- [x] Phase 2: Auth/login/RBAC/session/CSRF, dev seed (7 users, roles, permissions)
+- [x] Phase 3: Frontend shell (sidebar, header, auth guard), login page, base components (Button, InputField, Toast, Skeleton), API client
