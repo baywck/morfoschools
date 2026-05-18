@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { MoreVertical } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -17,29 +18,47 @@ interface RowActionsProps {
 
 export function RowActions({ actions }: RowActionsProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (btnRef.current && btnRef.current.contains(e.target as Node)) return;
+      setOpen(false);
     }
+    function handleScroll() { setOpen(false); }
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+    document.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [open]);
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 4, left: rect.right - 160 });
+    }
+    setOpen((v) => !v);
+  }
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={btnRef}
+        onClick={toggle}
         className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
       >
         <MoreVertical size={15} />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1 w-40 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg z-50">
+      {open && pos && typeof document !== "undefined" && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
+          className="w-40 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg"
+        >
           {actions.map((action, i) => (
             <button
               key={i}
@@ -55,8 +74,9 @@ export function RowActions({ actions }: RowActionsProps) {
               {action.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
