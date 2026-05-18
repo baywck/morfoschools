@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
-import { listUsers, createUser, updateUser, archiveUser, listRoles, type User, type Role } from "@/lib/modules-api";
+import { listUsers, createUser, updateUser, archiveUser, type User } from "@/lib/modules-api";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,10 +13,9 @@ import { PageShell } from "@/components/layout/page-shell";
 import { Plus, Trash2, Pencil, Users, Mail, Lock, User as UserIcon, Shield } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export default function UsersPage() {
+export default function AdminPage() {
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -24,7 +23,7 @@ export default function UsersPage() {
   // Create
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState({ email: "", displayName: "", password: "", roleSlug: "" });
+  const [createForm, setCreateForm] = useState({ email: "", displayName: "", password: "" });
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
 
   // Edit
@@ -39,16 +38,12 @@ export default function UsersPage() {
 
   async function load() {
     setLoading(true);
-    const [usersRes, rolesRes] = await Promise.all([
-      listUsers({ search: search || undefined }),
-      listRoles(),
+    const [usersRes] = await Promise.all([
+      listUsers({ search: search || undefined })
     ]);
     if (usersRes.data) {
       setUsers(usersRes.data.data);
       setTotal(usersRes.data.pagination.total);
-    }
-    if (rolesRes.data) {
-      setRoles(rolesRes.data.data);
     }
     setLoading(false);
   }
@@ -59,16 +54,16 @@ export default function UsersPage() {
     e.preventDefault();
     setCreateErrors({});
     setCreating(true);
-    const res = await createUser(createForm);
+    const res = await createUser({ ...createForm, roleSlug: "school_admin" });
     if (res.error) {
       if (res.error.fields) setCreateErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
       setCreating(false);
       return;
     }
-    toast({ tone: "success", title: "User created" });
+    toast({ tone: "success", title: "Admin created" });
     setShowCreate(false);
-    setCreateForm({ email: "", displayName: "", password: "", roleSlug: "" });
+    setCreateForm({ email: "", displayName: "", password: "" });
     setCreating(false);
     load();
   }
@@ -91,7 +86,7 @@ export default function UsersPage() {
       setEditing(false);
       return;
     }
-    toast({ tone: "success", title: "User updated" });
+    toast({ tone: "success", title: "Admin updated" });
     setEditTarget(null);
     setEditing(false);
     load();
@@ -104,14 +99,13 @@ export default function UsersPage() {
     if (res.error) {
       toast({ tone: "error", title: "Failed", description: res.error.message });
     } else {
-      toast({ tone: "success", title: "User archived" });
+      toast({ tone: "success", title: "Admin archived" });
       load();
     }
     setArchiving(false);
     setArchiveTarget(null);
   }
 
-  const roleOptions = roles.map((r) => ({ value: r.slug, label: r.name }));
   const statusOptions = [
     { value: "active", label: "Active" },
     { value: "suspended", label: "Suspended" },
@@ -120,11 +114,11 @@ export default function UsersPage() {
   return (
     <>
       <PageShell
-        title="Users"
-        subtitle={`${total} user${total !== 1 ? "s" : ""} in this tenant`}
-        search={{ value: search, onChange: setSearch, placeholder: "Search users..." }}
+        title="Admin"
+        subtitle={`${total} admin${total !== 1 ? "s" : ""} in this tenant`}
+        search={{ value: search, onChange: setSearch, placeholder: "Search admins..." }}
         onAdd={() => setShowCreate(true)}
-        addLabel="Add User"
+        addLabel="Add Admin"
       >
         {loading ? (
           <div className="space-y-2">
@@ -133,8 +127,8 @@ export default function UsersPage() {
         ) : users.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--accent)] p-10 text-center">
             <Users size={24} className="text-[var(--muted-foreground)] mb-2" />
-            <p className="text-[13px] font-semibold text-[var(--foreground)]">No users yet</p>
-            <p className="text-[11px] text-[var(--muted-foreground)] mt-1">Add users to this tenant to get started.</p>
+            <p className="text-[13px] font-semibold text-[var(--foreground)]">No admins yet</p>
+            <p className="text-[11px] text-[var(--muted-foreground)] mt-1">Add admins to this tenant to get started.</p>
           </div>
         ) : (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
@@ -166,12 +160,11 @@ export default function UsersPage() {
       </PageShell>
 
       {/* Create */}
-      <RightPullSheet open={showCreate} title="Add User" onClose={() => setShowCreate(false)}>
+      <RightPullSheet open={showCreate} title="Add Admin" onClose={() => setShowCreate(false)}>
         <form onSubmit={handleCreate} className="space-y-3">
           <InputField label="Display Name" value={createForm.displayName} onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })} error={createErrors.displayName} prefix={<UserIcon size={14} />} />
           <InputField label="Email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} error={createErrors.email} prefix={<Mail size={14} />} />
           <InputField label="Password" type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} error={createErrors.password} prefix={<Lock size={14} />} />
-          <SelectField label="Role" value={createForm.roleSlug} options={roleOptions} onChange={(v) => setCreateForm({ ...createForm, roleSlug: v })} prefix={<Shield size={14} />} />
           <div className="flex gap-2 justify-end pt-3">
             <button type="button" onClick={() => setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancel</button>
             <button type="submit" disabled={creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
@@ -183,7 +176,7 @@ export default function UsersPage() {
       </RightPullSheet>
 
       {/* Edit */}
-      <RightPullSheet open={!!editTarget} title="Edit User" onClose={() => setEditTarget(null)}>
+      <RightPullSheet open={!!editTarget} title="Edit Admin" onClose={() => setEditTarget(null)}>
         <form onSubmit={handleEdit} className="space-y-3">
           <InputField label="Display Name" value={editForm.displayName} onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })} error={editErrors.displayName} prefix={<UserIcon size={14} />} />
           <SelectField label="Status" value={editForm.status} options={statusOptions} onChange={(v) => setEditForm({ ...editForm, status: v })} />
@@ -200,7 +193,7 @@ export default function UsersPage() {
       {/* Archive Confirm */}
       <ConfirmDialog
         open={!!archiveTarget}
-        title="Archive User"
+        title="Archive Admin"
         description={`Are you sure you want to archive "${archiveTarget?.displayName}"?`}
         confirmLabel="Archive"
         destructive

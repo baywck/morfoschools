@@ -55,7 +55,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       : []),
     ...(session?.effectiveTenantId
       ? [
-          { label: "Users", href: "/app/users", icon: Users },
+          { label: "Admin", href: "/app/admin", icon: Users },
           { label: "Teachers", href: "/app/teachers", icon: GraduationCap },
           { label: "Students", href: "/app/students", icon: BookOpen },
           { label: "Staff", href: "/app/staff", icon: Briefcase },

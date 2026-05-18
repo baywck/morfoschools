@@ -148,6 +148,10 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.RoleSlug == "" {
+		req.RoleSlug = "school_admin"
+	}
+
 	// Check email uniqueness
 	var exists bool
 	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`, req.Email).Scan(&exists)
