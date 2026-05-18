@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-provider";
 import { useToast } from "@/components/ui/toast";
 import { listTenants, createTenant, archiveTenant, switchTenant, type Tenant } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/text-field";
+import { InputField } from "@/components/ui/input-field";
 import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
@@ -155,23 +155,22 @@ export default function TenantsPage() {
       {/* Create Sheet */}
       <RightPullSheet open={showCreate} title="Add Tenant" onClose={() => setShowCreate(false)}>
         <form onSubmit={handleCreate} className="space-y-4">
-          <TextField
-            size="compact"
+          <InputField
             label="School Name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             error={fieldErrors.name}
-            prefix={<Building2 size={14} />}
+            placeholder="e.g. SMA Negeri 1 Jakarta"
           />
-          <TextField
-            size="compact"
+          <InputField
             label="Code"
             value={newCode}
             onChange={(e) => setNewCode(e.target.value)}
             error={fieldErrors.code}
-            helperText="Unique identifier (e.g. sman1-jkt)"
+            placeholder="e.g. sman1-jkt"
+            helperText="Unique identifier for this tenant"
           />
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex gap-2 justify-end pt-3">
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button size="sm" type="submit" loading={creating}><Plus size={14} /> Create</Button>
           </div>
