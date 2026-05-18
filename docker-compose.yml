@@ -1,0 +1,121 @@
+services:
+  frontend:
+    image: node:22-alpine
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0 --port 1666"
+    ports:
+      - "${FRONTEND_PORT:-1666}:1666"
+    environment:
+      NODE_ENV: development
+      PORT: 1666
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - app-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: 8080
+      DATABASE_URL: ${DATABASE_URL:-postgres://morfoschools:change-me@pgbouncer:5432/morfoschools?sslmode=disable}
+      VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379/0}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      SEED_DEV_DATA: ${SEED_DEV_DATA:-true}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      valkey:
+        condition: service_started
+      nats:
+        condition: service_started
+    networks:
+      - app-net
+      - data-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-morfoschools}
+      POSTGRES_USER: ${POSTGRES_USER:-morfoschools}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-morfoschools} -d $${POSTGRES_DB:-morfoschools}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - data-net
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-morfoschools}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      DB_NAME: ${POSTGRES_DB:-morfoschools}
+      POOL_MODE: ${PGBOUNCER_POOL_MODE:-transaction}
+      AUTH_TYPE: scram-sha-256
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "6432:5432"
+    networks:
+      - data-net
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    networks:
+      - data-net
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+    networks:
+      - data-net
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    profiles:
+      - analytics
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - data-net
+
+networks:
+  app-net:
+  data-net:
+
+volumes:
+  postgres-data:
+  nats-data:
+  clickhouse-data:
+  frontend-node-modules:
