@@ -18,14 +18,17 @@ interface SelectFieldProps {
   error?: string;
   helperText?: string;
   prefix?: React.ReactNode;
+  placeholder?: string;
 }
 
-export function SelectField({ label, value, options, onChange, error, helperText, prefix }: SelectFieldProps) {
+export function SelectField({ label, value, options, onChange, error, helperText, prefix, placeholder }: SelectFieldProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const selectedLabel = options.find((o) => o.value === value)?.label || "";
-  const isFloating = open || !!value;
+  const selectedOption = options.find((o) => o.value === value);
+  const displayText = selectedOption?.label || placeholder || "";
+  const hasSelection = !!selectedOption;
+  const isFloating = open || hasSelection;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -38,7 +41,7 @@ export function SelectField({ label, value, options, onChange, error, helperText
   }, []);
 
   return (
-    <div className="w-full" ref={ref}>
+    <div className="w-full relative" ref={ref}>
       <div
         onClick={() => setOpen((v) => !v)}
         className={cn(
@@ -71,9 +74,14 @@ export function SelectField({ label, value, options, onChange, error, helperText
           )}>
             {label}
           </span>
-          {/* Selected value */}
-          <span className="absolute bottom-1.5 left-3 text-[13px] font-medium text-[var(--foreground)]" style={{ left: prefix ? "0.5rem" : "0.75rem" }}>
-            {selectedLabel}
+          {/* Display value */}
+          <span className={cn(
+            "absolute text-[13px] font-medium",
+            prefix ? "left-2" : "left-3",
+            isFloating ? "bottom-1.5" : "hidden",
+            hasSelection ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"
+          )}>
+            {displayText}
           </span>
         </div>
 
@@ -105,12 +113,8 @@ export function SelectField({ label, value, options, onChange, error, helperText
         </div>
       )}
 
-      {error && (
-        <p className="mt-1 text-[11px] font-medium text-[var(--danger)]" role="alert">{error}</p>
-      )}
-      {helperText && !error && (
-        <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{helperText}</p>
-      )}
+      {error && <p className="mt-1 text-[11px] font-medium text-[var(--danger)]" role="alert">{error}</p>}
+      {helperText && !error && <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{helperText}</p>}
     </div>
   );
 }

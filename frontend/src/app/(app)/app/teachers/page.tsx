@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
-import { listTeachers, archiveTeacher, createTeacher, updateTeacher, type Teacher, listUsers, type User } from "@/lib/modules-api";
+import { 
+  listTeachers, archiveTeacher, createTeacher, updateTeacher, type Teacher, 
+  listUsers, type User,
+  listTeacherSubjects, assignTeacherSubject, unassignTeacherSubject, listSubjects, type TeacherSubject, type Subject
+} from "@/lib/modules-api";
 import { PageShell } from "@/components/layout/page-shell";
 import { RowActions } from "@/components/ui/row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -10,7 +14,7 @@ import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GraduationCap, Trash2, Pencil, Plus } from "lucide-react";
+import { GraduationCap, Trash2, Pencil, Plus, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function TeachersPage() {
@@ -33,6 +37,12 @@ export default function TeachersPage() {
   const [editForm, setEditForm] = useState({ employeeId: "", specialization: "", status: "" });
 
   const [teacherToArchive, setTeacherToArchive] = useState<Teacher | null>(null);
+
+  // Subjects
+  const [assignedSubjects, setAssignedSubjects] = useState<TeacherSubject[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<Subject[]>([]);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [subjectToAdd, setSubjectToAdd] = useState("");
 
   async function load() {
     setLoading(true);
@@ -78,6 +88,39 @@ export default function TeachersPage() {
       status: teacher.status 
     });
     setFieldErrors({});
+    loadTeacherSubjects(teacher.id);
+  }
+
+  async function loadTeacherSubjects(teacherId: string) {
+    setLoadingSubjects(true);
+    const [tsRes, subRes] = await Promise.all([
+      listTeacherSubjects(teacherId),
+      listSubjects()
+    ]);
+    if (tsRes.data) setAssignedSubjects(tsRes.data.data);
+    if (subRes.data) setAvailableSubjects(subRes.data.data);
+    setLoadingSubjects(false);
+  }
+
+  async function handleAssignSubject(subjectId: string) {
+    if (!editTarget || !subjectId) return;
+    setSubjectToAdd(""); // reset immediately
+    const res = await assignTeacherSubject(editTarget.id, subjectId);
+    if (res.error) {
+      toast({ tone: "error", title: "Failed to assign subject", description: res.error.message });
+      return;
+    }
+    loadTeacherSubjects(editTarget.id);
+  }
+
+  async function handleUnassignSubject(subjectId: string) {
+    if (!editTarget) return;
+    const res = await unassignTeacherSubject(editTarget.id, subjectId);
+    if (res.error) {
+      toast({ tone: "error", title: "Failed to unassign subject", description: res.error.message });
+      return;
+    }
+    loadTeacherSubjects(editTarget.id);
   }
 
   async function handleEdit(e: React.FormEvent) {
@@ -221,6 +264,52 @@ export default function TeachersPage() {
             { value: "archived", label: "Archived" }
           ]}
         />
+        
+        <div className="pt-4 border-t border-[var(--border)] space-y-3 mt-4">
+          <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Assigned Subjects</h3>
+          
+          <div className="flex flex-wrap gap-2">
+            {loadingSubjects ? (
+              <Skeleton className="h-6 w-20" />
+            ) : assignedSubjects.length === 0 ? (
+              <p className="text-[12px] text-[var(--muted-foreground)]">No subjects assigned.</p>
+            ) : (
+              assignedSubjects.map(ts => {
+                const subjectName = ts.name || availableSubjects.find(s => s.id === ts.id)?.name || 'Unknown Subject';
+                return (
+                  <div key={ts.id} className="inline-flex items-center gap-1 rounded-md pl-2 pr-1 py-0.5 text-[11px] font-medium bg-[var(--brand-soft)] text-[var(--brand)]">
+                    {subjectName}
+                    <button 
+                      type="button" 
+                      onClick={() => handleUnassignSubject(ts.id)}
+                      className="p-0.5 hover:bg-[var(--brand)] hover:text-white rounded transition-colors ml-1"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {!loadingSubjects && (
+            <SelectField
+              label="Add Subject"
+              value={subjectToAdd}
+              onChange={(val) => {
+                setSubjectToAdd(val);
+                if (val) handleAssignSubject(val);
+              }}
+              options={[
+                { value: "", label: "Select a subject..." },
+                ...availableSubjects
+                  .filter(s => !assignedSubjects.some(ts => ts.id === s.id))
+                  .map(s => ({ value: s.id, label: s.name }))
+              ]}
+            />
+          )}
+        </div>
+
         <div className="flex gap-2 justify-end pt-3">
           <button type="button" onClick={() => setEditTarget(null)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
             Cancel

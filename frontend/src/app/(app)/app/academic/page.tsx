@@ -10,6 +10,7 @@ import {
   type AcademicYear
 } from "@/lib/modules-api";
 import { InputField } from "@/components/ui/input-field";
+import { DatePicker } from "@/components/ui/date-picker";
 import { SelectField } from "@/components/ui/select-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
@@ -216,18 +217,16 @@ export default function AcademicYearsPage() {
             error={fieldErrors.name}
             helperText="e.g. Tahun Ajaran 2025/2026"
           />
-          <InputField
+          <DatePicker
             label="Starts On"
-            type="date"
             value={newStartsOn}
-            onChange={(e) => setNewStartsOn(e.target.value)}
+            onChange={(v) => setNewStartsOn(v)}
             error={fieldErrors.startsOn}
           />
-          <InputField
+          <DatePicker
             label="Ends On"
-            type="date"
             value={newEndsOn}
-            onChange={(e) => setNewEndsOn(e.target.value)}
+            onChange={(v) => setNewEndsOn(v)}
             error={fieldErrors.endsOn}
           />
           <div className="flex gap-2 justify-end pt-3">
@@ -252,18 +251,16 @@ export default function AcademicYearsPage() {
             error={fieldErrors.name}
             prefix={<CalendarRange size={14} />}
           />
-          <InputField
+          <DatePicker
             label="Starts On"
-            type="date"
             value={editForm.startsOn}
-            onChange={(e) => setEditForm({ ...editForm, startsOn: e.target.value })}
+            onChange={(v) => setEditForm({ ...editForm, startsOn: v })}
             error={fieldErrors.startsOn}
           />
-          <InputField
+          <DatePicker
             label="Ends On"
-            type="date"
             value={editForm.endsOn}
-            onChange={(e) => setEditForm({ ...editForm, endsOn: e.target.value })}
+            onChange={(v) => setEditForm({ ...editForm, endsOn: v })}
             error={fieldErrors.endsOn}
           />
           <SelectField
