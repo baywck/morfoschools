@@ -1,17 +1,18 @@
 # Tasks — Morfoschools
 
-## Current Phase: Phase 6 — User & School Admin Modules
+## Current Phase: Phase 7 — Academic Structure Modules
 
 ### Completed
-- [x] Users CRUD (list, create, update, archive)
+- [x] Subjects CRUD (BE + FE)
+- [x] Class Sections CRUD with homeroom teacher (BE + FE)
+- [x] Teacher-Subject assignments (BE + FE API)
 
-### Active
-- [ ] Tenants/Schools management
-- [ ] Teachers directory
-- [ ] Students directory
-- [ ] Staff directory
-- [ ] Guardians directory
-- [ ] Student-Guardian linking
+### Remaining
+- [ ] Academic Years + Semesters
+- [ ] Subject Groups
+- [ ] Fix Teachers page: multi-subject assignment UI
+- [ ] Fix Students page: optional class assignment + guardian management
+- [ ] Remove standalone Guardians page
 
 ## Backlog
 

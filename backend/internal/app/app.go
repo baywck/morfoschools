@@ -76,6 +76,7 @@ func (a *App) Handler() http.Handler {
 	a.registerSubjectRoutes(mux)
 	a.registerClassSectionRoutes(mux)
 	a.registerTeacherSubjectRoutes(mux)
+	a.registerAcademicYearRoutes(mux)
 
 	return a.applyMiddleware(mux)
 }

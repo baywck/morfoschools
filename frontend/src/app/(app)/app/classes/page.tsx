@@ -9,8 +9,10 @@ import {
   updateClassSection, 
   archiveClassSection, 
   listTeachers,
+  listAcademicYears,
   type ClassSection,
-  type Teacher
+  type Teacher,
+  type AcademicYear
 } from "@/lib/modules-api";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
@@ -26,6 +28,7 @@ export default function ClassesPage() {
   const { toast } = useToast();
   const [classes, setClasses] = useState<ClassSection[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -34,7 +37,8 @@ export default function ClassesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newGradeLevel, setNewGradeLevel] = useState("");
+  const [newGradeLevelSelection, setNewGradeLevelSelection] = useState("");
+  const [newCustomGradeLevel, setNewCustomGradeLevel] = useState("");
   const [newAcademicYearId, setNewAcademicYearId] = useState("");
   const [newHomeroomTeacherId, setNewHomeroomTeacherId] = useState("");
   const [newCapacity, setNewCapacity] = useState("");
@@ -43,6 +47,8 @@ export default function ClassesPage() {
   // Edit sheet
   const [editTarget, setEditTarget] = useState<ClassSection | null>(null);
   const [editing, setEditing] = useState(false);
+  const [editGradeLevelSelection, setEditGradeLevelSelection] = useState("");
+  const [editCustomGradeLevel, setEditCustomGradeLevel] = useState("");
   const [editForm, setEditForm] = useState({ 
     name: "", 
     gradeLevel: "", 
@@ -55,11 +61,28 @@ export default function ClassesPage() {
   const [archiveTarget, setArchiveTarget] = useState<ClassSection | null>(null);
   const [archiving, setArchiving] = useState(false);
 
+  const gradeLevelOptions = [
+    { value: "SD-1", label: "SD Kelas 1" },
+    { value: "SD-2", label: "SD Kelas 2" },
+    { value: "SD-3", label: "SD Kelas 3" },
+    { value: "SD-4", label: "SD Kelas 4" },
+    { value: "SD-5", label: "SD Kelas 5" },
+    { value: "SD-6", label: "SD Kelas 6" },
+    { value: "SMP-7", label: "SMP Kelas 7" },
+    { value: "SMP-8", label: "SMP Kelas 8" },
+    { value: "SMP-9", label: "SMP Kelas 9" },
+    { value: "SMA-10", label: "SMA Kelas 10" },
+    { value: "SMA-11", label: "SMA Kelas 11" },
+    { value: "SMA-12", label: "SMA Kelas 12" },
+    { value: "custom", label: "Custom..." },
+  ];
+
   async function loadData() {
     setLoading(true);
-    const [classesRes, teachersRes] = await Promise.all([
+    const [classesRes, teachersRes, academicYearsRes] = await Promise.all([
       listClassSections({ search: search || undefined }),
-      listTeachers() // Need active teachers for homeroom selection
+      listTeachers(), // Need active teachers for homeroom selection
+      listAcademicYears()
     ]);
     
     if (classesRes.data) {
@@ -69,6 +92,10 @@ export default function ClassesPage() {
     
     if (teachersRes.data) {
       setTeachers(teachersRes.data.data);
+    }
+
+    if (academicYearsRes.data) {
+      setAcademicYears(academicYearsRes.data.data);
     }
     
     setLoading(false);
@@ -82,10 +109,11 @@ export default function ClassesPage() {
     setCreating(true);
     
     const capacityVal = newCapacity ? parseInt(newCapacity, 10) : undefined;
+    const finalGradeLevel = newGradeLevelSelection === "custom" ? newCustomGradeLevel : newGradeLevelSelection;
     
     const res = await createClassSection({ 
       name: newName, 
-      gradeLevel: newGradeLevel, 
+      gradeLevel: finalGradeLevel, 
       academicYearId: newAcademicYearId,
       homeroomTeacherId: newHomeroomTeacherId || undefined,
       capacity: capacityVal
@@ -100,7 +128,8 @@ export default function ClassesPage() {
     toast({ tone: "success", title: "Class created" });
     setShowCreate(false);
     setNewName("");
-    setNewGradeLevel("");
+    setNewGradeLevelSelection("");
+    setNewCustomGradeLevel("");
     setNewAcademicYearId("");
     setNewHomeroomTeacherId("");
     setNewCapacity("");
@@ -110,6 +139,13 @@ export default function ClassesPage() {
 
   function openEdit(cls: ClassSection) {
     setEditTarget(cls);
+    
+    // Determine if grade level is custom
+    const isPredefined = gradeLevelOptions.some(opt => opt.value === cls.gradeLevel && opt.value !== "custom");
+    
+    setEditGradeLevelSelection(isPredefined ? cls.gradeLevel : "custom");
+    setEditCustomGradeLevel(isPredefined ? "" : cls.gradeLevel);
+
     setEditForm({ 
       name: cls.name, 
       gradeLevel: cls.gradeLevel,
@@ -127,10 +163,11 @@ export default function ClassesPage() {
     setEditing(true);
     
     const capacityVal = editForm.capacity ? parseInt(editForm.capacity, 10) : undefined;
+    const finalGradeLevel = editGradeLevelSelection === "custom" ? editCustomGradeLevel : editGradeLevelSelection;
     
     const res = await updateClassSection(editTarget.id, {
       name: editForm.name,
-      gradeLevel: editForm.gradeLevel,
+      gradeLevel: finalGradeLevel,
       homeroomTeacherId: editForm.homeroomTeacherId || undefined,
       capacity: capacityVal,
       status: editForm.status
@@ -167,6 +204,8 @@ export default function ClassesPage() {
     { value: "", label: "None" },
     ...teachers.map(t => ({ value: t.id, label: t.displayName }))
   ];
+
+  const academicYearOptions = academicYears.map(y => ({ value: y.id, label: y.name }));
 
   function getTeacherName(id: string | null) {
     if (!id) return "No homeroom teacher";
@@ -239,18 +278,29 @@ export default function ClassesPage() {
             onChange={(e) => setNewName(e.target.value)}
             error={fieldErrors.name}
             prefix={<School2 size={14} />}
-            helperText="e.g. 10-A, 11 Science 1"
+            helperText="e.g. X-IPA-1, 11 Science 1"
           />
-          <InputField
+          <SelectField
             label="Grade Level"
-            value={newGradeLevel}
-            onChange={(e) => setNewGradeLevel(e.target.value)}
+            value={newGradeLevelSelection}
+            onChange={(val) => setNewGradeLevelSelection(val)}
+            options={gradeLevelOptions}
             error={fieldErrors.gradeLevel}
           />
-          <InputField
-            label="Academic Year ID"
+          {newGradeLevelSelection === "custom" && (
+            <InputField
+              label="Custom Grade Level"
+              value={newCustomGradeLevel}
+              onChange={(e) => setNewCustomGradeLevel(e.target.value)}
+              error={fieldErrors.gradeLevel}
+              helperText="Enter custom grade level name"
+            />
+          )}
+          <SelectField
+            label="Academic Year"
             value={newAcademicYearId}
-            onChange={(e) => setNewAcademicYearId(e.target.value)}
+            onChange={(val) => setNewAcademicYearId(val)}
+            options={academicYearOptions}
             error={fieldErrors.academicYearId}
           />
           <SelectField
@@ -289,12 +339,21 @@ export default function ClassesPage() {
             error={fieldErrors.name}
             prefix={<School2 size={14} />}
           />
-          <InputField
+          <SelectField
             label="Grade Level"
-            value={editForm.gradeLevel}
-            onChange={(e) => setEditForm({ ...editForm, gradeLevel: e.target.value })}
+            value={editGradeLevelSelection}
+            onChange={(val) => setEditGradeLevelSelection(val)}
+            options={gradeLevelOptions}
             error={fieldErrors.gradeLevel}
           />
+          {editGradeLevelSelection === "custom" && (
+            <InputField
+              label="Custom Grade Level"
+              value={editCustomGradeLevel}
+              onChange={(e) => setEditCustomGradeLevel(e.target.value)}
+              error={fieldErrors.gradeLevel}
+            />
+          )}
           <SelectField
             label="Homeroom Teacher"
             value={editForm.homeroomTeacherId}

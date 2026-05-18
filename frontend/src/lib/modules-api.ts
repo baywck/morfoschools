@@ -202,6 +202,42 @@ export function archiveStaff(id: string) {
   return patch<{ status: string }>(`/api/v1/staff/${id}/archive`);
 }
 
+// --- Academic Years ---
+export interface AcademicYear {
+  id: string;
+  code: string;
+  name: string;
+  startsOn: string | null;
+  endsOn: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface AcademicYearListResponse {
+  data: AcademicYear[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listAcademicYears(params?: { page?: number; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return get<AcademicYearListResponse>(`/api/v1/academic-years${qs ? `?${qs}` : ""}`);
+}
+
+export function createAcademicYear(data: { code: string; name: string; startsOn?: string; endsOn?: string }) {
+  return post<AcademicYear>("/api/v1/academic-years", data);
+}
+
+export function updateAcademicYear(id: string, data: { name?: string; startsOn?: string; endsOn?: string; status?: string }) {
+  return patch<{ id: string }>(`/api/v1/academic-years/${id}`, data);
+}
+
+export function archiveAcademicYear(id: string) {
+  return patch<{ status: string }>(`/api/v1/academic-years/${id}/archive`);
+}
+
 // --- Subjects ---
 export interface Subject {
   id: string;
