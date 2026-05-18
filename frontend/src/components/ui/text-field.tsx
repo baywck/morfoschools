@@ -4,16 +4,17 @@ import * as React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 
-interface TextFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "placeholder" | "prefix"> {
+interface TextFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "placeholder" | "prefix" | "size"> {
   label: string;
   error?: string;
   helperText?: string;
   prefix?: React.ReactNode;
   suffix?: React.ReactNode;
+  size?: "default" | "compact";
 }
 
 export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
-  ({ label, error, helperText, prefix, suffix, id, className, onFocus, onBlur, value, defaultValue, disabled, ...props }, ref) => {
+  ({ label, error, helperText, prefix, suffix, id, className, onFocus, onBlur, value, defaultValue, disabled, size = "default", ...props }, ref) => {
     const inputId = id || label.toLowerCase().replace(/\s+/g, "-");
     const [focused, setFocused] = useState(false);
     const [internalValue, setInternalValue] = useState(defaultValue || "");
@@ -22,11 +23,14 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
     const hasValue = String(currentValue).length > 0;
     const floatLabel = focused || hasValue;
 
+    const isCompact = size === "compact";
+
     return (
       <div className="w-full">
         <div
           className={cn(
-            "relative min-h-[62px] rounded-2xl border-2 bg-[var(--field-bg)] transition-all duration-200",
+            "relative rounded-2xl border-2 bg-[var(--field-bg)] transition-all duration-200",
+            isCompact ? "min-h-[44px]" : "min-h-[62px]",
             focused
               ? "border-[var(--field-focus)] shadow-[0_0_0_3px_var(--field-ring)]"
               : error
@@ -40,7 +44,8 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
           {prefix && (
             <div
               className={cn(
-                "pointer-events-none absolute left-2.5 inset-y-2.5 flex w-10 items-center justify-center rounded-xl border bg-[var(--muted)] text-[var(--muted-foreground)] transition-colors",
+                "pointer-events-none absolute left-2 inset-y-1.5 flex items-center justify-center rounded-lg border bg-[var(--muted)] text-[var(--muted-foreground)] transition-colors",
+                isCompact ? "w-8 h-8" : "w-10 rounded-xl",
                 focused ? "border-[var(--field-focus)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)]",
                 error && "border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger)]"
               )}
@@ -62,9 +67,11 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
             onChange={(e) => { if (value === undefined) setInternalValue(e.target.value); props.onChange?.(e); }}
             placeholder=" "
             className={cn(
-              "h-[58px] w-full bg-transparent px-4 pb-2.5 pt-7 text-sm font-semibold text-[var(--foreground)] outline-none placeholder:text-transparent",
-              prefix && "pl-[4rem]",
-              suffix && "pr-16",
+              "w-full bg-transparent text-sm font-medium text-[var(--foreground)] outline-none placeholder:text-transparent",
+              isCompact ? "h-[40px] px-3 pb-1 pt-4" : "h-[58px] px-4 pb-2.5 pt-7",
+              isCompact && prefix && "pl-[2.75rem]",
+              !isCompact && prefix && "pl-[4rem]",
+              suffix && "pr-12",
               disabled && "cursor-not-allowed"
             )}
             aria-invalid={!!error}
@@ -77,10 +84,14 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
             htmlFor={inputId}
             className={cn(
               "pointer-events-none absolute select-none transition-all duration-200",
-              prefix ? "left-[4rem]" : "left-4",
-              floatLabel
-                ? "top-2.5 text-[11px] font-semibold"
-                : "top-1/2 -translate-y-1/2 text-sm font-medium",
+              isCompact && prefix ? "left-[2.75rem]" : !isCompact && prefix ? "left-[4rem]" : isCompact ? "left-3" : "left-4",
+              isCompact
+                ? floatLabel
+                  ? "top-1 text-[9px] font-semibold"
+                  : "top-1/2 -translate-y-1/2 text-[12px] font-medium"
+                : floatLabel
+                  ? "top-2.5 text-[11px] font-semibold"
+                  : "top-1/2 -translate-y-1/2 text-sm font-medium",
               error ? "text-[var(--danger)]" : "text-[var(--muted-foreground)]"
             )}
           >

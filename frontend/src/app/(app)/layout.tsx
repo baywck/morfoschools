@@ -67,7 +67,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthGuard>
-      <AppShell navigation={navigation} title="Dashboard">
+      <AppShell navigation={navigation}>
         {children}
       </AppShell>
     </AuthGuard>
