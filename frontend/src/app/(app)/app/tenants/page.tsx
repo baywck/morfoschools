@@ -6,10 +6,12 @@ import { useToast } from "@/components/ui/toast";
 import { listTenants, createTenant, archiveTenant, switchTenant, type Tenant } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Plus, Search, Building2, Trash2, ArrowRightLeft } from "lucide-react";
+import { PageShell } from "@/components/layout/page-shell";
+import { Plus, Building2, Trash2, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function TenantsPage() {
@@ -94,29 +96,18 @@ export default function TenantsPage() {
 
   return (
     <>
-      <div className="space-y-5">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-[15px] font-bold text-[var(--foreground)] tracking-tight">Tenants</h2>
-            <p className="text-[12px] text-[var(--muted-foreground)] mt-0.5">{total} school{total !== 1 ? "s" : ""} registered</p>
-          </div>
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus size={14} /> Add Tenant
-          </Button>
-        </div>
-
-        {/* Search */}
-        <div className="max-w-xs">
-          <TextField
-            size="compact"
-            label="Search tenants..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            prefix={<Search size={14} />}
-          />
-        </div>
-
+      <PageShell
+        title="Tenants"
+        subtitle={`${total} school${total !== 1 ? "s" : ""} registered`}
+        actions={
+          <>
+            <SearchInput value={search} onChange={setSearch} placeholder="Search tenants..." className="w-40" />
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus size={14} /> Add Tenant
+            </Button>
+          </>
+        }
+      >
         {/* List */}
         {loading ? (
           <div className="space-y-3">
@@ -159,7 +150,7 @@ export default function TenantsPage() {
             </div>
           </div>
         )}
-      </div>
+      </PageShell>
 
       {/* Create Sheet */}
       <RightPullSheet open={showCreate} title="Add Tenant" onClose={() => setShowCreate(false)}>
