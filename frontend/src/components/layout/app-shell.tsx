@@ -1,10 +1,11 @@
-// Morfosis — AppShell (dark shell + floating content card)
+// Morfosis — AppShell (dark shell + floating content card + AI chat)
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Sidebar, type NavItem } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { AiChatPanel } from "@/components/layout/ai-chat-panel";
 
 type AppShellProps = {
   children: ReactNode;
@@ -12,6 +13,8 @@ type AppShellProps = {
 };
 
 export function AppShell({ children, navigation }: AppShellProps) {
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+
   return (
     <div className="h-screen overflow-hidden bg-[var(--shell)]">
       {/* Desktop sidebar */}
@@ -19,7 +22,7 @@ export function AppShell({ children, navigation }: AppShellProps) {
 
       <div className="relative flex h-screen flex-col md:pl-[var(--sidebar-width)]">
         {/* Topbar — in dark shell */}
-        <Topbar />
+        <Topbar onToggleAiChat={() => setAiChatOpen((v) => !v)} aiChatOpen={aiChatOpen} />
 
         {/* Content — floating white card */}
         <div className="flex-1 min-h-0 px-2 pb-[4.5rem] md:p-0 md:pb-2.5 md:pr-2.5">
@@ -33,6 +36,9 @@ export function AppShell({ children, navigation }: AppShellProps) {
 
       {/* Mobile bottom nav */}
       <MobileNav navigation={navigation} />
+
+      {/* AI Chat Panel */}
+      <AiChatPanel open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
     </div>
   );
 }

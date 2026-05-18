@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Moon, Sun, LogOut, ChevronDown, Home as HomeIcon } from "lucide-react";
+import { Moon, Sun, LogOut, ChevronDown, Home as HomeIcon, Bot } from "lucide-react";
 import { useTheme } from "@/lib/use-theme";
 import { useAuth } from "@/lib/auth-provider";
 import { cn } from "@/lib/cn";
@@ -23,7 +23,12 @@ function formatSegment(segment: string) {
     .join(" ");
 }
 
-export function Topbar() {
+interface TopbarProps {
+  onToggleAiChat?: () => void;
+  aiChatOpen?: boolean;
+}
+
+export function Topbar({ onToggleAiChat, aiChatOpen }: TopbarProps) {
   const { dark, toggle } = useTheme();
   const { session, logout } = useAuth();
   const pathname = usePathname();
@@ -76,6 +81,20 @@ export function Topbar() {
 
       {/* Right — actions */}
       <div className="flex items-center gap-2">
+        {/* AI Chat toggle */}
+        {onToggleAiChat && (
+          <button
+            onClick={onToggleAiChat}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+              aiChatOpen ? "bg-white/10 text-[var(--shell-foreground)]" : "text-[var(--shell-muted)] hover:text-[var(--shell-foreground)]"
+            )}
+            aria-label="Toggle AI Chat"
+          >
+            <Bot size={16} strokeWidth={2} />
+          </button>
+        )}
+
         {/* Theme toggle — desktop only */}
         <button
           onClick={toggle}
