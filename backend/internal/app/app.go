@@ -69,6 +69,9 @@ func (a *App) Handler() http.Handler {
 	a.registerStaffRoutes(mux)
 	a.registerGuardianRoutes(mux)
 
+	// Roles
+	a.registerRoleRoutes(mux)
+
 	return a.applyMiddleware(mux)
 }
 

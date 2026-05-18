@@ -2,15 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
-import { listGuardians, createGuardian, archiveGuardian, type Guardian } from "@/lib/modules-api";
+import { listGuardians, createGuardian, archiveGuardian, updateGuardian, type Guardian } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
+import { SelectField } from "@/components/ui/select-field";
 import { PageShell } from "@/components/layout/page-shell";
 import { RowActions } from "@/components/ui/row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Heart, Trash2, User } from "lucide-react";
+import { Plus, Heart, Trash2, User, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function GuardiansPage() {
@@ -23,6 +24,12 @@ export default function GuardiansPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", email: "", relationship: "" });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Edit sheet
+  const [editTarget, setEditTarget] = useState<Guardian | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", phone: "", email: "", relationship: "", status: "" });
+
   const [guardianToArchive, setGuardianToArchive] = useState<Guardian | null>(null);
 
   async function load() {
@@ -55,6 +62,36 @@ export default function GuardiansPage() {
     load();
   }
 
+  function openEdit(guardian: Guardian) {
+    setEditTarget(guardian);
+    setEditForm({ 
+      name: guardian.name || "", 
+      phone: guardian.phone || "", 
+      email: guardian.email || "", 
+      relationship: guardian.relationship || "",
+      status: guardian.status 
+    });
+    setFieldErrors({});
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editTarget) return;
+    setFieldErrors({});
+    setEditing(true);
+    const res = await updateGuardian(editTarget.id, editForm);
+    if (res.error) {
+      if (res.error.fields) setFieldErrors(res.error.fields);
+      else toast({ tone: "error", title: "Failed", description: res.error.message });
+      setEditing(false);
+      return;
+    }
+    toast({ tone: "success", title: "Guardian updated" });
+    setEditTarget(null);
+    setEditing(false);
+    load();
+  }
+
   async function handleArchive(id: string) {
     const res = await archiveGuardian(id);
     if (res.error) { toast({ tone: "error", title: "Failed", description: res.error.message }); return; }
@@ -64,6 +101,7 @@ export default function GuardiansPage() {
   }
 
   return (
+    <>
     <PageShell
       title="Guardians"
       subtitle={`${total} guardian${total !== 1 ? "s" : ""}`}
@@ -122,6 +160,7 @@ export default function GuardiansPage() {
                 <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", g.status === "active" ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]")}>{g.status}</span>
                 <RowActions
                   actions={[
+                    { label: "Edit", icon: <Pencil size={14} />, onClick: () => openEdit(g) },
                     { label: "Archive", icon: <Trash2 size={14} />, onClick: () => setGuardianToArchive(g), variant: "danger" }
                   ]}
                 />
@@ -131,5 +170,53 @@ export default function GuardiansPage() {
         </div>
       )}
     </PageShell>
+    
+    <RightPullSheet open={!!editTarget} title="Edit Guardian" onClose={() => setEditTarget(null)}>
+      <form onSubmit={handleEdit} className="space-y-4 pt-4">
+        <InputField 
+          label="Name" 
+          value={editForm.name} 
+          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} 
+          error={fieldErrors.name} 
+          prefix={<User size={14} />} 
+        />
+        <InputField 
+          label="Relationship" 
+          value={editForm.relationship} 
+          onChange={(e) => setEditForm({ ...editForm, relationship: e.target.value })} 
+          error={fieldErrors.relationship}
+          prefix={<Heart size={14} />} 
+        />
+        <InputField 
+          label="Phone" 
+          value={editForm.phone} 
+          onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} 
+          error={fieldErrors.phone}
+        />
+        <InputField 
+          label="Email" 
+          type="email" 
+          value={editForm.email} 
+          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} 
+          error={fieldErrors.email}
+        />
+        <SelectField
+          label="Status"
+          value={editForm.status}
+          onChange={(val) => setEditForm({ ...editForm, status: val })}
+          options={[
+            { value: "active", label: "Active" },
+            { value: "inactive", label: "Inactive" },
+            { value: "archived", label: "Archived" }
+          ]}
+        />
+        
+        <div className="flex gap-2 justify-end pt-4">
+          <Button variant="ghost" size="sm" type="button" onClick={() => setEditTarget(null)}>Cancel</Button>
+          <Button size="sm" type="submit" loading={editing}>Save Changes</Button>
+        </div>
+      </form>
+    </RightPullSheet>
+    </>
   );
 }

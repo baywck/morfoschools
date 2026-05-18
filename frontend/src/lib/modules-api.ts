@@ -1,5 +1,16 @@
 import { get, post, patch } from "./api-client";
 
+// --- Roles ---
+export interface Role {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+export function listRoles() {
+  return get<{ data: Role[] }>("/api/v1/roles");
+}
+
 // --- Users ---
 export interface User {
   id: string;
@@ -106,6 +117,10 @@ export function createTeacher(data: { userId: string; employeeId?: string; speci
   return post<{ id: string }>("/api/v1/teachers", data);
 }
 
+export function updateTeacher(id: string, data: { employeeId?: string; specialization?: string; status?: string }) {
+  return patch<{ id: string }>(`/api/v1/teachers/${id}`, data);
+}
+
 export function archiveTeacher(id: string) {
   return patch<{ status: string }>(`/api/v1/teachers/${id}/archive`);
 }
@@ -138,6 +153,10 @@ export function listStudents(params?: { page?: number; search?: string; status?:
 
 export function createStudent(data: { userId: string; studentIdNumber?: string; gradeLevel?: string }) {
   return post<{ id: string }>("/api/v1/students", data);
+}
+
+export function updateStudent(id: string, data: { studentIdNumber?: string; gradeLevel?: string; status?: string }) {
+  return patch<{ id: string }>(`/api/v1/students/${id}`, data);
 }
 
 export function archiveStudent(id: string) {
@@ -175,6 +194,10 @@ export function createStaff(data: { userId: string; employeeId?: string; departm
   return post<{ id: string }>("/api/v1/staff", data);
 }
 
+export function updateStaff(id: string, data: { employeeId?: string; department?: string; position?: string; status?: string }) {
+  return patch<{ id: string }>(`/api/v1/staff/${id}`, data);
+}
+
 export function archiveStaff(id: string) {
   return patch<{ status: string }>(`/api/v1/staff/${id}/archive`);
 }
@@ -207,6 +230,10 @@ export function listGuardians(params?: { page?: number; search?: string; status?
 
 export function createGuardian(data: { name: string; phone?: string; email?: string; relationship?: string }) {
   return post<{ id: string }>("/api/v1/guardians", data);
+}
+
+export function updateGuardian(id: string, data: { name?: string; phone?: string; email?: string; relationship?: string; status?: string }) {
+  return patch<{ id: string }>(`/api/v1/guardians/${id}`, data);
 }
 
 export function archiveGuardian(id: string) {

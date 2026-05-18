@@ -3,14 +3,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-provider";
 import { useToast } from "@/components/ui/toast";
-import { listTenants, createTenant, archiveTenant, switchTenant, type Tenant } from "@/lib/modules-api";
+import { listTenants, createTenant, updateTenant, archiveTenant, switchTenant, type Tenant } from "@/lib/modules-api";
 import { InputField } from "@/components/ui/input-field";
+import { SelectField } from "@/components/ui/select-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActions } from "@/components/ui/row-actions";
 import { PageShell } from "@/components/layout/page-shell";
-import { Plus, Building2, Trash2, ArrowRightLeft } from "lucide-react";
+import { Plus, Building2, Trash2, ArrowRightLeft, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function TenantsPage() {
@@ -27,6 +28,11 @@ export default function TenantsPage() {
   const [newName, setNewName] = useState("");
   const [newCode, setNewCode] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Edit sheet
+  const [editTarget, setEditTarget] = useState<Tenant | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", status: "" });
 
   // Confirm dialogs
   const [archiveTarget, setArchiveTarget] = useState<Tenant | null>(null);
@@ -62,6 +68,30 @@ export default function TenantsPage() {
     setNewName("");
     setNewCode("");
     setCreating(false);
+    load();
+  }
+
+  function openEdit(tenant: Tenant) {
+    setEditTarget(tenant);
+    setEditForm({ name: tenant.name, status: tenant.status });
+    setFieldErrors({});
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editTarget) return;
+    setFieldErrors({});
+    setEditing(true);
+    const res = await updateTenant(editTarget.id, editForm);
+    if (res.error) {
+      if (res.error.fields) setFieldErrors(res.error.fields);
+      else toast({ tone: "error", title: "Failed", description: res.error.message });
+      setEditing(false);
+      return;
+    }
+    toast({ tone: "success", title: "Tenant updated" });
+    setEditTarget(null);
+    setEditing(false);
     load();
   }
 
@@ -132,6 +162,7 @@ export default function TenantsPage() {
                     {t.status}
                   </span>
                   <RowActions actions={[
+                    { label: "Edit", icon: <Pencil size={13} />, onClick: () => openEdit(t) },
                     { label: "Switch", icon: <ArrowRightLeft size={13} />, onClick: () => setSwitchTarget(t) },
                     { label: "Archive", icon: <Trash2 size={13} />, onClick: () => setArchiveTarget(t), variant: "danger" },
                   ]} />
@@ -166,6 +197,37 @@ export default function TenantsPage() {
             <button type="submit" disabled={creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
               {creating && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
               <Plus size={14} /> Create
+            </button>
+          </div>
+        </form>
+      </RightPullSheet>
+
+      {/* Edit Sheet */}
+      <RightPullSheet open={!!editTarget} title="Edit Tenant" onClose={() => setEditTarget(null)}>
+        <form onSubmit={handleEdit} className="space-y-3">
+          <InputField
+            label="School Name"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            error={fieldErrors.name}
+            prefix={<Building2 size={14} />}
+          />
+          <SelectField
+            label="Status"
+            value={editForm.status}
+            onChange={(val) => setEditForm({ ...editForm, status: val })}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Inactive" },
+              { value: "archived", label: "Archived" }
+            ]}
+          />
+          <div className="flex gap-2 justify-end pt-3">
+            <button type="button" onClick={() => setEditTarget(null)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
+              {editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
             </button>
           </div>
         </form>
