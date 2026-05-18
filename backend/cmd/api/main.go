@@ -13,6 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"morfoschools/backend/internal/app"
+	"morfoschools/backend/internal/platform/devseed"
 	"morfoschools/backend/internal/platform/migrate"
 	"morfoschools/backend/migrations"
 )
@@ -57,8 +58,17 @@ func main() {
 			logger.Error("failed to run migrations", "error", err)
 			os.Exit(1)
 		}
-		cancel()
 		logger.Info("database connected, migrations complete")
+
+		// Dev seed
+		if envOr("SEED_DEV_DATA", "false") == "true" {
+			if err := devseed.Run(ctx, db, logger); err != nil {
+				cancel()
+				logger.Error("failed to seed dev data", "error", err)
+				os.Exit(1)
+			}
+		}
+		cancel()
 	}
 
 	application, err := app.New(cfg, logger, db)

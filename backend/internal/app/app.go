@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -22,17 +23,19 @@ type Config struct {
 
 // App is the main application container.
 type App struct {
-	cfg    Config
-	logger *slog.Logger
-	db     *sql.DB
+	cfg          Config
+	logger       *slog.Logger
+	db           *sql.DB
+	loginLimiter *loginLimiter
 }
 
 // New creates a new App instance.
 func New(cfg Config, logger *slog.Logger, db *sql.DB) (*App, error) {
 	a := &App{
-		cfg:    cfg,
-		logger: logger,
-		db:     db,
+		cfg:          cfg,
+		logger:       logger,
+		db:           db,
+		loginLimiter: newLoginLimiter(),
 	}
 	return a, nil
 }
@@ -44,9 +47,12 @@ func (a *App) Close() {}
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// Health endpoints
+	// Health endpoints (public)
 	mux.HandleFunc("GET /healthz", a.handleHealthz)
 	mux.HandleFunc("GET /readyz", a.handleReadyz)
+
+	// Auth routes
+	a.registerAuthRoutes(mux)
 
 	return a.applyMiddleware(mux)
 }
@@ -100,10 +106,15 @@ func (a *App) handleReadyz(w http.ResponseWriter, r *http.Request) {
 // --- Middleware ---
 
 func (a *App) applyMiddleware(next http.Handler) http.Handler {
+	// Order: requestID → recovery → securityHeaders → cors → csrf → auth → handler
 	return requestIDMiddleware(
 		recoveryMiddleware(a.logger)(
 			securityHeadersMiddleware(
-				corsMiddleware(next),
+				corsMiddleware(
+					a.csrfMiddleware(
+						a.authMiddleware(next),
+					),
+				),
 			),
 		),
 	)
@@ -193,6 +204,12 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func jsonDecoder(r io.Reader) *json.Decoder {
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	return dec
 }
 
 func generateRequestID() string {
