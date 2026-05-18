@@ -16,6 +16,7 @@ import {
   Heart,
   CalendarRange,
   School2,
+  FileText,
 } from "lucide-react";
 import type { NavItem } from "@/components/layout/sidebar";
 
@@ -61,6 +62,8 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           { label: "Academic", href: "/app/academic", icon: CalendarRange },
           { label: "Classes", href: "/app/classes", icon: School2 },
           { label: "Subjects", href: "/app/subjects", icon: BookOpen },
+          { label: "Programs", href: "/app/programs", icon: BookOpen },
+          { label: "Courses", href: "/app/courses", icon: FileText },
         ]
       : []),
   ];

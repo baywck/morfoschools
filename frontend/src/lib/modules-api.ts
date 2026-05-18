@@ -383,3 +383,133 @@ export function createStudentFull(data: { displayName: string; email: string; pa
 export function createStaffFull(data: { displayName: string; email: string; password: string; employeeId?: string; department?: string; position?: string }) {
   return post<{ id: string; userId: string }>("/api/v1/staff/create-full", data);
 }
+
+// --- Programs ---
+export interface Program {
+  id: string;
+  title: string;
+  description: string | null;
+  kind: string;
+  status: string;
+  gradeLevel: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface ProgramListResponse {
+  data: Program[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listPrograms(params?: { page?: number; search?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.search) query.set("search", params.search);
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return get<ProgramListResponse>(`/api/v1/programs${qs ? `?${qs}` : ""}`);
+}
+
+export function createProgram(data: { title: string; description?: string; kind?: string; gradeLevel?: string; subjectId?: string }) {
+  return post<Program>("/api/v1/programs", data);
+}
+
+export function updateProgram(id: string, data: { title?: string; description?: string; kind?: string; gradeLevel?: string }) {
+  return patch<{ id: string }>(`/api/v1/programs/${id}`, data);
+}
+
+export function archiveProgram(id: string) {
+  return patch<{ status: string }>(`/api/v1/programs/${id}/archive`);
+}
+
+export function publishProgram(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/programs/${id}/publish`);
+}
+
+// --- Program Sections ---
+export interface ProgramSection {
+  id: string;
+  title: string;
+  sortOrder: number;
+  unlockMode: string;
+  isRequired: boolean;
+  items: ProgramItem[];
+}
+
+export interface ProgramItem {
+  id: string;
+  itemType: string;
+  itemId: string;
+  sortOrder: number;
+  isRequired: boolean;
+  passingGrade: number | null;
+  maxAttempts: number;
+}
+
+export function listProgramSections(programId: string) {
+  return get<{ data: ProgramSection[] }>(`/api/v1/programs/${programId}/sections`);
+}
+
+export function createProgramSection(programId: string, data: { title: string; unlockMode?: string; isRequired?: boolean }) {
+  return post<{ id: string }>(`/api/v1/programs/${programId}/sections`, data);
+}
+
+export function updateProgramSection(sectionId: string, data: { title?: string; sortOrder?: number; unlockMode?: string; isRequired?: boolean }) {
+  return patch<{ id: string }>(`/api/v1/program-sections/${sectionId}`, data);
+}
+
+export function deleteProgramSection(sectionId: string) {
+  return del<{ status: string }>(`/api/v1/program-sections/${sectionId}`);
+}
+
+export function createProgramItem(sectionId: string, data: { itemType: string; itemId: string; isRequired?: boolean; passingGrade?: number; maxAttempts?: number }) {
+  return post<{ id: string }>(`/api/v1/program-sections/${sectionId}/items`, data);
+}
+
+export function updateProgramItem(itemId: string, data: { sortOrder?: number; isRequired?: boolean; passingGrade?: number; maxAttempts?: number }) {
+  return patch<{ id: string }>(`/api/v1/program-items/${itemId}`, data);
+}
+
+export function deleteProgramItem(itemId: string) {
+  return del<{ status: string }>(`/api/v1/program-items/${itemId}`);
+}
+
+// --- Courses ---
+export interface Course {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface CourseListResponse {
+  data: Course[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listCourses(params?: { page?: number; search?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.search) query.set("search", params.search);
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return get<CourseListResponse>(`/api/v1/courses${qs ? `?${qs}` : ""}`);
+}
+
+export function createCourse(data: { title: string; description?: string; subjectId?: string }) {
+  return post<Course>("/api/v1/courses", data);
+}
+
+export function updateCourse(id: string, data: { title?: string; description?: string }) {
+  return patch<{ id: string }>(`/api/v1/courses/${id}`, data);
+}
+
+export function archiveCourse(id: string) {
+  return patch<{ status: string }>(`/api/v1/courses/${id}/archive`);
+}
+
+export function publishCourse(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/courses/${id}/publish`);
+}
