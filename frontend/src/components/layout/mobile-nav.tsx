@@ -15,7 +15,7 @@ export function MobileNav({ navigation }: MobileNavProps) {
   const items = navigation.slice(0, 5);
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 flex md:hidden h-18 items-center justify-around bg-[var(--shell)] px-2 pb-2">
+    <nav className="fixed bottom-0 inset-x-0 z-50 flex md:hidden h-18 items-center justify-around bg-[var(--shell)] px-2 py-1">
       {items.map((item) => {
         const Icon = item.icon;
         const isActive =

@@ -23,8 +23,10 @@ export function Topbar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  const roleLabel = session?.roles?.[0]?.replace("_", " ") || "User";
+
   return (
-    <header className="flex h-[var(--header-height)] items-center gap-3 pl-2 pr-4">
+    <header className="flex h-[var(--header-height)] items-center gap-3 px-4">
       {/* Left — Logo */}
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <img src="/logo.png" alt="Morfoschools" className="h-6 w-6 md:hidden" />
@@ -34,14 +36,14 @@ export function Topbar() {
       </div>
 
       {/* Right — actions */}
-      <div className="flex items-center gap-1.5">
-        {/* Theme toggle */}
+      <div className="flex items-center gap-2">
+        {/* Theme toggle — no border/box */}
         <button
           onClick={toggle}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] text-[var(--shell-muted)] hover:bg-white/[0.1] hover:text-[var(--shell-foreground)] transition-all"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
         >
-          {dark ? <Sun size={14} strokeWidth={2} /> : <Moon size={14} strokeWidth={2} />}
+          {dark ? <Sun size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
         </button>
 
         {/* User button */}
@@ -53,13 +55,18 @@ export function Topbar() {
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-[var(--shell-foreground)]">
               {session?.user.displayName?.charAt(0) || "?"}
             </div>
-            <span className="hidden sm:inline text-[12px] font-medium text-[var(--shell-foreground)]">
-              {session?.user.displayName}
-            </span>
+            <div className="text-left">
+              <p className="text-[12px] font-medium text-[var(--shell-foreground)] leading-tight">
+                {session?.user.displayName}
+              </p>
+              <p className="text-[10px] text-[var(--shell-muted)] leading-tight capitalize">
+                {roleLabel}
+              </p>
+            </div>
             <ChevronDown
               size={12}
               className={cn(
-                "text-[var(--shell-muted)] transition-transform hidden sm:inline",
+                "text-[var(--shell-muted)] transition-transform",
                 dropdownOpen && "rotate-180"
               )}
             />
