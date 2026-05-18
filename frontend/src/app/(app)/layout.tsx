@@ -10,10 +10,12 @@ import {
   LayoutDashboard,
   Building2,
   Users,
+  GraduationCap,
+  BookOpen,
+  Briefcase,
+  Heart,
   CalendarRange,
   School2,
-  BookOpen,
-  GraduationCap,
 } from "lucide-react";
 import type { NavItem } from "@/components/layout/sidebar";
 
@@ -53,10 +55,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     ...(session?.effectiveTenantId
       ? [
           { label: "Users", href: "/app/users", icon: Users },
+          { label: "Teachers", href: "/app/teachers", icon: GraduationCap },
+          { label: "Students", href: "/app/students", icon: BookOpen },
+          { label: "Staff", href: "/app/staff", icon: Briefcase },
+          { label: "Guardians", href: "/app/guardians", icon: Heart },
           { label: "Academic", href: "/app/academic", icon: CalendarRange },
           { label: "Classes", href: "/app/classes", icon: School2 },
-          { label: "Programs", href: "/app/programs", icon: BookOpen },
-          { label: "Exams", href: "/app/exams", icon: GraduationCap },
         ]
       : []),
   ];
