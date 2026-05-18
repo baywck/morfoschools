@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { 
-  listTeachers, archiveTeacher, createTeacher, updateTeacher, type Teacher, 
-  listUsers, type User,
+  listTeachers, archiveTeacher, createTeacherFull, updateTeacher, type Teacher,
   listTeacherSubjects, assignTeacherSubject, unassignTeacherSubject, listSubjects, type TeacherSubject, type Subject
 } from "@/lib/modules-api";
 import { PageShell } from "@/components/layout/page-shell";
@@ -23,12 +22,11 @@ export default function TeachersPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [users, setUsers] = useState<User[]>([]);
   
   // Create sheet
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState({ userId: "", employeeId: "", specialization: "" });
+  const [createForm, setCreateForm] = useState({ displayName: "", email: "", password: "", employeeId: "", specialization: "", subjectIds: [] as string[] });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Edit sheet
@@ -46,27 +44,29 @@ export default function TeachersPage() {
 
   async function load() {
     setLoading(true);
-    const [res, usersRes] = await Promise.all([
-      listTeachers({ search: search || undefined }),
-      listUsers()
-    ]);
+    const res = await listTeachers({ search: search || undefined });
     if (res.data) {
       setTeachers(res.data.data);
       setTotal(res.data.pagination.total);
-    }
-    if (usersRes.data) {
-      setUsers(usersRes.data.data);
     }
     setLoading(false);
   }
 
   useEffect(() => { load(); }, [search]);
 
+  useEffect(() => {
+    async function loadAllSubjects() {
+      const res = await listSubjects();
+      if (res.data) setAvailableSubjects(res.data.data);
+    }
+    loadAllSubjects();
+  }, []);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFieldErrors({});
     setCreating(true);
-    const res = await createTeacher(createForm);
+    const res = await createTeacherFull(createForm);
     if (res.error) {
       if (res.error.fields) setFieldErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -75,9 +75,18 @@ export default function TeachersPage() {
     }
     toast({ tone: "success", title: "Teacher created" });
     setShowCreate(false);
-    setCreateForm({ userId: "", employeeId: "", specialization: "" });
+    setCreateForm({ displayName: "", email: "", password: "", employeeId: "", specialization: "", subjectIds: [] });
     setCreating(false);
     load();
+  }
+
+  function toggleSubject(id: string) {
+    setCreateForm(prev => {
+      if (prev.subjectIds.includes(id)) {
+        return { ...prev, subjectIds: prev.subjectIds.filter(s => s !== id) };
+      }
+      return { ...prev, subjectIds: [...prev.subjectIds, id] };
+    });
   }
 
   function openEdit(teacher: Teacher) {
@@ -93,12 +102,8 @@ export default function TeachersPage() {
 
   async function loadTeacherSubjects(teacherId: string) {
     setLoadingSubjects(true);
-    const [tsRes, subRes] = await Promise.all([
-      listTeacherSubjects(teacherId),
-      listSubjects()
-    ]);
+    const tsRes = await listTeacherSubjects(teacherId);
     if (tsRes.data) setAssignedSubjects(tsRes.data.data);
-    if (subRes.data) setAvailableSubjects(subRes.data.data);
     setLoadingSubjects(false);
   }
 
@@ -148,8 +153,6 @@ export default function TeachersPage() {
     setTeacherToArchive(null);
     load();
   }
-
-  const userOptions = users.map(u => ({ value: u.id, label: `${u.displayName} (${u.email})` }));
 
   return (
     <>
@@ -208,25 +211,70 @@ export default function TeachersPage() {
     {/* Create Sheet */}
     <RightPullSheet open={showCreate} title="Add Teacher" onClose={() => setShowCreate(false)}>
       <form onSubmit={handleCreate} className="space-y-3">
-        <SelectField
-          label="User"
-          value={createForm.userId}
-          onChange={(val) => setCreateForm({ ...createForm, userId: val })}
-          error={fieldErrors.userId}
-          options={userOptions}
+        <InputField
+          label="Display Name"
+          value={createForm.displayName}
+          onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })}
+          error={fieldErrors.displayName}
+          required
         />
         <InputField
-          label="Employee ID"
+          label="Email"
+          type="email"
+          value={createForm.email}
+          onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+          error={fieldErrors.email}
+          required
+        />
+        <InputField
+          label="Password"
+          type="password"
+          value={createForm.password}
+          onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+          error={fieldErrors.password}
+          required
+        />
+        <InputField
+          label="Employee ID (optional)"
           value={createForm.employeeId}
           onChange={(e) => setCreateForm({ ...createForm, employeeId: e.target.value })}
           error={fieldErrors.employeeId}
         />
         <InputField
-          label="Specialization"
+          label="Specialization (optional)"
           value={createForm.specialization}
           onChange={(e) => setCreateForm({ ...createForm, specialization: e.target.value })}
           error={fieldErrors.specialization}
         />
+        
+        <div className="pt-2">
+          <p className="text-[12px] font-medium text-[var(--foreground)] mb-2">Subjects</p>
+          <div className="flex flex-wrap gap-2">
+            {availableSubjects.length === 0 ? (
+              <p className="text-[12px] text-[var(--muted-foreground)]">No subjects available.</p>
+            ) : (
+              availableSubjects.map((s) => {
+                const selected = createForm.subjectIds.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => toggleSubject(s.id)}
+                    className={cn(
+                      "inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors border",
+                      selected
+                        ? "bg-[var(--brand-soft)] text-[var(--brand)] border-transparent"
+                        : "bg-[var(--muted)] text-[var(--muted-foreground)] border-transparent hover:border-[var(--border-strong)]"
+                    )}
+                  >
+                    {s.name}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
         <div className="flex gap-2 justify-end pt-3">
           <button type="button" onClick={() => setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
             Cancel

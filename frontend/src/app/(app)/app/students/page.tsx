@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { 
-  listStudents, archiveStudent, createStudent, updateStudent, type Student, 
-  listUsers, type User,
+  listStudents, archiveStudent, createStudentFull, updateStudent, type Student,
   listClassSections, createGuardian, linkStudentGuardian, listGuardians, type ClassSection, type Guardian
 } from "@/lib/modules-api";
 import { PageShell } from "@/components/layout/page-shell";
@@ -23,7 +22,6 @@ export default function StudentsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [users, setUsers] = useState<User[]>([]);
 
   // Class options
   const [classes, setClasses] = useState<ClassSection[]>([]);
@@ -31,7 +29,7 @@ export default function StudentsPage() {
   // Create sheet
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState({ userId: "", studentIdNumber: "", gradeLevel: "", classSectionId: "" });
+  const [createForm, setCreateForm] = useState({ displayName: "", email: "", password: "", studentIdNumber: "", gradeLevel: "", classSectionId: "" });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Edit sheet
@@ -45,22 +43,18 @@ export default function StudentsPage() {
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [loadingGuardians, setLoadingGuardians] = useState(false);
   const [showAddGuardian, setShowAddGuardian] = useState(false);
-  const [guardianForm, setGuardianForm] = useState({ name: "", phone: "", relationship: "" });
+  const [guardianForm, setGuardianForm] = useState({ name: "", phone: "", relationship: "", email: "", password: "" });
   const [addingGuardian, setAddingGuardian] = useState(false);
 
   async function load() {
     setLoading(true);
-    const [res, usersRes, classesRes] = await Promise.all([
+    const [res, classesRes] = await Promise.all([
       listStudents({ search: search || undefined }),
-      listUsers(),
       listClassSections()
     ]);
     if (res.data) {
       setStudents(res.data.data);
       setTotal(res.data.pagination.total);
-    }
-    if (usersRes.data) {
-      setUsers(usersRes.data.data);
     }
     if (classesRes.data) {
       setClasses(classesRes.data.data);
@@ -74,7 +68,7 @@ export default function StudentsPage() {
     e.preventDefault();
     setFieldErrors({});
     setCreating(true);
-    const res = await createStudent(createForm);
+    const res = await createStudentFull(createForm);
     if (res.error) {
       if (res.error.fields) setFieldErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -83,7 +77,7 @@ export default function StudentsPage() {
     }
     toast({ tone: "success", title: "Student created" });
     setShowCreate(false);
-    setCreateForm({ userId: "", studentIdNumber: "", gradeLevel: "", classSectionId: "" });
+    setCreateForm({ displayName: "", email: "", password: "", studentIdNumber: "", gradeLevel: "", classSectionId: "" });
     setCreating(false);
     load();
   }
@@ -118,12 +112,26 @@ export default function StudentsPage() {
       toast({ tone: "error", title: "Name is required" });
       return;
     }
+    if (!guardianForm.email) {
+      toast({ tone: "error", title: "Email is required for guardian login" });
+      return;
+    }
+    if (!guardianForm.password) {
+      toast({ tone: "error", title: "Password is required for guardian login" });
+      return;
+    }
     setAddingGuardian(true);
+    // We would ideally have a composite createGuardianFull but let's see if createGuardian works or if we just pass email/password
+    // The instructions say: "For guardian create in edit, use createGuardian then linkStudentGuardian."
+    // Let's pass all fields to createGuardian
     const gRes = await createGuardian({
       name: guardianForm.name,
       phone: guardianForm.phone,
-      relationship: guardianForm.relationship
-    });
+      relationship: guardianForm.relationship,
+      email: guardianForm.email,
+      password: guardianForm.password
+    } as any);
+    
     if (gRes.error) {
       toast({ tone: "error", title: "Failed to create guardian", description: gRes.error.message });
       setAddingGuardian(false);
@@ -141,7 +149,7 @@ export default function StudentsPage() {
     }
 
     toast({ tone: "success", title: "Guardian added" });
-    setGuardianForm({ name: "", phone: "", relationship: "" });
+    setGuardianForm({ name: "", phone: "", relationship: "", email: "", password: "" });
     setShowAddGuardian(false);
     setAddingGuardian(false);
     loadStudentGuardians(editTarget.id);
@@ -172,8 +180,6 @@ export default function StudentsPage() {
     setStudentToArchive(null);
     load();
   }
-
-  const userOptions = users.map(u => ({ value: u.id, label: `${u.displayName} (${u.email})` }));
 
   return (
     <>
@@ -232,12 +238,28 @@ export default function StudentsPage() {
     {/* Create Sheet */}
     <RightPullSheet open={showCreate} title="Add Student" onClose={() => setShowCreate(false)}>
       <form onSubmit={handleCreate} className="space-y-3">
-        <SelectField
-          label="User"
-          value={createForm.userId}
-          onChange={(val) => setCreateForm({ ...createForm, userId: val })}
-          error={fieldErrors.userId}
-          options={userOptions}
+        <InputField
+          label="Display Name"
+          value={createForm.displayName}
+          onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })}
+          error={fieldErrors.displayName}
+          required
+        />
+        <InputField
+          label="Email"
+          type="email"
+          value={createForm.email}
+          onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+          error={fieldErrors.email}
+          required
+        />
+        <InputField
+          label="Password"
+          type="password"
+          value={createForm.password}
+          onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+          error={fieldErrors.password}
+          required
         />
         <InputField
           label="Student ID Number (optional)"
@@ -319,6 +341,18 @@ export default function StudentsPage() {
                 label="Name *"
                 value={guardianForm.name}
                 onChange={(e) => setGuardianForm({ ...guardianForm, name: e.target.value })}
+              />
+              <InputField
+                label="Email *"
+                type="email"
+                value={guardianForm.email}
+                onChange={(e) => setGuardianForm({ ...guardianForm, email: e.target.value })}
+              />
+              <InputField
+                label="Password *"
+                type="password"
+                value={guardianForm.password}
+                onChange={(e) => setGuardianForm({ ...guardianForm, password: e.target.value })}
               />
               <InputField
                 label="Phone"

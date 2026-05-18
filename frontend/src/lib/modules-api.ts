@@ -370,3 +370,16 @@ export function archiveGuardian(id: string) {
 export function linkStudentGuardian(guardianId: string, data: { studentId: string; isPrimary?: boolean }) {
   return post<{ id: string }>(`/api/v1/guardians/${guardianId}/link-student`, data);
 }
+
+// --- Composite Create ---
+export function createTeacherFull(data: { displayName: string; email: string; password: string; employeeId?: string; specialization?: string; subjectIds?: string[] }) {
+  return post<{ id: string; userId: string }>("/api/v1/teachers/create-full", data);
+}
+
+export function createStudentFull(data: { displayName: string; email: string; password: string; studentIdNumber?: string; gradeLevel?: string; classSectionId?: string }) {
+  return post<{ id: string; userId: string }>("/api/v1/students/create-full", data);
+}
+
+export function createStaffFull(data: { displayName: string; email: string; password: string; employeeId?: string; department?: string; position?: string }) {
+  return post<{ id: string; userId: string }>("/api/v1/staff/create-full", data);
+}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
-import { listStaff, archiveStaff, createStaff, updateStaff, type Staff, listUsers, type User } from "@/lib/modules-api";
+import { listStaff, archiveStaff, createStaffFull, updateStaff, type Staff } from "@/lib/modules-api";
 import { PageShell } from "@/components/layout/page-shell";
 import { RowActions } from "@/components/ui/row-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -19,12 +19,11 @@ export default function StaffPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [users, setUsers] = useState<User[]>([]);
 
   // Create sheet
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState({ userId: "", employeeId: "", department: "", position: "" });
+  const [createForm, setCreateForm] = useState({ displayName: "", email: "", password: "", employeeId: "", department: "", position: "" });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Edit sheet
@@ -36,16 +35,10 @@ export default function StaffPage() {
 
   async function load() {
     setLoading(true);
-    const [res, usersRes] = await Promise.all([
-      listStaff({ search: search || undefined }),
-      listUsers()
-    ]);
+    const res = await listStaff({ search: search || undefined });
     if (res.data) {
       setStaff(res.data.data);
       setTotal(res.data.pagination.total);
-    }
-    if (usersRes.data) {
-      setUsers(usersRes.data.data);
     }
     setLoading(false);
   }
@@ -56,7 +49,7 @@ export default function StaffPage() {
     e.preventDefault();
     setFieldErrors({});
     setCreating(true);
-    const res = await createStaff(createForm);
+    const res = await createStaffFull(createForm);
     if (res.error) {
       if (res.error.fields) setFieldErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -65,7 +58,7 @@ export default function StaffPage() {
     }
     toast({ tone: "success", title: "Staff created" });
     setShowCreate(false);
-    setCreateForm({ userId: "", employeeId: "", department: "", position: "" });
+    setCreateForm({ displayName: "", email: "", password: "", employeeId: "", department: "", position: "" });
     setCreating(false);
     load();
   }
@@ -106,8 +99,6 @@ export default function StaffPage() {
     setStaffToArchive(null);
     load();
   }
-
-  const userOptions = users.map(u => ({ value: u.id, label: `${u.displayName} (${u.email})` }));
 
   return (
     <>
@@ -165,27 +156,43 @@ export default function StaffPage() {
     {/* Create Sheet */}
     <RightPullSheet open={showCreate} title="Add Staff" onClose={() => setShowCreate(false)}>
       <form onSubmit={handleCreate} className="space-y-3">
-        <SelectField
-          label="User"
-          value={createForm.userId}
-          onChange={(val) => setCreateForm({ ...createForm, userId: val })}
-          error={fieldErrors.userId}
-          options={userOptions}
+        <InputField
+          label="Display Name"
+          value={createForm.displayName}
+          onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })}
+          error={fieldErrors.displayName}
+          required
         />
         <InputField
-          label="Employee ID"
+          label="Email"
+          type="email"
+          value={createForm.email}
+          onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+          error={fieldErrors.email}
+          required
+        />
+        <InputField
+          label="Password"
+          type="password"
+          value={createForm.password}
+          onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+          error={fieldErrors.password}
+          required
+        />
+        <InputField
+          label="Employee ID (optional)"
           value={createForm.employeeId}
           onChange={(e) => setCreateForm({ ...createForm, employeeId: e.target.value })}
           error={fieldErrors.employeeId}
         />
         <InputField
-          label="Department"
+          label="Department (optional)"
           value={createForm.department}
           onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
           error={fieldErrors.department}
         />
         <InputField
-          label="Position"
+          label="Position (optional)"
           value={createForm.position}
           onChange={(e) => setCreateForm({ ...createForm, position: e.target.value })}
           error={fieldErrors.position}

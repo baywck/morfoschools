@@ -69,6 +69,11 @@ func (a *App) Handler() http.Handler {
 	a.registerStaffRoutes(mux)
 	a.registerGuardianRoutes(mux)
 
+	// Composite create (user + profile in one request)
+	mux.HandleFunc("POST /api/v1/teachers/create-full", a.handleCreateTeacherFull)
+	mux.HandleFunc("POST /api/v1/students/create-full", a.handleCreateStudentFull)
+	mux.HandleFunc("POST /api/v1/staff/create-full", a.handleCreateStaffFull)
+
 	// Roles
 	a.registerRoleRoutes(mux)
 
