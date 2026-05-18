@@ -8,6 +8,7 @@ import { InputField } from "@/components/ui/input-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RowActions } from "@/components/ui/row-actions";
 import { PageShell } from "@/components/layout/page-shell";
 import { Plus, Building2, Trash2, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -98,9 +99,8 @@ export default function TenantsPage() {
         title="Tenants"
         subtitle={`${total} school${total !== 1 ? "s" : ""} registered`}
         search={{ value: search, onChange: setSearch, placeholder: "Search tenants..." }}
-        actions={[
-          { label: "Add Tenant", icon: <Plus size={14} />, onClick: () => setShowCreate(true) },
-        ]}
+        onAdd={() => setShowCreate(true)}
+        addLabel="Add Tenant"
       >
         {/* List */}
         {loading ? (
@@ -126,19 +126,15 @@ export default function TenantsPage() {
                     <p className="text-[11px] text-[var(--muted-foreground)]">{t.code}</p>
                   </div>
                   <span className={cn(
-                    "hidden sm:inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium",
+                    "rounded-md px-2 py-0.5 text-[10px] font-medium",
                     t.status === "active" ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]"
                   )}>
                     {t.status}
                   </span>
-                  <div className="flex items-center gap-0.5">
-                    <button onClick={() => setSwitchTarget(t)} title="Switch" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors">
-                      <ArrowRightLeft size={14} />
-                    </button>
-                    <button onClick={() => setArchiveTarget(t)} title="Archive" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  <RowActions actions={[
+                    { label: "Switch", icon: <ArrowRightLeft size={13} />, onClick: () => setSwitchTarget(t) },
+                    { label: "Archive", icon: <Trash2 size={13} />, onClick: () => setArchiveTarget(t), variant: "danger" },
+                  ]} />
                 </div>
               ))}
             </div>
@@ -167,7 +163,7 @@ export default function TenantsPage() {
             <button type="button" onClick={() => setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50">
+            <button type="submit" disabled={creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
               {creating && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
               <Plus size={14} /> Create
             </button>

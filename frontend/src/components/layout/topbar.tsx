@@ -40,12 +40,8 @@ export function Topbar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Build breadcrumb segments from pathname
-  // /app/tenants → ["app", "tenants"] → show "Morfoschools / Tenants"
   const segments = pathname.split("/").filter(Boolean);
-  // Remove "app" prefix for display
   const displaySegments = segments.filter((s) => s !== "app");
-
   const roleLabel = session?.roles?.[0]?.replace("_", " ") || "User";
 
   return (
@@ -80,10 +76,10 @@ export function Topbar() {
 
       {/* Right — actions */}
       <div className="flex items-center gap-2">
-        {/* Theme toggle */}
+        {/* Theme toggle — desktop only */}
         <button
           onClick={toggle}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
+          className="hidden md:flex h-8 w-8 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
         >
           {dark ? <Sun size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
@@ -98,7 +94,8 @@ export function Topbar() {
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-[var(--shell-foreground)]">
               {session?.user.displayName?.charAt(0) || "?"}
             </div>
-            <div className="text-left">
+            {/* Name + sub — desktop only */}
+            <div className="hidden md:block text-left">
               <p className="text-[12px] font-medium text-[var(--shell-foreground)] leading-tight">
                 {session?.user.displayName}
               </p>
@@ -109,7 +106,7 @@ export function Topbar() {
             <ChevronDown
               size={12}
               className={cn(
-                "text-[var(--shell-muted)] transition-transform",
+                "hidden md:block text-[var(--shell-muted)] transition-transform",
                 dropdownOpen && "rotate-180"
               )}
             />
@@ -126,7 +123,15 @@ export function Topbar() {
                   {session?.user.email}
                 </p>
               </div>
-              <div className="pt-1">
+              {/* Theme toggle — mobile (inside dropdown) */}
+              <button
+                onClick={toggle}
+                className="flex md:hidden w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
+              >
+                {dark ? <Sun size={13} /> : <Moon size={13} />}
+                {dark ? "Light mode" : "Dark mode"}
+              </button>
+              <div className="border-t border-[var(--border)] pt-1 mt-1">
                 <button
                   onClick={() => { logout(); setDropdownOpen(false); }}
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[11px] font-medium text-[var(--danger)] hover:bg-[var(--danger-soft)] transition-colors"
