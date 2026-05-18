@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { listStaff, archiveStaff, type Staff } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/text-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Briefcase, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -45,7 +45,7 @@ export default function StaffPage() {
       </div>
 
       <div className="max-w-xs">
-        <TextField label="Search staff..." value={search} onChange={(e) => setSearch(e.target.value)} prefix={<Search size={15} />} />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search staff..." />
       </div>
 
       {loading ? (

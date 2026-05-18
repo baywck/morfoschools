@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Moon, Sun, LogOut, ChevronDown } from "lucide-react";
 import { useTheme } from "@/lib/use-theme";
 import { useAuth } from "@/lib/auth-provider";
@@ -12,6 +13,7 @@ export function Topbar() {
   const { session, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -25,13 +27,21 @@ export function Topbar() {
 
   const roleLabel = session?.roles?.[0]?.replace("_", " ") || "User";
 
+  const getPageTitle = () => {
+    if (!pathname) return "";
+    const parts = pathname.split("/").filter(Boolean);
+    const lastPart = parts[parts.length - 1];
+    if (!lastPart || lastPart === "app") return "";
+    return " / " + lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
+  };
+
   return (
     <header className="flex h-[var(--header-height)] items-center gap-3 px-4 pl-1">
       {/* Left — Logo */}
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
         <img src="/logo.png" alt="Morfoschools" className="h-6 w-6 md:hidden" />
         <span className="text-[13px] font-semibold text-[var(--shell-foreground)] hidden md:inline">
-          Morfoschools
+          Morfoschools{getPageTitle()}
         </span>
       </div>
 

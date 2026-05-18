@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { listUsers, createUser, archiveUser, type User } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/text-field";
+import { InputField } from "@/components/ui/input-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Users, Trash2, Mail, Lock, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -75,7 +76,7 @@ export default function UsersPage() {
 
       {/* Search */}
       <div className="max-w-xs">
-        <TextField label="Search users..." value={search} onChange={(e) => setSearch(e.target.value)} prefix={<Search size={15} />} />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search users..." />
       </div>
 
       {/* Create form */}
@@ -83,12 +84,12 @@ export default function UsersPage() {
         <form onSubmit={handleCreate} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-3">
           <p className="text-[12px] font-semibold text-[var(--foreground)]">New User</p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label="Display Name" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} error={fieldErrors.displayName} prefix={<UserIcon size={15} />} />
-            <TextField label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} error={fieldErrors.email} prefix={<Mail size={15} />} />
+            <InputField label="Display Name" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} error={fieldErrors.displayName} prefix={<UserIcon size={14} />} />
+            <InputField label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} error={fieldErrors.email} prefix={<Mail size={14} />} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} error={fieldErrors.password} prefix={<Lock size={15} />} />
-            <TextField label="Role (slug)" value={form.roleSlug} onChange={(e) => setForm({ ...form, roleSlug: e.target.value })} />
+            <InputField label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} error={fieldErrors.password} prefix={<Lock size={14} />} />
+            <InputField label="Role (slug)" value={form.roleSlug} onChange={(e) => setForm({ ...form, roleSlug: e.target.value })} />
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowCreate(false)}>Cancel</Button>

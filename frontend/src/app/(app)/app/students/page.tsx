@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { listStudents, archiveStudent, type Student } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/text-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, BookOpen, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -45,7 +45,7 @@ export default function StudentsPage() {
       </div>
 
       <div className="max-w-xs">
-        <TextField label="Search students..." value={search} onChange={(e) => setSearch(e.target.value)} prefix={<Search size={15} />} />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search students..." />
       </div>
 
       {loading ? (

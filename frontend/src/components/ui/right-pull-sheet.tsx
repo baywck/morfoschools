@@ -21,12 +21,13 @@ export function RightPullSheet({ open, title, onClose, children }: RightPullShee
         onClick={onClose}
       />
       {/* Panel */}
-      <div className="absolute right-0 top-0 z-50 h-full w-full max-w-md border-l border-[var(--border)] bg-[var(--card)] shadow-xl flex flex-col">
+      <div className="absolute right-0 top-0 z-50 h-full w-full sm:max-w-md border-l border-[var(--border)] bg-[var(--card)] shadow-xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
           <h3 className="text-[14px] font-semibold text-[var(--foreground)]">{title}</h3>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
           >
             <X size={16} />

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-provider";
 import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/text-field";
+import { InputField } from "@/components/ui/input-field";
 import { Mail, Lock, LogIn } from "lucide-react";
 
 export default function LoginPage() {
@@ -54,30 +54,28 @@ export default function LoginPage() {
         {/* Form Card */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.12)] space-y-4">
           {error && (
-            <div className="rounded-xl border-2 border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3">
+            <div className="rounded-lg border border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3">
               <p className="text-[11px] font-medium text-[var(--danger)]">{error}</p>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            <TextField
+            <InputField
               label="Email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={fieldErrors.email}
-              prefix={<Mail size={15} />}
-              autoComplete="email"
+              prefix={<Mail size={14} />}
             />
 
-            <TextField
+            <InputField
               label="Password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={fieldErrors.password}
-              prefix={<Lock size={15} />}
-              autoComplete="current-password"
+              prefix={<Lock size={14} />}
             />
 
             <Button type="submit" loading={loading} size="lg" className="w-full mt-2">

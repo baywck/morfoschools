@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { listGuardians, createGuardian, archiveGuardian, type Guardian } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/text-field";
+import { InputField } from "@/components/ui/input-field";
+import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Heart, Trash2, User } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -70,19 +71,19 @@ export default function GuardiansPage() {
       </div>
 
       <div className="max-w-xs">
-        <TextField label="Search guardians..." value={search} onChange={(e) => setSearch(e.target.value)} prefix={<Search size={15} />} />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search guardians..." />
       </div>
 
       {showCreate && (
         <form onSubmit={handleCreate} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-3">
           <p className="text-[12px] font-semibold text-[var(--foreground)]">New Guardian</p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={fieldErrors.name} prefix={<User size={15} />} />
-            <TextField label="Relationship" value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} prefix={<Heart size={15} />} />
+            <InputField label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={fieldErrors.name} prefix={<User size={14} />} />
+            <InputField label="Relationship" value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} prefix={<Heart size={14} />} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            <TextField label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <InputField label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <InputField label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowCreate(false)}>Cancel</Button>
