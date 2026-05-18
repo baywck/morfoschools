@@ -72,6 +72,11 @@ func (a *App) Handler() http.Handler {
 	// Roles
 	a.registerRoleRoutes(mux)
 
+	// Academic
+	a.registerSubjectRoutes(mux)
+	a.registerClassSectionRoutes(mux)
+	a.registerTeacherSubjectRoutes(mux)
+
 	return a.applyMiddleware(mux)
 }
 

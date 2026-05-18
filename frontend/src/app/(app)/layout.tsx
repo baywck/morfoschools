@@ -58,9 +58,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           { label: "Teachers", href: "/app/teachers", icon: GraduationCap },
           { label: "Students", href: "/app/students", icon: BookOpen },
           { label: "Staff", href: "/app/staff", icon: Briefcase },
-          { label: "Guardians", href: "/app/guardians", icon: Heart },
           { label: "Academic", href: "/app/academic", icon: CalendarRange },
           { label: "Classes", href: "/app/classes", icon: School2 },
+          { label: "Subjects", href: "/app/subjects", icon: BookOpen },
         ]
       : []),
   ];

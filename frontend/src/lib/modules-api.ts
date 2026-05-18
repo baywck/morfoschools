@@ -1,4 +1,4 @@
-import { get, post, patch } from "./api-client";
+import { get, post, patch, del } from "./api-client";
 
 // --- Roles ---
 export interface Role {
@@ -202,7 +202,98 @@ export function archiveStaff(id: string) {
   return patch<{ status: string }>(`/api/v1/staff/${id}/archive`);
 }
 
-// --- Guardians ---
+// --- Subjects ---
+export interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface SubjectListResponse {
+  data: Subject[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listSubjects(params?: { page?: number; search?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.search) query.set("search", params.search);
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return get<SubjectListResponse>(`/api/v1/subjects${qs ? `?${qs}` : ""}`);
+}
+
+export function createSubject(data: { code: string; name: string; description?: string }) {
+  return post<Subject>("/api/v1/subjects", data);
+}
+
+export function updateSubject(id: string, data: { name?: string; description?: string; status?: string }) {
+  return patch<{ id: string }>(`/api/v1/subjects/${id}`, data);
+}
+
+export function archiveSubject(id: string) {
+  return patch<{ status: string }>(`/api/v1/subjects/${id}/archive`);
+}
+
+// --- Class Sections ---
+export interface ClassSection {
+  id: string;
+  name: string;
+  gradeLevel: string;
+  homeroomTeacherId: string | null;
+  capacity: number | null;
+  status: string;
+  createdAt: string;
+  teacherName: string;
+}
+
+export interface ClassSectionListResponse {
+  data: ClassSection[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listClassSections(params?: { page?: number; search?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.search) query.set("search", params.search);
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return get<ClassSectionListResponse>(`/api/v1/class-sections${qs ? `?${qs}` : ""}`);
+}
+
+export function createClassSection(data: { name: string; gradeLevel: string; academicYearId: string; homeroomTeacherId?: string; capacity?: number }) {
+  return post<ClassSection>("/api/v1/class-sections", data);
+}
+
+export function updateClassSection(id: string, data: { name?: string; gradeLevel?: string; homeroomTeacherId?: string; capacity?: number; status?: string }) {
+  return patch<{ id: string }>(`/api/v1/class-sections/${id}`, data);
+}
+
+export function archiveClassSection(id: string) {
+  return patch<{ status: string }>(`/api/v1/class-sections/${id}/archive`);
+}
+
+// --- Teacher Subjects ---
+export interface TeacherSubject {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export function listTeacherSubjects(teacherId: string) {
+  return get<{ data: TeacherSubject[] }>(`/api/v1/teachers/${teacherId}/subjects`);
+}
+
+export function assignTeacherSubject(teacherId: string, subjectId: string) {
+  return post<{ teacherId: string; subjectId: string }>(`/api/v1/teachers/${teacherId}/subjects`, { subjectId });
+}
+
+export function unassignTeacherSubject(teacherId: string, subjectId: string) {
+  return del<{ status: string }>(`/api/v1/teachers/${teacherId}/subjects/${subjectId}`);
+}
 export interface Guardian {
   id: string;
   userId: string | null;
