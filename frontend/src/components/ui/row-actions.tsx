@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { MoreVertical } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -20,28 +20,44 @@ export function RowActions({ actions }: RowActionsProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
-      if (btnRef.current && btnRef.current.contains(e.target as Node)) return;
-      setOpen(false);
+      if (btnRef.current?.contains(e.target as Node)) return;
+      if (menuRef.current?.contains(e.target as Node)) return;
+      close();
     }
-    function handleScroll() { setOpen(false); }
-    document.addEventListener("mousedown", handleClick);
+    function handleScroll() { close(); }
+    // Use click (not mousedown) so menu item onClick fires first
+    document.addEventListener("click", handleClick);
     document.addEventListener("scroll", handleScroll, true);
     return () => {
-      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("click", handleClick);
       document.removeEventListener("scroll", handleScroll, true);
     };
-  }, [open]);
+  }, [open, close]);
 
-  function toggle() {
+  function toggle(e: React.MouseEvent) {
+    e.stopPropagation();
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 4, left: rect.right - 160 });
+      // Position dropdown: align right edge with button, below button
+      const left = Math.max(8, rect.right - 160);
+      setPos({ top: rect.bottom + 4, left });
     }
     setOpen((v) => !v);
+  }
+
+  function handleAction(action: RowAction) {
+    setOpen(false);
+    // Delay action to allow dropdown to close and portal to unmount
+    requestAnimationFrame(() => {
+      action.onClick();
+    });
   }
 
   return (
@@ -56,13 +72,14 @@ export function RowActions({ actions }: RowActionsProps) {
 
       {open && pos && typeof document !== "undefined" && createPortal(
         <div
+          ref={menuRef}
           style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
           className="w-40 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg"
         >
           {actions.map((action, i) => (
             <button
               key={i}
-              onClick={() => { action.onClick(); setOpen(false); }}
+              onClick={() => handleAction(action)}
               className={cn(
                 "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[11px] font-medium transition-colors",
                 action.variant === "danger"
