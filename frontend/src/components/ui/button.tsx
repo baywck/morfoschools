@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Loader2 } from "lucide-react";
 
 type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
-type ButtonSize = "sm" | "md" | "lg" | "icon";
+type ButtonSize = "sm" | "md" | "lg";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -13,19 +13,18 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean;
 }
 
-const variantClass: Record<ButtonVariant, string> = {
-  primary: "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.98]",
-  secondary: "bg-[var(--muted)] text-[var(--foreground)] hover:bg-[var(--border)] active:scale-[0.98]",
-  outline: "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)] active:scale-[0.98]",
-  ghost: "bg-transparent text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
-  danger: "bg-[var(--danger)] text-white shadow-sm hover:opacity-90 active:scale-[0.98]",
+const variantStyles: Record<ButtonVariant, string> = {
+  primary: "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm hover:opacity-90",
+  secondary: "bg-[var(--muted)] text-[var(--foreground)] border border-[var(--border)] hover:border-[var(--border-strong)]",
+  outline: "border-2 border-[var(--border-strong)] text-[var(--foreground)] hover:bg-[var(--muted)]",
+  ghost: "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]",
+  danger: "bg-[var(--danger)] text-white shadow-sm hover:opacity-90",
 };
 
-const sizeClass: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-xs gap-1.5 rounded-md",
-  md: "h-8 px-4 text-xs gap-1.5 rounded-lg",
-  lg: "h-9 px-5 text-sm gap-2 rounded-lg",
-  icon: "h-8 w-8 rounded-lg",
+const sizeStyles: Record<ButtonSize, string> = {
+  sm: "h-8 px-3 text-[11px] rounded-lg gap-1.5",
+  md: "h-9 px-4 text-[12px] rounded-lg gap-2",
+  lg: "h-11 px-5 text-[13px] rounded-xl gap-2",
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -36,18 +35,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={loading || undefined}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center whitespace-nowrap font-medium transition-all duration-150",
-          "focus-visible:ring-2 focus-visible:ring-[var(--primary)]/20 focus-visible:ring-offset-1",
-          "disabled:pointer-events-none disabled:opacity-50",
-          variantClass[variant],
-          sizeClass[size],
+          "inline-flex items-center justify-center font-semibold transition-all duration-150 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none",
+          variantStyles[variant],
+          sizeStyles[size],
           className
         )}
         {...props}
       >
-        {loading && (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        )}
+        {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
         {children}
       </button>
     );

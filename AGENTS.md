@@ -24,7 +24,7 @@ You are an AI coding agent. This file is your only auto-loaded instruction set.
 
 ## Rules
 
-- **Before writing ANY UI code**: load Morfosis UI skill at `/home/bayw/.pi/agent/skills/morfosis-ui/SKILL.md`, read `DESIGN_SPEC.md` and `COMPONENT_REFERENCE.md`. No exceptions.
+- **Before writing ANY UI code**: reference morfosis-studio at `/home/bayw/Documents/Morfosis/morfosis-studio`. Read its `src/components/layout/`, `src/app/globals.css`, and relevant component pages. No exceptions.
 - Follow existing patterns. Do not invent new architecture.
 - Prefer small, incremental changes.
 - Do not refactor unrelated code.

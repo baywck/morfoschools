@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-provider";
 import { Button } from "@/components/ui/button";
-import { InputField } from "@/components/ui/input-field";
+import { TextField } from "@/components/ui/text-field";
 import { Mail, Lock, LogIn } from "lucide-react";
 
 export default function LoginPage() {
@@ -38,57 +38,57 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] p-5">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--shell)] p-5">
       <div className="w-full max-w-sm space-y-6">
         {/* Header */}
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--primary)]">
-            <span className="text-lg font-bold text-[var(--primary-foreground)]">M</span>
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+            <span className="text-lg font-bold text-white">M</span>
           </div>
-          <h1 className="text-xl font-semibold text-[var(--foreground)]">Sign In</h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Masuk ke akun Morfoschools Anda
+          <h1 className="text-xl font-semibold text-[var(--shell-foreground)]">Morfoschools</h1>
+          <p className="mt-1 text-[13px] text-[var(--shell-muted)]">
+            Masuk ke akun Anda
           </p>
         </div>
 
         {/* Form Card */}
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-5 space-y-3">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.12)] space-y-4">
           {error && (
-            <div className="rounded-lg border border-l-4 border-l-[var(--danger)] bg-[var(--danger-soft)] p-3">
-              <p className="text-xs font-medium text-[var(--danger)]">{error}</p>
+            <div className="rounded-xl border-2 border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3">
+              <p className="text-[11px] font-medium text-[var(--danger)]">{error}</p>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            <InputField
+            <TextField
               label="Email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={fieldErrors.email}
-              icon={<Mail className="h-3.5 w-3.5" />}
+              prefix={<Mail size={15} />}
               autoComplete="email"
             />
 
-            <InputField
+            <TextField
               label="Password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={fieldErrors.password}
-              icon={<Lock className="h-3.5 w-3.5" />}
+              prefix={<Lock size={15} />}
               autoComplete="current-password"
             />
 
-            <Button type="submit" loading={loading} className="w-full">
-              <LogIn className="h-3.5 w-3.5" /> Sign In
+            <Button type="submit" loading={loading} size="lg" className="w-full mt-2">
+              <LogIn size={14} /> Sign In
             </Button>
           </form>
         </div>
 
         {/* Dev personas */}
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
-          <p className="mb-2 text-[11px] font-medium text-[var(--muted-foreground)]">Dev quick login:</p>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+          <p className="mb-2 text-[10px] font-semibold text-[var(--shell-muted)] uppercase tracking-wider">Dev quick login</p>
           <div className="flex flex-wrap gap-1.5">
             {[
               { label: "Master", email: "master@morfoschools.local", pw: "master123" },
@@ -100,7 +100,7 @@ export default function LoginPage() {
                 key={p.email}
                 type="button"
                 onClick={() => { setEmail(p.email); setPassword(p.pw); }}
-                className="rounded-md bg-[var(--muted)] px-2.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--border)] transition-colors"
+                className="h-7 px-2.5 rounded-md text-[11px] font-medium border border-white/10 bg-white/[0.06] text-[var(--shell-muted)] hover:bg-white/[0.1] hover:text-[var(--shell-foreground)] transition-all"
               >
                 {p.label}
               </button>

@@ -2,8 +2,10 @@
 
 import { AuthProvider, useAuth } from "@/lib/auth-provider";
 import { ToastProvider } from "@/components/ui/toast";
-import { AppShell } from "@/components/app-shell";
-import type { NavSection, NavItem } from "@/components/app-shell/types";
+import { AppShell } from "@/components/layout/app-shell";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -12,12 +14,8 @@ import {
   School2,
   BookOpen,
   GraduationCap,
-  Settings,
-  Bell,
 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import type { NavItem } from "@/components/layout/sidebar";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
@@ -31,7 +29,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[var(--background)]">
+      <div className="flex h-screen items-center justify-center bg-[var(--shell)]">
         <div className="flex flex-col items-center gap-3">
           <Skeleton className="h-10 w-10 rounded-full" />
           <Skeleton className="h-4 w-32" />
@@ -47,44 +45,25 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
 
-  const sections: NavSection[] = [
-    {
-      title: "Main",
-      items: [
-        { label: "Dashboard", href: "/app", icon: LayoutDashboard },
-        ...(session?.roles.includes("master_admin")
-          ? [{ label: "Tenants", href: "/app/tenants", icon: Building2 }]
-          : []),
-        ...(session?.effectiveTenantId
-          ? [
-              { label: "Users", href: "/app/users", icon: Users },
-              { label: "Academic", href: "/app/academic", icon: CalendarRange },
-              { label: "Classes", href: "/app/classes", icon: School2 },
-            ]
-          : []),
-      ],
-    },
+  const navigation: NavItem[] = [
+    { label: "Dashboard", href: "/app", icon: LayoutDashboard },
+    ...(session?.roles.includes("master_admin")
+      ? [{ label: "Tenants", href: "/app/tenants", icon: Building2 }]
+      : []),
     ...(session?.effectiveTenantId
       ? [
-          {
-            title: "Learning",
-            items: [
-              { label: "Programs", href: "/app/programs", icon: BookOpen },
-              { label: "Exams", href: "/app/exams", icon: GraduationCap },
-            ] as NavItem[],
-          },
+          { label: "Users", href: "/app/users", icon: Users },
+          { label: "Academic", href: "/app/academic", icon: CalendarRange },
+          { label: "Classes", href: "/app/classes", icon: School2 },
+          { label: "Programs", href: "/app/programs", icon: BookOpen },
+          { label: "Exams", href: "/app/exams", icon: GraduationCap },
         ]
       : []),
   ];
 
-  const bottomItems: NavItem[] = [
-    { label: "Notifications", href: "/app/notifications", icon: Bell },
-    { label: "Settings", href: "/app/settings", icon: Settings },
-  ];
-
   return (
     <AuthGuard>
-      <AppShell sections={sections} bottomItems={bottomItems}>
+      <AppShell navigation={navigation} title="Dashboard">
         {children}
       </AppShell>
     </AuthGuard>

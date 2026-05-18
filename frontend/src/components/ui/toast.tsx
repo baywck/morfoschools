@@ -25,7 +25,7 @@ export function useToast() {
   return ctx;
 }
 
-const toneLeftBorder: Record<ToastTone, string> = {
+const toneBorder: Record<ToastTone, string> = {
   success: "border-l-[var(--success)]",
   error: "border-l-[var(--danger)]",
   info: "border-l-[var(--info)]",
@@ -55,23 +55,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             className={cn(
-              "flex items-start gap-3 rounded-lg border border-l-4 bg-[var(--card)] p-4 shadow-sm",
+              "flex items-start gap-3 rounded-xl border border-l-4 bg-[var(--card)] p-4 shadow-sm",
               "min-w-[300px] max-w-[400px]",
-              toneLeftBorder[t.tone]
+              toneBorder[t.tone]
             )}
           >
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-[var(--foreground)]">{t.title}</p>
+              <p className="text-[12px] font-semibold text-[var(--foreground)]">{t.title}</p>
               {t.description && (
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">{t.description}</p>
+                <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{t.description}</p>
               )}
             </div>
             <button
               onClick={() => dismiss(t.id)}
-              className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
               aria-label="Dismiss"
             >
-              <X className="h-3.5 w-3.5" />
+              <X size={13} />
             </button>
           </div>
         ))}
