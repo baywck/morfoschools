@@ -4,9 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-provider";
 import { useToast } from "@/components/ui/toast";
 import { listTenants, createTenant, archiveTenant, switchTenant, type Tenant } from "@/lib/modules-api";
-import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
-import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -99,18 +97,14 @@ export default function TenantsPage() {
       <PageShell
         title="Tenants"
         subtitle={`${total} school${total !== 1 ? "s" : ""} registered`}
-        actions={
-          <>
-            <SearchInput value={search} onChange={setSearch} placeholder="Search tenants..." className="w-40" />
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={14} /> Add Tenant
-            </Button>
-          </>
-        }
+        search={{ value: search, onChange: setSearch, placeholder: "Search tenants..." }}
+        actions={[
+          { label: "Add Tenant", icon: <Plus size={14} />, onClick: () => setShowCreate(true) },
+        ]}
       >
         {/* List */}
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
         ) : tenants.length === 0 ? (
@@ -123,8 +117,8 @@ export default function TenantsPage() {
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
             <div className="divide-y divide-[var(--border)]">
               {tenants.map((t) => (
-                <div key={t.id} className="flex items-center gap-4 px-5 py-3 hover:bg-[var(--muted)]/50 transition-colors">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)]">
+                <div key={t.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--muted)]/50 transition-colors">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)]">
                     <Building2 size={16} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -132,18 +126,18 @@ export default function TenantsPage() {
                     <p className="text-[11px] text-[var(--muted-foreground)]">{t.code}</p>
                   </div>
                   <span className={cn(
-                    "rounded-md px-2 py-0.5 text-[10px] font-medium",
+                    "hidden sm:inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium",
                     t.status === "active" ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]"
                   )}>
                     {t.status}
                   </span>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => setSwitchTarget(t)} title="Switch to this tenant">
-                      <ArrowRightLeft size={13} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setArchiveTarget(t)} title="Archive">
-                      <Trash2 size={13} />
-                    </Button>
+                  <div className="flex items-center gap-0.5">
+                    <button onClick={() => setSwitchTarget(t)} title="Switch" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors">
+                      <ArrowRightLeft size={14} />
+                    </button>
+                    <button onClick={() => setArchiveTarget(t)} title="Archive" className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] transition-colors">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -170,8 +164,13 @@ export default function TenantsPage() {
             helperText="Unique identifier (e.g. sman1-jkt)"
           />
           <div className="flex gap-2 justify-end pt-3">
-            <Button variant="ghost" size="sm" type="button" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button size="sm" type="submit" loading={creating}><Plus size={14} /> Create</Button>
+            <button type="button" onClick={() => setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50">
+              {creating && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+              <Plus size={14} /> Create
+            </button>
           </div>
         </form>
       </RightPullSheet>

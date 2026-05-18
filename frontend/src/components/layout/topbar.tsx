@@ -1,4 +1,4 @@
-// Morfosis — Topbar (dark shell: logo + user button)
+// Morfosis — Topbar (dark shell: breadcrumb + theme + user)
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -7,13 +7,28 @@ import { Moon, Sun, LogOut, ChevronDown } from "lucide-react";
 import { useTheme } from "@/lib/use-theme";
 import { useAuth } from "@/lib/auth-provider";
 import { cn } from "@/lib/cn";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+
+function formatSegment(segment: string) {
+  return segment
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 export function Topbar() {
   const { dark, toggle } = useTheme();
   const { session, logout } = useAuth();
+  const pathname = usePathname();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const pathname = usePathname();
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -25,29 +40,44 @@ export function Topbar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Build breadcrumb segments from pathname
+  // /app/tenants → ["app", "tenants"] → show "Morfoschools / Tenants"
+  const segments = pathname.split("/").filter(Boolean);
+  // Remove "app" prefix for display
+  const displaySegments = segments.filter((s) => s !== "app");
+
   const roleLabel = session?.roles?.[0]?.replace("_", " ") || "User";
 
-  const getPageTitle = () => {
-    if (!pathname) return "";
-    const parts = pathname.split("/").filter(Boolean);
-    const lastPart = parts[parts.length - 1];
-    if (!lastPart || lastPart === "app") return "";
-    return " / " + lastPart.charAt(0).toUpperCase() + lastPart.slice(1);
-  };
-
   return (
-    <header className="flex h-[var(--header-height)] items-center gap-3 px-4 pl-1">
-      {/* Left — Logo */}
-      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <img src="/logo.png" alt="Morfoschools" className="h-6 w-6 md:hidden" />
-        <span className="text-[13px] font-semibold text-[var(--shell-foreground)] hidden md:inline">
-          Morfoschools{getPageTitle()}
-        </span>
+    <header className="flex h-[var(--header-height)] items-center gap-3 px-4">
+      {/* Left — Breadcrumb */}
+      <div className="flex-1 min-w-0">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href="/app">Morfoschools</BreadcrumbLink>
+            </BreadcrumbItem>
+            {displaySegments.map((segment, index) => (
+              <span key={segment} className="contents">
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  {index === displaySegments.length - 1 ? (
+                    <BreadcrumbPage>{formatSegment(segment)}</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink href={`/app/${displaySegments.slice(0, index + 1).join("/")}`}>
+                      {formatSegment(segment)}
+                    </BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+              </span>
+            ))}
+          </BreadcrumbList>
+        </Breadcrumb>
       </div>
 
       {/* Right — actions */}
       <div className="flex items-center gap-2">
-        {/* Theme toggle — no border/box */}
+        {/* Theme toggle */}
         <button
           onClick={toggle}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
@@ -85,7 +115,6 @@ export function Topbar() {
           {/* Dropdown */}
           {dropdownOpen && (
             <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg z-50">
-              {/* User info */}
               <div className="px-3 py-2.5 border-b border-[var(--border)]">
                 <p className="text-[12px] font-medium text-[var(--foreground)]">
                   {session?.user.displayName}
@@ -94,8 +123,6 @@ export function Topbar() {
                   {session?.user.email}
                 </p>
               </div>
-
-              {/* Logout */}
               <div className="pt-1">
                 <button
                   onClick={() => { logout(); setDropdownOpen(false); }}
