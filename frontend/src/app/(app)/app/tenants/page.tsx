@@ -154,21 +154,20 @@ export default function TenantsPage() {
 
       {/* Create Sheet */}
       <RightPullSheet open={showCreate} title="Add Tenant" onClose={() => setShowCreate(false)}>
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form onSubmit={handleCreate} className="space-y-3">
           <InputField
             label="School Name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             error={fieldErrors.name}
-            placeholder="e.g. SMA Negeri 1 Jakarta"
+            prefix={<Building2 size={14} />}
           />
           <InputField
             label="Code"
             value={newCode}
             onChange={(e) => setNewCode(e.target.value)}
             error={fieldErrors.code}
-            placeholder="e.g. sman1-jkt"
-            helperText="Unique identifier for this tenant"
+            helperText="Unique identifier (e.g. sman1-jkt)"
           />
           <div className="flex gap-2 justify-end pt-3">
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowCreate(false)}>Cancel</Button>
