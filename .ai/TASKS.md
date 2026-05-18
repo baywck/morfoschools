@@ -1,13 +1,17 @@
 # Tasks — Morfoschools
 
-## Current Phase: Phase 4 — Backend Architecture Patterns
+## Current Phase: Phase 6 — User & School Admin Modules
+
+### Completed
+- [x] Users CRUD (list, create, update, archive)
 
 ### Active
-- [ ] Middleware stack completion (tenant resolution, RBAC authorization)
-- [ ] Standard pagination/filter/sort pattern
-- [ ] Test helpers (auth, tenant, RBAC, DB, handlers)
-- [ ] OpenAPI documentation convention
-- [ ] AI Tool Manifest convention
+- [ ] Tenants/Schools management
+- [ ] Teachers directory
+- [ ] Students directory
+- [ ] Staff directory
+- [ ] Guardians directory
+- [ ] Student-Guardian linking
 
 ## Backlog
 
@@ -123,4 +127,6 @@
 - [x] Phase 0: .ai/ memory files, ADRs, AGENTS.md, standards
 - [x] Phase 1: Docker Compose (6 services), migrations (6), backend skeleton, frontend skeleton
 - [x] Phase 2: Auth/login/RBAC/session/CSRF, dev seed (7 users, roles, permissions)
-- [x] Phase 3: Frontend shell (sidebar, header, auth guard), login page, base components (Button, InputField, Toast, Skeleton), API client
+- [x] Phase 3: Frontend shell (morfosis-studio aligned: dark shell, 66px sidebar, floating card)
+- [x] Phase 4: Backend patterns (pagination, response helpers, RBAC helpers, tenant switch)
+- [x] Phase 6: Users CRUD (list/create/update/archive, paginated, tenant-scoped, audited)
