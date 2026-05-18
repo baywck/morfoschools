@@ -63,6 +63,12 @@ func (a *App) Handler() http.Handler {
 	// Users
 	a.registerUserRoutes(mux)
 
+	// Profiles
+	a.registerTeacherRoutes(mux)
+	a.registerStudentRoutes(mux)
+	a.registerStaffRoutes(mux)
+	a.registerGuardianRoutes(mux)
+
 	return a.applyMiddleware(mux)
 }
 
