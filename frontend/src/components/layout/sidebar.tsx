@@ -21,7 +21,7 @@ export function Sidebar({ navigation, brand }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-width)] flex-col items-center bg-[var(--shell)] px-2.5 py-4 md:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-width)] flex-col items-center justify-start bg-[var(--shell)] py-4 md:flex">
       {/* Brand */}
       <Link href="/app" className="mb-6" aria-label="Home">
         {brand || (
