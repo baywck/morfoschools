@@ -433,6 +433,16 @@ func verifyPassword(password, hash string) bool {
 	return subtle.ConstantTimeCompare(computed, expectedHash) == 1
 }
 
+func hashPassword(password string) string {
+	salt := make([]byte, 16)
+	_, _ = rand.Read(salt)
+	hash := argon2.IDKey([]byte(password), salt, 1, 64*1024, 4, 32)
+	return fmt.Sprintf("$argon2id$v=19$m=65536,t=1,p=4$%s$%s",
+		hex.EncodeToString(salt),
+		hex.EncodeToString(hash),
+	)
+}
+
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
