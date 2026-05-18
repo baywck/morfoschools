@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
@@ -23,13 +24,15 @@ type Config struct {
 type App struct {
 	cfg    Config
 	logger *slog.Logger
+	db     *sql.DB
 }
 
 // New creates a new App instance.
-func New(cfg Config, logger *slog.Logger) (*App, error) {
+func New(cfg Config, logger *slog.Logger, db *sql.DB) (*App, error) {
 	a := &App{
 		cfg:    cfg,
 		logger: logger,
+		db:     db,
 	}
 	return a, nil
 }
@@ -59,18 +62,44 @@ func (a *App) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	// TODO: check DB, Valkey, NATS connectivity
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":    "ready",
+	checks := map[string]string{}
+	ready := true
+
+	// Database check
+	if a.db != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		if err := a.db.PingContext(ctx); err != nil {
+			checks["database"] = "unavailable"
+			ready = false
+		} else {
+			checks["database"] = "ready"
+		}
+	} else {
+		checks["database"] = "not_configured"
+	}
+
+	status := "ready"
+	code := http.StatusOK
+	if !ready {
+		status = "degraded"
+		code = http.StatusServiceUnavailable
+	}
+
+	payload := map[string]any{
+		"status":    status,
 		"service":   "morfoschools-api",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	for k, v := range checks {
+		payload[k] = v
+	}
+	writeJSON(w, code, payload)
 }
 
 // --- Middleware ---
 
 func (a *App) applyMiddleware(next http.Handler) http.Handler {
-	// Order: requestID → recovery → securityHeaders → cors → handler
 	return requestIDMiddleware(
 		recoveryMiddleware(a.logger)(
 			securityHeadersMiddleware(
@@ -97,7 +126,9 @@ func recoveryMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if rec := recover(); rec != nil {
-					logger.Error("panic recovered", "panic", rec, "requestId", RequestID(r.Context()))
+					if logger != nil {
+						logger.Error("panic recovered", "panic", rec, "requestId", RequestID(r.Context()))
+					}
 					writeJSON(w, http.StatusInternalServerError, map[string]any{
 						"error": map[string]any{
 							"code":      "internal_error",

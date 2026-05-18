@@ -1,7 +1,6 @@
 services:
   frontend:
     image: node:22-alpine
-    user: "${UID:-1000}:${GID:-1000}"
     working_dir: /app
     command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0 --port 1666"
     ports:
@@ -13,7 +12,6 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
     volumes:
       - ./frontend:/app
-      - frontend-node-modules:/app/node_modules
     depends_on:
       backend:
         condition: service_started
@@ -83,7 +81,7 @@ services:
     image: valkey/valkey:8-alpine
     command: ["valkey-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "6379:6379"
+      - "${VALKEY_PORT:-6399}:6379"
     networks:
       - data-net
 
@@ -118,4 +116,3 @@ volumes:
   postgres-data:
   nats-data:
   clickhouse-data:
-  frontend-node-modules:

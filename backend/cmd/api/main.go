@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"os"
@@ -9,7 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"morfoschools/backend/internal/app"
+	"morfoschools/backend/internal/platform/migrate"
+	"morfoschools/backend/migrations"
 )
 
 func main() {
@@ -23,7 +28,40 @@ func main() {
 		NatsUrl: envOr("NATS_URL", ""),
 	}
 
-	application, err := app.New(cfg, logger)
+	// Connect to database
+	var db *sql.DB
+	if cfg.DBUrl != "" {
+		var err error
+		db, err = sql.Open("pgx", cfg.DBUrl)
+		if err != nil {
+			logger.Error("failed to open database", "error", err)
+			os.Exit(1)
+		}
+		defer db.Close()
+
+		db.SetMaxOpenConns(25)
+		db.SetMaxIdleConns(5)
+		db.SetConnMaxLifetime(5 * time.Minute)
+
+		// Verify connection
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := db.PingContext(ctx); err != nil {
+			cancel()
+			logger.Error("failed to ping database", "error", err)
+			os.Exit(1)
+		}
+
+		// Run migrations
+		if err := migrate.Run(ctx, db, logger, migrations.FS); err != nil {
+			cancel()
+			logger.Error("failed to run migrations", "error", err)
+			os.Exit(1)
+		}
+		cancel()
+		logger.Info("database connected, migrations complete")
+	}
+
+	application, err := app.New(cfg, logger, db)
 	if err != nil {
 		logger.Error("failed to initialize app", "error", err)
 		os.Exit(1)
@@ -38,7 +76,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

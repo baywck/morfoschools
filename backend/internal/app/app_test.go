@@ -6,12 +6,13 @@ import (
 	"testing"
 )
 
-func TestHealthz(t *testing.T) {
-	a, err := New(Config{Port: "8080", AppEnv: "test"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+func newTestApp() *App {
+	a, _ := New(Config{Port: "8080", AppEnv: "test"}, nil, nil)
+	return a
+}
 
+func TestHealthz(t *testing.T) {
+	a := newTestApp()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -26,27 +27,20 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestReadyz(t *testing.T) {
-	a, err := New(Config{Port: "8080", AppEnv: "test"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	a := newTestApp()
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
 
 	a.Handler().ServeHTTP(w, req)
 
+	// Without DB, readyz still returns 200 (db shows as not_configured)
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 
 func TestSecurityHeaders(t *testing.T) {
-	a, err := New(Config{Port: "8080", AppEnv: "test"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	a := newTestApp()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -65,11 +59,7 @@ func TestSecurityHeaders(t *testing.T) {
 }
 
 func TestCORSPreflight(t *testing.T) {
-	a, err := New(Config{Port: "8080", AppEnv: "test"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	a := newTestApp()
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/anything", nil)
 	req.Header.Set("Origin", "http://localhost:1666")
 	w := httptest.NewRecorder()
@@ -85,11 +75,7 @@ func TestCORSPreflight(t *testing.T) {
 }
 
 func TestCORSRejectsUnknownOrigin(t *testing.T) {
-	a, err := New(Config{Port: "8080", AppEnv: "test"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	a := newTestApp()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	req.Header.Set("Origin", "http://evil.com")
 	w := httptest.NewRecorder()
@@ -102,11 +88,7 @@ func TestCORSRejectsUnknownOrigin(t *testing.T) {
 }
 
 func TestRequestIDGenerated(t *testing.T) {
-	a, err := New(Config{Port: "8080", AppEnv: "test"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	a := newTestApp()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
 
@@ -118,11 +100,7 @@ func TestRequestIDGenerated(t *testing.T) {
 }
 
 func TestRequestIDPreserved(t *testing.T) {
-	a, err := New(Config{Port: "8080", AppEnv: "test"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	a := newTestApp()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	req.Header.Set("X-Request-ID", "custom-123")
 	w := httptest.NewRecorder()
