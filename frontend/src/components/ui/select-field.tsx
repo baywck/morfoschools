@@ -19,9 +19,10 @@ interface SelectFieldProps {
   helperText?: string;
   prefix?: React.ReactNode;
   placeholder?: string;
+  disabled?: boolean;
 }
 
-export function SelectField({ label, value, options, onChange, error, helperText, prefix, placeholder }: SelectFieldProps) {
+export function SelectField({ label, value, options, onChange, error, helperText, prefix, placeholder, disabled }: SelectFieldProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -43,14 +44,17 @@ export function SelectField({ label, value, options, onChange, error, helperText
   return (
     <div className="w-full relative" ref={ref}>
       <div
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => { if (!disabled) setOpen((v) => !v); }}
         className={cn(
-          "relative flex h-11 items-center rounded-lg border bg-[var(--card)] transition-all cursor-pointer",
+          "relative flex h-11 items-center rounded-lg border bg-[var(--card)] transition-all",
+          disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
           open
             ? "border-[var(--field-focus)] ring-2 ring-[var(--field-ring)]"
             : error
               ? "border-[var(--danger)]"
-              : "border-[var(--border)] hover:border-[var(--border-strong)]"
+              : disabled
+                ? "border-[var(--border)]"
+                : "border-[var(--border)] hover:border-[var(--border-strong)]"
         )}
       >
         {prefix && (

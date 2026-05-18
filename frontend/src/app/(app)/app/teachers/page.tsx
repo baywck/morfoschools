@@ -35,12 +35,15 @@ export default function TeachersPage() {
   const [editForm, setEditForm] = useState({ employeeId: "", specialization: "", status: "" });
 
   const [teacherToArchive, setTeacherToArchive] = useState<Teacher | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   // Subjects
   const [assignedSubjects, setAssignedSubjects] = useState<TeacherSubject[]>([]);
   const [availableSubjects, setAvailableSubjects] = useState<Subject[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
   const [subjectToAdd, setSubjectToAdd] = useState("");
+  const [assigningSubject, setAssigningSubject] = useState(false);
+  const [unassigningSubject, setUnassigningSubject] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -110,7 +113,9 @@ export default function TeachersPage() {
   async function handleAssignSubject(subjectId: string) {
     if (!editTarget || !subjectId) return;
     setSubjectToAdd(""); // reset immediately
+    setAssigningSubject(true);
     const res = await assignTeacherSubject(editTarget.id, subjectId);
+    setAssigningSubject(false);
     if (res.error) {
       toast({ tone: "error", title: "Failed to assign subject", description: res.error.message });
       return;
@@ -120,7 +125,9 @@ export default function TeachersPage() {
 
   async function handleUnassignSubject(subjectId: string) {
     if (!editTarget) return;
+    setUnassigningSubject(subjectId);
     const res = await unassignTeacherSubject(editTarget.id, subjectId);
+    setUnassigningSubject(null);
     if (res.error) {
       toast({ tone: "error", title: "Failed to unassign subject", description: res.error.message });
       return;
@@ -147,7 +154,9 @@ export default function TeachersPage() {
   }
 
   async function handleArchive(id: string) {
+    setArchiving(true);
     const res = await archiveTeacher(id);
+    setArchiving(false);
     if (res.error) { toast({ tone: "error", title: "Failed", description: res.error.message }); return; }
     toast({ tone: "success", title: "Teacher archived" });
     setTeacherToArchive(null);
@@ -170,6 +179,7 @@ export default function TeachersPage() {
         title="Archive Teacher"
         description={`Are you sure you want to archive ${teacherToArchive?.displayName}? This action can be undone later.`}
         confirmLabel="Archive Teacher"
+        loading={archiving}
         destructive
       />
 
@@ -216,15 +226,12 @@ export default function TeachersPage() {
           value={createForm.displayName}
           onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })}
           error={fieldErrors.displayName}
-          required
         />
         <InputField
           label="Email"
-          type="email"
           value={createForm.email}
           onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
           error={fieldErrors.email}
-          required
         />
         <InputField
           label="Password"
@@ -232,7 +239,6 @@ export default function TeachersPage() {
           value={createForm.password}
           onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
           error={fieldErrors.password}
-          required
         />
         <InputField
           label="Employee ID (optional)"
@@ -324,16 +330,21 @@ export default function TeachersPage() {
             ) : (
               assignedSubjects.map(ts => {
                 const subjectName = ts.name || availableSubjects.find(s => s.id === ts.id)?.name || 'Unknown Subject';
+                const isRemoving = unassigningSubject === ts.id;
                 return (
-                  <div key={ts.id} className="inline-flex items-center gap-1 rounded-md pl-2 pr-1 py-0.5 text-[11px] font-medium bg-[var(--brand-soft)] text-[var(--brand)]">
+                  <div key={ts.id} className={cn("inline-flex items-center gap-1 rounded-md pl-2 pr-1 py-0.5 text-[11px] font-medium bg-[var(--brand-soft)] text-[var(--brand)]", isRemoving && "opacity-50 pointer-events-none")}>
                     {subjectName}
-                    <button 
-                      type="button" 
-                      onClick={() => handleUnassignSubject(ts.id)}
-                      className="p-0.5 hover:bg-[var(--brand)] hover:text-white rounded transition-colors ml-1"
-                    >
-                      <X size={12} />
-                    </button>
+                    {isRemoving ? (
+                       <span className="h-3 w-3 animate-spin rounded-full border border-current border-r-transparent ml-1" />
+                    ) : (
+                      <button 
+                        type="button" 
+                        onClick={() => handleUnassignSubject(ts.id)}
+                        className="p-0.5 hover:bg-[var(--brand)] hover:text-white rounded transition-colors ml-1"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
                   </div>
                 );
               })
@@ -341,20 +352,28 @@ export default function TeachersPage() {
           </div>
 
           {!loadingSubjects && (
-            <SelectField
-              label="Add Subject"
-              value={subjectToAdd}
-              onChange={(val) => {
-                setSubjectToAdd(val);
-                if (val) handleAssignSubject(val);
-              }}
-              options={[
-                { value: "", label: "Select a subject..." },
-                ...availableSubjects
-                  .filter(s => !assignedSubjects.some(ts => ts.id === s.id))
-                  .map(s => ({ value: s.id, label: s.name }))
-              ]}
-            />
+            <div className="relative">
+              <SelectField
+                label="Add Subject"
+                value={subjectToAdd}
+                disabled={assigningSubject}
+                onChange={(val) => {
+                  setSubjectToAdd(val);
+                  if (val) handleAssignSubject(val);
+                }}
+                options={[
+                  { value: "", label: "Select a subject..." },
+                  ...availableSubjects
+                    .filter(s => !assignedSubjects.some(ts => ts.id === s.id))
+                    .map(s => ({ value: s.id, label: s.name }))
+                ]}
+              />
+              {assigningSubject && (
+                <div className="absolute top-8 right-2">
+                  <span className="block h-4 w-4 animate-spin rounded-full border-2 border-[var(--primary)] border-r-transparent" />
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -363,7 +382,8 @@ export default function TeachersPage() {
             Cancel
           </button>
           <button type="submit" disabled={editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-            {editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
+            {editing && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+            Save Changes
           </button>
         </div>
       </form>

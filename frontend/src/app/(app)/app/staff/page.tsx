@@ -32,6 +32,7 @@ export default function StaffPage() {
   const [editForm, setEditForm] = useState({ employeeId: "", department: "", position: "", status: "" });
 
   const [staffToArchive, setStaffToArchive] = useState<Staff | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -93,7 +94,9 @@ export default function StaffPage() {
   }
 
   async function handleArchive(id: string) {
+    setArchiving(true);
     const res = await archiveStaff(id);
+    setArchiving(false);
     if (res.error) { toast({ tone: "error", title: "Failed", description: res.error.message }); return; }
     toast({ tone: "success", title: "Staff archived" });
     setStaffToArchive(null);
@@ -116,6 +119,7 @@ export default function StaffPage() {
         title="Archive Staff"
         description={`Are you sure you want to archive ${staffToArchive?.displayName}? This action can be undone later.`}
         confirmLabel="Archive Staff"
+        loading={archiving}
         destructive
       />
 
@@ -161,15 +165,12 @@ export default function StaffPage() {
           value={createForm.displayName}
           onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })}
           error={fieldErrors.displayName}
-          required
         />
         <InputField
           label="Email"
-          type="email"
           value={createForm.email}
           onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
           error={fieldErrors.email}
-          required
         />
         <InputField
           label="Password"
@@ -177,7 +178,6 @@ export default function StaffPage() {
           value={createForm.password}
           onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
           error={fieldErrors.password}
-          required
         />
         <InputField
           label="Employee ID (optional)"
@@ -245,7 +245,8 @@ export default function StaffPage() {
             Cancel
           </button>
           <button type="submit" disabled={editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-            {editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
+            {editing && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+            Save Changes
           </button>
         </div>
       </form>

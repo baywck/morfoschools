@@ -38,6 +38,7 @@ export default function StudentsPage() {
   const [editForm, setEditForm] = useState({ studentIdNumber: "", gradeLevel: "", status: "" });
 
   const [studentToArchive, setStudentToArchive] = useState<Student | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   // Guardians
   const [guardians, setGuardians] = useState<Guardian[]>([]);
@@ -174,7 +175,9 @@ export default function StudentsPage() {
   }
 
   async function handleArchive(id: string) {
+    setArchiving(true);
     const res = await archiveStudent(id);
+    setArchiving(false);
     if (res.error) { toast({ tone: "error", title: "Failed", description: res.error.message }); return; }
     toast({ tone: "success", title: "Student archived" });
     setStudentToArchive(null);
@@ -197,6 +200,7 @@ export default function StudentsPage() {
         title="Archive Student"
         description={`Are you sure you want to archive ${studentToArchive?.displayName}? This action can be undone later.`}
         confirmLabel="Archive Student"
+        loading={archiving}
         destructive
       />
 
@@ -243,15 +247,12 @@ export default function StudentsPage() {
           value={createForm.displayName}
           onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })}
           error={fieldErrors.displayName}
-          required
         />
         <InputField
           label="Email"
-          type="email"
           value={createForm.email}
           onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
           error={fieldErrors.email}
-          required
         />
         <InputField
           label="Password"
@@ -259,7 +260,6 @@ export default function StudentsPage() {
           value={createForm.password}
           onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
           error={fieldErrors.password}
-          required
         />
         <InputField
           label="Student ID Number (optional)"
@@ -344,7 +344,6 @@ export default function StudentsPage() {
               />
               <InputField
                 label="Email *"
-                type="email"
                 value={guardianForm.email}
                 onChange={(e) => setGuardianForm({ ...guardianForm, email: e.target.value })}
               />
@@ -414,7 +413,8 @@ export default function StudentsPage() {
             Cancel
           </button>
           <button type="submit" disabled={editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-            {editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
+            {editing && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+            Save Changes
           </button>
         </div>
       </form>

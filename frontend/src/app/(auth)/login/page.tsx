@@ -62,7 +62,6 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-3">
             <InputField
               label="Email"
-              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={fieldErrors.email}

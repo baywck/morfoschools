@@ -312,7 +312,6 @@ export default function ClassesPage() {
           />
           <InputField
             label="Capacity"
-            type="number"
             value={newCapacity}
             onChange={(e) => setNewCapacity(e.target.value)}
             error={fieldErrors.capacity}
@@ -363,7 +362,6 @@ export default function ClassesPage() {
           />
           <InputField
             label="Capacity"
-            type="number"
             value={editForm.capacity}
             onChange={(e) => setEditForm({ ...editForm, capacity: e.target.value })}
             error={fieldErrors.capacity}
@@ -383,7 +381,8 @@ export default function ClassesPage() {
               Cancel
             </button>
             <button type="submit" disabled={editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-              {editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
+              {editing && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+              Save Changes
             </button>
           </div>
         </form>

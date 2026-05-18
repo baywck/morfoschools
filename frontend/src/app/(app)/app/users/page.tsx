@@ -169,7 +169,7 @@ export default function UsersPage() {
       <RightPullSheet open={showCreate} title="Add User" onClose={() => setShowCreate(false)}>
         <form onSubmit={handleCreate} className="space-y-3">
           <InputField label="Display Name" value={createForm.displayName} onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })} error={createErrors.displayName} prefix={<UserIcon size={14} />} />
-          <InputField label="Email" type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} error={createErrors.email} prefix={<Mail size={14} />} />
+          <InputField label="Email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} error={createErrors.email} prefix={<Mail size={14} />} />
           <InputField label="Password" type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} error={createErrors.password} prefix={<Lock size={14} />} />
           <SelectField label="Role" value={createForm.roleSlug} options={roleOptions} onChange={(v) => setCreateForm({ ...createForm, roleSlug: v })} prefix={<Shield size={14} />} />
           <div className="flex gap-2 justify-end pt-3">
