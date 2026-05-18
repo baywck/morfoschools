@@ -5,9 +5,12 @@ import { useToast } from "@/components/ui/toast";
 import { listGuardians, createGuardian, archiveGuardian, type Guardian } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
-import { SearchInput } from "@/components/ui/search-input";
+import { PageShell } from "@/components/layout/page-shell";
+import { RowActions } from "@/components/ui/row-actions";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Heart, Trash2, User } from "lucide-react";
+import { Plus, Heart, Trash2, User } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function GuardiansPage() {
@@ -20,6 +23,7 @@ export default function GuardiansPage() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", email: "", relationship: "" });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [guardianToArchive, setGuardianToArchive] = useState<Guardian | null>(null);
 
   async function load() {
     setLoading(true);
@@ -55,42 +59,45 @@ export default function GuardiansPage() {
     const res = await archiveGuardian(id);
     if (res.error) { toast({ tone: "error", title: "Failed", description: res.error.message }); return; }
     toast({ tone: "success", title: "Guardian archived" });
+    setGuardianToArchive(null);
     load();
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-[15px] font-bold text-[var(--foreground)] tracking-tight">Guardians</h2>
-          <p className="text-[12px] text-[var(--muted-foreground)] mt-0.5">{total} guardian{total !== 1 ? "s" : ""}</p>
-        </div>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
-          <Plus size={14} /> Add Guardian
-        </Button>
-      </div>
-
-      <div className="max-w-xs">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search guardians..." />
-      </div>
-
-      {showCreate && (
-        <form onSubmit={handleCreate} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-3">
-          <p className="text-[12px] font-semibold text-[var(--foreground)]">New Guardian</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <InputField label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={fieldErrors.name} prefix={<User size={14} />} />
-            <InputField label="Relationship" value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} prefix={<Heart size={14} />} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <InputField label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            <InputField label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </div>
-          <div className="flex gap-2 justify-end">
+    <PageShell
+      title="Guardians"
+      subtitle={`${total} guardian${total !== 1 ? "s" : ""}`}
+      search={{ value: search, onChange: setSearch }}
+      onAdd={() => setShowCreate(true)}
+      addLabel="Add Guardian"
+    >
+      <RightPullSheet
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="New Guardian"
+      >
+        <form onSubmit={handleCreate} className="space-y-4 pt-4">
+          <InputField label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={fieldErrors.name} prefix={<User size={14} />} />
+          <InputField label="Relationship" value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} prefix={<Heart size={14} />} />
+          <InputField label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <InputField label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          
+          <div className="flex gap-2 justify-end pt-4">
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button size="sm" type="submit" loading={creating}><Plus size={14} /> Create</Button>
           </div>
         </form>
-      )}
+      </RightPullSheet>
+
+      <ConfirmDialog
+        open={!!guardianToArchive}
+        onCancel={() => setGuardianToArchive(null)}
+        onConfirm={() => guardianToArchive && handleArchive(guardianToArchive.id)}
+        title="Archive Guardian"
+        description={`Are you sure you want to archive ${guardianToArchive?.name}? This action can be undone later.`}
+        confirmLabel="Archive Guardian"
+        destructive
+      />
 
       {loading ? (
         <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
@@ -104,7 +111,7 @@ export default function GuardiansPage() {
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
           <div className="divide-y divide-[var(--border)]">
             {guardians.map((g) => (
-              <div key={g.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[var(--muted)]/50 transition-colors">
+              <div key={g.id} className="flex items-center gap-4 px-3 py-3 hover:bg-[var(--muted)]/50 transition-colors">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--danger-soft)] text-[var(--danger)]">
                   <Heart size={16} />
                 </div>
@@ -113,12 +120,16 @@ export default function GuardiansPage() {
                   <p className="text-[11px] text-[var(--muted-foreground)]">{[g.relationship, g.phone].filter(Boolean).join(" • ")}</p>
                 </div>
                 <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", g.status === "active" ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]")}>{g.status}</span>
-                <Button variant="ghost" size="sm" onClick={() => handleArchive(g.id)}><Trash2 size={13} /></Button>
+                <RowActions
+                  actions={[
+                    { label: "Archive", icon: <Trash2 size={14} />, onClick: () => setGuardianToArchive(g), variant: "danger" }
+                  ]}
+                />
               </div>
             ))}
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

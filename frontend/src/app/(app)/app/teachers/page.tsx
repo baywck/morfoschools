@@ -4,9 +4,11 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { listTeachers, archiveTeacher, type Teacher } from "@/lib/modules-api";
 import { Button } from "@/components/ui/button";
-import { SearchInput } from "@/components/ui/search-input";
+import { PageShell } from "@/components/layout/page-shell";
+import { RowActions } from "@/components/ui/row-actions";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, GraduationCap, Trash2 } from "lucide-react";
+import { GraduationCap, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function TeachersPage() {
@@ -15,6 +17,7 @@ export default function TeachersPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [teacherToArchive, setTeacherToArchive] = useState<Teacher | null>(null);
 
   async function load() {
     setLoading(true);
@@ -32,21 +35,25 @@ export default function TeachersPage() {
     const res = await archiveTeacher(id);
     if (res.error) { toast({ tone: "error", title: "Failed", description: res.error.message }); return; }
     toast({ tone: "success", title: "Teacher archived" });
+    setTeacherToArchive(null);
     load();
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-[15px] font-bold text-[var(--foreground)] tracking-tight">Teachers</h2>
-          <p className="text-[12px] text-[var(--muted-foreground)] mt-0.5">{total} teacher{total !== 1 ? "s" : ""}</p>
-        </div>
-      </div>
-
-      <div className="max-w-xs">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search teachers..." />
-      </div>
+    <PageShell
+      title="Teachers"
+      subtitle={`${total} teacher${total !== 1 ? "s" : ""}`}
+      search={{ value: search, onChange: setSearch }}
+    >
+      <ConfirmDialog
+        open={!!teacherToArchive}
+        onCancel={() => setTeacherToArchive(null)}
+        onConfirm={() => teacherToArchive && handleArchive(teacherToArchive.id)}
+        title="Archive Teacher"
+        description={`Are you sure you want to archive ${teacherToArchive?.displayName}? This action can be undone later.`}
+        confirmLabel="Archive Teacher"
+        destructive
+      />
 
       {loading ? (
         <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
@@ -60,7 +67,7 @@ export default function TeachersPage() {
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
           <div className="divide-y divide-[var(--border)]">
             {teachers.map((t) => (
-              <div key={t.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[var(--muted)]/50 transition-colors">
+              <div key={t.id} className="flex items-center gap-4 px-3 py-3 hover:bg-[var(--muted)]/50 transition-colors">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--info-soft)] text-[var(--info)]">
                   <GraduationCap size={16} />
                 </div>
@@ -70,12 +77,16 @@ export default function TeachersPage() {
                 </div>
                 {t.employeeId && <span className="text-[10px] text-[var(--muted-foreground)] font-mono">{t.employeeId}</span>}
                 <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", t.status === "active" ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]")}>{t.status}</span>
-                <Button variant="ghost" size="sm" onClick={() => handleArchive(t.id)}><Trash2 size={13} /></Button>
+                <RowActions
+                  actions={[
+                    { label: "Archive", icon: <Trash2 size={14} />, onClick: () => setTeacherToArchive(t), variant: "danger" }
+                  ]}
+                />
               </div>
             ))}
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

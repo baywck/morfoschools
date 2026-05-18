@@ -15,7 +15,7 @@ export function MobileNav({ navigation }: MobileNavProps) {
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 flex md:hidden h-16 items-center bg-[var(--shell)] px-2 pb-1 overflow-x-auto scrollbar-none">
-      <div className="flex items-center gap-1 mx-auto">
+      <div className="flex items-center gap-3 mx-auto">
         {navigation.map((item) => {
           const Icon = item.icon;
           const isActive =
