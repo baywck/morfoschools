@@ -24,7 +24,7 @@ export function AppShell({ children, navigation, title, subtitle, actions, back 
         {/* Dark shell header */}
         <Topbar />
         {/* Content — floating white card */}
-        <div className="flex-1 min-h-0 p-0 md:p-2.5 md:pl-1.5 md:pt-0">
+        <div className="flex-1 min-h-0 p-0 md:p-2.5 md:pt-0">
           <div className="flex h-full flex-col overflow-hidden rounded-none bg-[var(--background)] md:rounded-2xl md:border md:border-[var(--border)] md:shadow-[0_20px_60px_rgba(0,0,0,0.12)]">
             <main className="min-h-0 flex-1 overflow-y-auto">
               {/* Inner sticky page header */}
