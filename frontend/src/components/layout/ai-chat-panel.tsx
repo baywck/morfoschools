@@ -93,7 +93,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
   if (!open) return null;
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-[var(--shell)] text-white shadow-2xl md:rounded-l-2xl">
+    <aside className="fixed inset-y-0 right-0 z-50 flex w-[360px] flex-col bg-[var(--shell)] text-white shadow-2xl">
       {/* Header */}
       <div className="shrink-0 px-4 py-4">
         <div className="flex items-center justify-between">
