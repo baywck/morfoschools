@@ -1,133 +1,67 @@
 # Tasks — Morfoschools
 
-## Current Phase: Phase 7 — Academic Structure Modules
+## Current Phase: Phase 9 — Exams (next session)
 
-### Completed
-- [x] Subjects CRUD (BE + FE)
-- [x] Class Sections CRUD with homeroom teacher (BE + FE)
-- [x] Teacher-Subject assignments (BE + FE API)
-
-### Remaining
-- [ ] Academic Years + Semesters
-- [ ] Subject Groups
-- [ ] Fix Teachers page: multi-subject assignment UI
-- [ ] Fix Students page: optional class assignment + guardian management
-- [ ] Remove standalone Guardians page
-
-## Backlog
-
-### Phase 1 — Infra + DB Foundation
-- [ ] Docker Compose: frontend, backend, PostgreSQL, PgBouncer, Valkey, NATS, optional ClickHouse
-- [ ] Backend boots with health endpoints
-- [ ] Migration runner (go:embed)
-- [ ] Base schema: auth/RBAC/tenant/theme/audit
-- [ ] Dev seed system
-- [ ] PgBouncer used in app runtime
-- [ ] Valkey and NATS reachable
-
-### Phase 2 — Auth/Login/RBAC/Session/Theme
-- [ ] POST /api/v1/auth/login
-- [ ] POST /api/v1/auth/logout
-- [ ] GET /api/v1/auth/me
-- [ ] httpOnly secure cookie sessions
-- [ ] CSRF protection
-- [ ] Login rate limiting
-- [ ] Password hashing (Argon2id)
-- [ ] RBAC roles + permissions seedable
-- [ ] Master admin global context + act-as audit
-- [ ] Tenant theme (preset + primary + accent + logo)
-- [ ] Theme cached in Valkey
-- [ ] Dark/light mode (local preference)
-
-### Phase 3 — Frontend Shell + Base Components
-- [ ] App shell (sidebar + header + AI sidecar placeholder)
-- [ ] Morfosis Design System tokens
-- [ ] Base component library
-- [ ] Login page
-- [ ] Dashboard page
-- [ ] Role-aware navigation
-- [ ] Dark/light + tenant palette integration
-
-### Phase 4 — Backend Architecture Patterns
-- [ ] Middleware stack (requestID, logging, recovery, CORS, security headers, auth, tenant, RBAC, rate limit, CSRF, audit)
-- [ ] Standard error envelope with structured validation
-- [ ] Pagination/filter/sort pattern
-- [ ] Test helpers (auth, tenant, RBAC, DB, handlers)
-- [ ] OpenAPI documentation convention
-- [ ] AI Tool Manifest convention
-
-### Phase 5 — Domain Schema
-- [ ] User profiles (teachers, students, staff, guardians)
-- [ ] Academic structure (years, terms, class_sections, subjects, subject_groups)
-- [ ] Programs (programs, sections, items, assignments, enrollments, progress, attempts)
-- [ ] Courses (courses, modules, lessons, resources)
-- [ ] Exams (exams, sections, questions, options, targets, gates, attempts, scores)
-
-### Phase 6 — User & School Admin Modules
-- [ ] Users CRUD
-- [ ] Tenants/Schools management
-- [ ] Teachers directory
-- [ ] Students directory
-- [ ] Staff directory
-- [ ] Guardians directory
-- [ ] Student-Guardian linking
-
-### Phase 7 — Academic Structure Modules
-- [ ] Academic Years + Semesters
-- [ ] Class Sections
-- [ ] Subjects
-- [ ] Subject Groups
-- [ ] Teaching Assignments
-- [ ] Enrollments
-
-### Phase 8 — Programs + Courses
-- [ ] Program CRUD (create, publish, archive)
-- [ ] Program Sections + Items management
-- [ ] Program Assignment (to class/student)
-- [ ] Auto-enrollment reconciler
-- [ ] Course CRUD
-- [ ] Course Modules + Lessons + Resources
-- [ ] Student program view + progress tracking
-- [ ] Section unlock logic
-- [ ] Item completion evaluation
-
-### Phase 9 — Exam Management
-- [ ] Exam CRUD
-- [ ] Exam Sections + Questions (MC, essay, short-answer)
-- [ ] Answer key / expected answer / rubric
-- [ ] Exam versioning
-- [ ] Targets + Gate Windows
-- [ ] Prerequisites
-- [ ] Publish flow + materialized eligibility
-
-### Phase 10 — Exam Critical Path
-- [ ] Exam Gate
-- [ ] Take Exam
-- [ ] Autosave (cheap, resilient)
-- [ ] Submit (append-only, durable, receipt)
-- [ ] Integrity events
-- [ ] Attempt locking
-- [ ] NATS JetStream shock absorber
-
-### Phase 11 — Teacher Operations
-- [ ] Exam Monitor
-- [ ] Manual Grading
-- [ ] AI-assisted Grading (uses correct answer/rubric)
-- [ ] Performance views
-- [ ] Reports/Export
-
-### Phase 12 — AI Agent Runtime
-- [ ] Provider config (BYO + platform default)
-- [ ] Conversation persistence
-- [ ] Context builder
-- [ ] Tool invocations (deterministic, audited)
-- [ ] Question generation (jobs/drafts/batches)
-- [ ] Memory (tenant-scoped, redacted)
+### Next Steps
+- [ ] Exams CRUD (BE + FE)
+- [ ] Exam Sections + Questions
+- [ ] Exam Gate Windows
+- [ ] Phase 10: Exam Critical Path (take, autosave, submit, receipt)
+- [ ] Phase 11: Teacher Operations (monitor, grading)
+- [ ] Phase 12: AI Agent Runtime
+- [ ] Tenant logo upload (R2/local)
 
 ## Completed
 - [x] Phase 0: .ai/ memory files, ADRs, AGENTS.md, standards
 - [x] Phase 1: Docker Compose (6 services), migrations (6), backend skeleton, frontend skeleton
 - [x] Phase 2: Auth/login/RBAC/session/CSRF, dev seed (7 users, roles, permissions)
-- [x] Phase 3: Frontend shell (morfosis-studio aligned: dark shell, 66px sidebar, floating card)
+- [x] Phase 3: Frontend shell (morfosis-studio: dark shell, 66px sidebar, floating card, AI chat panel)
 - [x] Phase 4: Backend patterns (pagination, response helpers, RBAC helpers, tenant switch)
-- [x] Phase 6: Users CRUD (list/create/update/archive, paginated, tenant-scoped, audited)
+- [x] Phase 6: All Admin Modules (BE + FE) — Users, Tenants, Teachers, Students, Staff, Guardians
+  - Composite create (user + profile in one request)
+  - Teachers: multi-subject assignment
+  - Students: optional class + guardian management
+  - Role select (enum, not text)
+  - Edit flows for all modules
+- [x] Phase 7: Academic Structure (BE + FE) — Academic Years, Subjects, Class Sections, Teacher-Subject assignments
+  - Grade level predefined (SD1-SMA12) + custom
+  - Homeroom teacher select
+  - Academic year select
+- [x] Phase 8: Programs + Courses (BE + FE)
+  - Programs: CRUD + sections + items + publish/archive
+  - Courses: CRUD + publish/archive
+  - Program sections with nested items (json_agg)
+
+## UI Components Built
+- [x] InputField (floating label, h-11, prefix icon)
+- [x] SelectField (floating label dropdown, disabled support)
+- [x] DatePicker (custom calendar, no native)
+- [x] DateRangePicker (start/end range)
+- [x] SearchInput (compact h-8, plain)
+- [x] Button (primary=black, loading spinner)
+- [x] RightPullSheet (no overlay, rounded-r-inherit)
+- [x] ConfirmDialog (centered, destructive variant)
+- [x] RowActions (portal dropdown, 3-dot)
+- [x] Toast (border-l-4, tones)
+- [x] Skeleton
+- [x] Breadcrumb (dynamic, Home icon)
+- [x] PageShell (sticky header, responsive)
+- [x] AppShell (dark shell + floating card + AI chat push)
+- [x] Sidebar (66px icon strip)
+- [x] Topbar (breadcrumb + user + AI toggle)
+- [x] MobileNav (bottom h-16, horizontal scroll)
+- [x] AI Chat Panel (360px, model selector, attach menu, auto-resize)
+
+## Key Decisions Made
+- No native form validation (all server-side)
+- Loading state on every async action
+- System font stack (no Google Fonts)
+- Portal for dropdowns (escape overflow)
+- RightPullSheet without overlay (user can interact outside)
+- AI Chat pushes content (not overlays)
+- Composite create endpoints (user + profile + assignments)
+- Programs as enrollment unit (ADR-0001)
+- Score decoupling (ADR-0002)
+- Enrollment persistence on class transfer (ADR-0003)
+- Status + Result separation (ADR-0004)
+- No structure locking (ADR-0005)
