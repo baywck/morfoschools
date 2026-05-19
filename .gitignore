@@ -20,3 +20,10 @@ postgres-data/
 nats-data/
 clickhouse-data/
 frontend-node-modules/
+
+# Agent / IDE state
+.serena/
+.ai/telemetry.jsonl
+.ai/telemetry.jsonl.lock
+frontend/tsconfig.tsbuildinfo
+HANDOFF_*.md

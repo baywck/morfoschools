@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { 
-  listTeachers, archiveTeacher, createTeacherFull, updateTeacher, type Teacher,
+  listTeachers, archiveTeacher, restoreTeacher, createTeacherFull, updateTeacher, updateUser, type Teacher,
   listTeacherSubjects, assignTeacherSubject, unassignTeacherSubject, listSubjects, type TeacherSubject, type Subject
 } from "@/lib/modules-api";
 import { PageShell } from "@/components/layout/page-shell";
@@ -13,7 +13,7 @@ import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GraduationCap, Trash2, Pencil, Plus, X } from "lucide-react";
+import { GraduationCap, Trash2, Pencil, Plus, X, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function TeachersPage() {
@@ -32,7 +32,7 @@ export default function TeachersPage() {
   // Edit sheet
   const [editTarget, setEditTarget] = useState<Teacher | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ employeeId: "", specialization: "", status: "" });
+  const [editForm, setEditForm] = useState({ employeeId: "", specialization: "", status: "", email: "", password: "" });
 
   const [teacherToArchive, setTeacherToArchive] = useState<Teacher | null>(null);
   const [archiving, setArchiving] = useState(false);
@@ -45,17 +45,33 @@ export default function TeachersPage() {
   const [assigningSubject, setAssigningSubject] = useState(false);
   const [unassigningSubject, setUnassigningSubject] = useState<string | null>(null);
 
+  // Map of teacher subjects for list display
+  const [teacherSubjectsMap, setTeacherSubjectsMap] = useState<Record<string, TeacherSubject[]>>({});
+
   async function load() {
     setLoading(true);
     const res = await listTeachers({ search: search || undefined });
     if (res.data) {
       setTeachers(res.data.data);
       setTotal(res.data.pagination.total);
+      // Load subjects for all teachers
+      const map: Record<string, TeacherSubject[]> = {};
+      await Promise.all(res.data.data.map(async (t) => {
+        const tsRes = await listTeacherSubjects(t.id);
+        if (tsRes.data) map[t.id] = tsRes.data.data;
+      }));
+      setTeacherSubjectsMap(map);
     }
     setLoading(false);
   }
 
   useEffect(() => { load(); }, [search]);
+
+  useEffect(() => {
+    function h() { load(); }
+    window.addEventListener("morfoschools:data-changed", h);
+    return () => window.removeEventListener("morfoschools:data-changed", h);
+  }, []);
 
   useEffect(() => {
     async function loadAllSubjects() {
@@ -81,6 +97,7 @@ export default function TeachersPage() {
     setCreateForm({ displayName: "", email: "", password: "", employeeId: "", specialization: "", subjectIds: [] });
     setCreating(false);
     load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   function toggleSubject(id: string) {
@@ -97,7 +114,9 @@ export default function TeachersPage() {
     setEditForm({ 
       employeeId: teacher.employeeId || "", 
       specialization: teacher.specialization || "", 
-      status: teacher.status 
+      status: teacher.status,
+      email: teacher.email || "",
+      password: ""
     });
     setFieldErrors({});
     loadTeacherSubjects(teacher.id);
@@ -140,7 +159,27 @@ export default function TeachersPage() {
     if (!editTarget) return;
     setFieldErrors({});
     setEditing(true);
-    const res = await updateTeacher(editTarget.id, editForm);
+
+    // Update user-level fields (email, password)
+    const userUpdate: Record<string, string> = {};
+    if (editForm.email && editForm.email !== editTarget.email) userUpdate.email = editForm.email;
+    if (editForm.password) userUpdate.password = editForm.password;
+    if (Object.keys(userUpdate).length > 0) {
+      const userRes = await updateUser(editTarget.userId, userUpdate);
+      if (userRes.error) {
+        if (userRes.error.fields) setFieldErrors(userRes.error.fields);
+        else toast({ tone: "error", title: "Failed", description: userRes.error.message });
+        setEditing(false);
+        return;
+      }
+    }
+
+    // Update teacher-level fields
+    const res = await updateTeacher(editTarget.id, { 
+      employeeId: editForm.employeeId, 
+      specialization: editForm.specialization, 
+      status: editForm.status 
+    });
     if (res.error) {
       if (res.error.fields) setFieldErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -151,6 +190,7 @@ export default function TeachersPage() {
     setEditTarget(null);
     setEditing(false);
     load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   async function handleArchive(id: string) {
@@ -161,6 +201,19 @@ export default function TeachersPage() {
     toast({ tone: "success", title: "Teacher archived" });
     setTeacherToArchive(null);
     load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
+  }
+
+  async function handleRestore(id: string) {
+    const res = await restoreTeacher(id);
+    if (res.error) {
+      const emailMsg = res.error.fields?.email;
+      toast({ tone: "error", title: "Restore failed", description: emailMsg || res.error.message });
+      return;
+    }
+    toast({ tone: "success", title: "Teacher restored" });
+    load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   return (
@@ -201,15 +254,25 @@ export default function TeachersPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-[var(--foreground)] truncate">{t.displayName}</p>
-                  <p className="text-[11px] text-[var(--muted-foreground)]">{t.specialization || t.email}</p>
+                  <p className="text-[11px] text-[var(--muted-foreground)] truncate">
+                    {teacherSubjectsMap[t.id]?.length
+                      ? teacherSubjectsMap[t.id].map(s => s.name).join(", ")
+                      : t.email}
+                  </p>
                 </div>
                 {t.employeeId && <span className="text-[10px] text-[var(--muted-foreground)] font-mono">{t.employeeId}</span>}
                 <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", t.status === "active" ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]")}>{t.status}</span>
                 <RowActions
-                  actions={[
-                    { label: "Edit", icon: <Pencil size={14} />, onClick: () => openEdit(t) },
-                    { label: "Archive", icon: <Trash2 size={14} />, onClick: () => setTeacherToArchive(t), variant: "danger" }
-                  ]}
+                  actions={
+                    t.status === "archived"
+                      ? [
+                          { label: "Restore", icon: <RotateCcw size={14} />, onClick: () => handleRestore(t.id) },
+                        ]
+                      : [
+                          { label: "Edit", icon: <Pencil size={14} />, onClick: () => openEdit(t) },
+                          { label: "Archive", icon: <Trash2 size={14} />, onClick: () => setTeacherToArchive(t), variant: "danger" }
+                        ]
+                  }
                 />
               </div>
             ))}
@@ -296,6 +359,20 @@ export default function TeachersPage() {
     {/* Edit Sheet */}
     <RightPullSheet open={!!editTarget} title="Edit Teacher" onClose={() => setEditTarget(null)}>
       <form onSubmit={handleEdit} className="space-y-3">
+        <InputField
+          label="Email"
+          type="email"
+          value={editForm.email}
+          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+          error={fieldErrors.email}
+        />
+        <InputField
+          label="New Password (leave blank to keep)"
+          type="password"
+          value={editForm.password}
+          onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+          error={fieldErrors.password}
+        />
         <InputField
           label="Employee ID"
           value={editForm.employeeId}

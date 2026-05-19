@@ -14,7 +14,7 @@ function Breadcrumb({ children, ...props }: React.ComponentPropsWithoutRef<"nav"
 function BreadcrumbList({ className, ...props }: React.ComponentPropsWithoutRef<"ol">) {
   return (
     <ol
-      className={cn("flex flex-wrap items-center gap-1.5 text-[13px] text-[var(--shell-muted)]", className)}
+      className={cn("flex flex-wrap items-center gap-1.5 text-[13px] text-[var(--muted-foreground)]", className)}
       {...props}
     />
   );
@@ -28,7 +28,7 @@ function BreadcrumbLink({ className, href, children, ...props }: React.Component
   return (
     <Link
       href={href}
-      className={cn("transition-colors hover:text-[var(--shell-foreground)] font-medium", className)}
+      className={cn("transition-colors hover:text-[var(--foreground)] font-medium", className)}
       {...props}
     >
       {children}
@@ -42,7 +42,7 @@ function BreadcrumbPage({ className, ...props }: React.ComponentPropsWithoutRef<
       role="link"
       aria-disabled="true"
       aria-current="page"
-      className={cn("font-semibold text-[var(--shell-foreground)]", className)}
+      className={cn("font-semibold text-[var(--foreground)]", className)}
       {...props}
     />
   );

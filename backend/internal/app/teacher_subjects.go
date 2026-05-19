@@ -25,9 +25,9 @@ func (a *App) handleListTeacherSubjects(w http.ResponseWriter, r *http.Request) 
 	teacherID := r.PathValue("id")
 
 	rows, err := a.db.QueryContext(r.Context(),
-		`SELECT s.id, s.code, s.name FROM teaching_assignments ta
-		 JOIN subjects s ON s.id = ta.subject_id
-		 WHERE ta.tenant_id = $1 AND ta.teacher_id = $2 AND ta.status = 'active'
+		`SELECT s.id, s.code, s.name FROM teacher_subjects ts
+		 JOIN subjects s ON s.id = ts.subject_id
+		 WHERE ts.tenant_id = $1 AND ts.teacher_id = $2 AND ts.status = 'active'
 		 ORDER BY s.name`,
 		tenantID, teacherID,
 	)
@@ -102,34 +102,17 @@ func (a *App) handleAssignTeacherSubject(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// We need a dummy academic_year_id and class_section_id for the teaching_assignments table
-	// For now, use a simplified assignment (subject-only, no class/year constraint)
-	// Insert with ON CONFLICT to make it idempotent
-	var assignmentID string
-	err := a.db.QueryRowContext(r.Context(),
-		`INSERT INTO teaching_assignments (tenant_id, teacher_id, subject_id, class_section_id, academic_year_id, status)
-		 SELECT $1, $2, $3, cs.id, cs.academic_year_id, 'active'
-		 FROM class_sections cs WHERE cs.tenant_id = $1 LIMIT 1
-		 ON CONFLICT (tenant_id, teacher_id, subject_id, class_section_id, academic_year_id) DO NOTHING
-		 RETURNING id`,
+	// Insert into teacher_subjects (simple direct mapping)
+	_, err := a.db.ExecContext(r.Context(),
+		`INSERT INTO teacher_subjects (tenant_id, teacher_id, subject_id, status)
+		 VALUES ($1, $2, $3, 'active')
+		 ON CONFLICT (tenant_id, teacher_id, subject_id) DO UPDATE SET status = 'active'`,
 		tenantID, teacherID, req.SubjectID,
-	).Scan(&assignmentID)
-
-	// If no class sections exist yet, create a simpler record
+	)
 	if err != nil {
-		// Try direct insert without class_section constraint
-		// For MVP: we'll track teacher-subject as a simple relation
-		_, err = a.db.ExecContext(r.Context(),
-			`INSERT INTO teaching_assignments (tenant_id, teacher_id, subject_id, class_section_id, academic_year_id, status)
-			 VALUES ($1, $2, $3, (SELECT id FROM class_sections WHERE tenant_id = $1 LIMIT 1), (SELECT id FROM academic_years WHERE tenant_id = $1 LIMIT 1), 'active')
-			 ON CONFLICT (tenant_id, teacher_id, subject_id, class_section_id, academic_year_id) DO NOTHING`,
-			tenantID, teacherID, req.SubjectID,
-		)
-		if err != nil {
-			a.logger.Error("assign teacher subject failed", "error", err)
-			writeErrorJSON(w, http.StatusInternalServerError, "assign_failed", "Could not assign subject. Ensure at least one class section and academic year exist.", r)
-			return
-		}
+		a.logger.Error("assign teacher subject failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "assign_failed", "Could not assign subject", r)
+		return
 	}
 
 	auth := AuthFromContext(r.Context())
@@ -154,7 +137,7 @@ func (a *App) handleUnassignTeacherSubject(w http.ResponseWriter, r *http.Reques
 	subjectID := r.PathValue("subjectId")
 
 	_, err := a.db.ExecContext(r.Context(),
-		`UPDATE teaching_assignments SET status = 'archived' WHERE tenant_id = $1 AND teacher_id = $2 AND subject_id = $3`,
+		`UPDATE teacher_subjects SET status = 'archived' WHERE tenant_id = $1 AND teacher_id = $2 AND subject_id = $3`,
 		tenantID, teacherID, subjectID,
 	)
 	if err != nil {

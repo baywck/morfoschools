@@ -119,10 +119,9 @@ func (a *App) handleCreateTeacherFull(w http.ResponseWriter, r *http.Request) {
 	// Assign subjects (outside transaction, non-critical)
 	for _, subjectID := range req.SubjectIDs {
 		_, _ = a.db.ExecContext(r.Context(),
-			`INSERT INTO teaching_assignments (tenant_id, teacher_id, subject_id, class_section_id, academic_year_id, status)
-			 SELECT $1, $2, $3, cs.id, cs.academic_year_id, 'active'
-			 FROM class_sections cs WHERE cs.tenant_id = $1 LIMIT 1
-			 ON CONFLICT (tenant_id, teacher_id, subject_id, class_section_id, academic_year_id) DO NOTHING`,
+			`INSERT INTO teacher_subjects (tenant_id, teacher_id, subject_id, status)
+			 VALUES ($1, $2, $3, 'active')
+			 ON CONFLICT (tenant_id, teacher_id, subject_id) DO UPDATE SET status = 'active'`,
 			tenantID, teacherID, subjectID,
 		)
 	}
@@ -219,8 +218,8 @@ func (a *App) handleCreateStudentFull(w http.ResponseWriter, r *http.Request) {
 
 	var studentID string
 	err = tx.QueryRowContext(r.Context(),
-		`INSERT INTO students (tenant_id, user_id, student_id_number, grade_level, status) VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), 'active') RETURNING id`,
-		tenantID, userID, strings.TrimSpace(req.StudentIDNumber), strings.TrimSpace(req.GradeLevel),
+		`INSERT INTO students (tenant_id, user_id, student_id_number, grade_level, class_section_id, status) VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,'')::uuid, 'active') RETURNING id`,
+		tenantID, userID, strings.TrimSpace(req.StudentIDNumber), strings.TrimSpace(req.GradeLevel), ptrToString(req.ClassSectionID),
 	).Scan(&studentID)
 	if err != nil {
 		writeErrorJSON(w, http.StatusInternalServerError, "create_failed", "Could not create student profile", r)

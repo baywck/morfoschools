@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useToast } from "@/components/ui/toast";
-import { listUsers, createUser, updateUser, archiveUser, type User } from "@/lib/modules-api";
+import { useState } from "react";
+import { useCRUD } from "@/lib/use-crud";
+import { listUsers, createUser, updateUser, archiveUser, restoreUser, type User } from "@/lib/modules-api";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,121 +10,68 @@ import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActions } from "@/components/ui/row-actions";
 import { PageShell } from "@/components/layout/page-shell";
-import { Plus, Trash2, Pencil, Users, Mail, Lock, User as UserIcon, Shield } from "lucide-react";
+import { Plus, Trash2, Pencil, Users, Mail, Lock, User as UserIcon, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/cn";
+import type { ApiResponse } from "@/lib/api-client";
+
+// Wrap listUsers to always filter by school_admin role
+function listAdmins(params?: { search?: string; page?: number }): Promise<ApiResponse<any>> {
+  return listUsers({ ...params, role: "school_admin" });
+}
+
+// Wrap createUser to always assign school_admin role
+function createAdmin(data: { email: string; displayName: string; password: string }): Promise<ApiResponse<any>> {
+  return createUser({ ...data, roleSlug: "school_admin" });
+}
 
 export default function AdminPage() {
-  const { toast } = useToast();
-  const [users, setUsers] = useState<User[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const crud = useCRUD<User>({
+    name: "Admin",
+    list: listAdmins,
+    create: createAdmin,
+    update: updateUser,
+    archive: archiveUser,
+    restore: (id: string) => restoreUser(id),
+  });
 
-  // Create
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({ email: "", displayName: "", password: "" });
-  const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
+  const [editForm, setEditForm] = useState({ displayName: "", status: "", email: "", password: "" });
 
-  // Edit
-  const [editTarget, setEditTarget] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ displayName: "", status: "" });
-  const [editing, setEditing] = useState(false);
-  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-
-  // Archive
-  const [archiveTarget, setArchiveTarget] = useState<User | null>(null);
-  const [archiving, setArchiving] = useState(false);
-
-  async function load() {
-    setLoading(true);
-    const [usersRes] = await Promise.all([
-      listUsers({ search: search || undefined })
-    ]);
-    if (usersRes.data) {
-      setUsers(usersRes.data.data);
-      setTotal(usersRes.data.pagination.total);
-    }
-    setLoading(false);
+  function openEdit(user: User) {
+    crud.setEditTarget(user);
+    crud.setFieldErrors({});
+    setEditForm({ displayName: user.displayName, status: user.status, email: user.email, password: "" });
   }
-
-  useEffect(() => { load(); }, [search]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    setCreateErrors({});
-    setCreating(true);
-    const res = await createUser({ ...createForm, roleSlug: "school_admin" });
-    if (res.error) {
-      if (res.error.fields) setCreateErrors(res.error.fields);
-      else toast({ tone: "error", title: "Failed", description: res.error.message });
-      setCreating(false);
-      return;
-    }
-    toast({ tone: "success", title: "Admin created" });
-    setShowCreate(false);
-    setCreateForm({ email: "", displayName: "", password: "" });
-    setCreating(false);
-    load();
-  }
-
-  function openEdit(user: User) {
-    setEditTarget(user);
-    setEditForm({ displayName: user.displayName, status: user.status });
-    setEditErrors({});
+    const success = await crud.handleCreate(createForm);
+    if (success) setCreateForm({ email: "", displayName: "", password: "" });
   }
 
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editTarget) return;
-    setEditErrors({});
-    setEditing(true);
-    const res = await updateUser(editTarget.id, editForm);
-    if (res.error) {
-      if (res.error.fields) setEditErrors(res.error.fields);
-      else toast({ tone: "error", title: "Failed", description: res.error.message });
-      setEditing(false);
-      return;
-    }
-    toast({ tone: "success", title: "Admin updated" });
-    setEditTarget(null);
-    setEditing(false);
-    load();
+    if (!crud.editTarget) return;
+    const data: Record<string, string> = { displayName: editForm.displayName, status: editForm.status };
+    if (editForm.email && editForm.email !== crud.editTarget.email) data.email = editForm.email;
+    if (editForm.password) data.password = editForm.password;
+    await crud.handleEdit(crud.editTarget.id, data);
   }
-
-  async function confirmArchive() {
-    if (!archiveTarget) return;
-    setArchiving(true);
-    const res = await archiveUser(archiveTarget.id);
-    if (res.error) {
-      toast({ tone: "error", title: "Failed", description: res.error.message });
-    } else {
-      toast({ tone: "success", title: "Admin archived" });
-      load();
-    }
-    setArchiving(false);
-    setArchiveTarget(null);
-  }
-
-  const statusOptions = [
-    { value: "active", label: "Active" },
-    { value: "suspended", label: "Suspended" },
-  ];
 
   return (
     <>
       <PageShell
         title="Admin"
-        subtitle={`${total} admin${total !== 1 ? "s" : ""} in this tenant`}
-        search={{ value: search, onChange: setSearch, placeholder: "Search admins..." }}
-        onAdd={() => setShowCreate(true)}
+        subtitle={`${crud.total} admin${crud.total !== 1 ? "s" : ""} in this tenant`}
+        search={{ value: crud.search, onChange: crud.setSearch, placeholder: "Search admins..." }}
+        onAdd={() => crud.setShowCreate(true)}
         addLabel="Add Admin"
       >
-        {loading ? (
+        {crud.loading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
-        ) : users.length === 0 ? (
+        ) : crud.items.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--accent)] p-10 text-center">
             <Users size={24} className="text-[var(--muted-foreground)] mb-2" />
             <p className="text-[13px] font-semibold text-[var(--foreground)]">No admins yet</p>
@@ -133,7 +80,7 @@ export default function AdminPage() {
         ) : (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
             <div className="divide-y divide-[var(--border)]">
-              {users.map((u) => (
+              {crud.items.map((u) => (
                 <div key={u.id} className="flex items-center gap-3 px-3 py-3 hover:bg-[var(--muted)]/50 transition-colors">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[10px] font-bold text-[var(--primary-foreground)]">
                     {u.displayName.charAt(0)}
@@ -148,10 +95,16 @@ export default function AdminPage() {
                   )}>
                     {u.status}
                   </span>
-                  <RowActions actions={[
-                    { label: "Edit", icon: <Pencil size={13} />, onClick: () => openEdit(u) },
-                    { label: "Archive", icon: <Trash2 size={13} />, onClick: () => setArchiveTarget(u), variant: "danger" },
-                  ]} />
+                  <RowActions actions={
+                    u.status === "archived"
+                      ? [
+                          { label: "Restore", icon: <RotateCcw size={13} />, onClick: () => crud.handleRestore(u.id) },
+                        ]
+                      : [
+                          { label: "Edit", icon: <Pencil size={13} />, onClick: () => openEdit(u) },
+                          { label: "Archive", icon: <Trash2 size={13} />, onClick: () => crud.setArchiveTarget(u), variant: "danger" },
+                        ]
+                  } />
                 </div>
               ))}
             </div>
@@ -160,15 +113,15 @@ export default function AdminPage() {
       </PageShell>
 
       {/* Create */}
-      <RightPullSheet open={showCreate} title="Add Admin" onClose={() => setShowCreate(false)}>
+      <RightPullSheet open={crud.showCreate} title="Add Admin" onClose={() => crud.setShowCreate(false)}>
         <form onSubmit={handleCreate} className="space-y-3">
-          <InputField label="Display Name" value={createForm.displayName} onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })} error={createErrors.displayName} prefix={<UserIcon size={14} />} />
-          <InputField label="Email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} error={createErrors.email} prefix={<Mail size={14} />} />
-          <InputField label="Password" type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} error={createErrors.password} prefix={<Lock size={14} />} />
+          <InputField label="Display Name" value={createForm.displayName} onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })} error={crud.fieldErrors.displayName} prefix={<UserIcon size={14} />} />
+          <InputField label="Email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} error={crud.fieldErrors.email} prefix={<Mail size={14} />} />
+          <InputField label="Password" type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} error={crud.fieldErrors.password} prefix={<Lock size={14} />} />
           <div className="flex gap-2 justify-end pt-3">
-            <button type="button" onClick={() => setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancel</button>
-            <button type="submit" disabled={creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-              {creating && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+            <button type="button" onClick={() => crud.setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancel</button>
+            <button type="submit" disabled={crud.creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
+              {crud.creating && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
               <Plus size={14} /> Create
             </button>
           </div>
@@ -176,15 +129,16 @@ export default function AdminPage() {
       </RightPullSheet>
 
       {/* Edit */}
-      <RightPullSheet open={!!editTarget} title="Edit Admin" onClose={() => setEditTarget(null)}>
+      <RightPullSheet open={!!crud.editTarget} title="Edit Admin" onClose={() => crud.setEditTarget(null)}>
         <form onSubmit={handleEdit} className="space-y-3">
-          <InputField label="Display Name" value={editForm.displayName} onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })} error={editErrors.displayName} prefix={<UserIcon size={14} />} />
-          <SelectField label="Status" value={editForm.status} options={statusOptions} onChange={(v) => setEditForm({ ...editForm, status: v })} />
+          <InputField label="Display Name" value={editForm.displayName} onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })} error={crud.fieldErrors.displayName} prefix={<UserIcon size={14} />} />
+          <InputField label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} error={crud.fieldErrors.email} prefix={<Mail size={14} />} />
+          <InputField label="New Password (leave blank to keep)" type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} error={crud.fieldErrors.password} prefix={<Lock size={14} />} />
+          <SelectField label="Status" value={editForm.status} onChange={(v) => setEditForm({ ...editForm, status: v })} options={[{ value: "active", label: "Active" }, { value: "suspended", label: "Suspended" }]} />
           <div className="flex gap-2 justify-end pt-3">
-            <button type="button" onClick={() => setEditTarget(null)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancel</button>
-            <button type="submit" disabled={editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-              {editing && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
-              <Pencil size={14} /> Save
+            <button type="button" onClick={() => crud.setEditTarget(null)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancel</button>
+            <button type="submit" disabled={crud.editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
+              {crud.editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
             </button>
           </div>
         </form>
@@ -192,14 +146,14 @@ export default function AdminPage() {
 
       {/* Archive Confirm */}
       <ConfirmDialog
-        open={!!archiveTarget}
+        open={!!crud.archiveTarget}
         title="Archive Admin"
-        description={`Are you sure you want to archive "${archiveTarget?.displayName}"?`}
+        description={`Are you sure you want to archive "${crud.archiveTarget?.displayName}"?`}
         confirmLabel="Archive"
         destructive
-        loading={archiving}
-        onConfirm={confirmArchive}
-        onCancel={() => setArchiveTarget(null)}
+        loading={crud.archiving}
+        onConfirm={() => crud.archiveTarget && crud.handleArchive(crud.archiveTarget.id)}
+        onCancel={() => crud.setArchiveTarget(null)}
       />
     </>
   );

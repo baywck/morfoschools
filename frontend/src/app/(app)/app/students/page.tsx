@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
 import { 
-  listStudents, archiveStudent, createStudentFull, updateStudent, type Student,
+  listStudents, archiveStudent, restoreStudent, createStudentFull, updateStudent, updateUser, type Student,
   listClassSections, createGuardian, linkStudentGuardian, listGuardians, type ClassSection, type Guardian
 } from "@/lib/modules-api";
 import { PageShell } from "@/components/layout/page-shell";
@@ -13,7 +13,7 @@ import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, Trash2, Pencil, Plus, X } from "lucide-react";
+import { BookOpen, Trash2, Pencil, Plus, X, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function StudentsPage() {
@@ -22,6 +22,7 @@ export default function StudentsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState("");
 
   // Class options
   const [classes, setClasses] = useState<ClassSection[]>([]);
@@ -35,7 +36,7 @@ export default function StudentsPage() {
   // Edit sheet
   const [editTarget, setEditTarget] = useState<Student | null>(null);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ studentIdNumber: "", gradeLevel: "", status: "" });
+  const [editForm, setEditForm] = useState({ studentIdNumber: "", gradeLevel: "", status: "", email: "", password: "" });
 
   const [studentToArchive, setStudentToArchive] = useState<Student | null>(null);
   const [archiving, setArchiving] = useState(false);
@@ -50,7 +51,7 @@ export default function StudentsPage() {
   async function load() {
     setLoading(true);
     const [res, classesRes] = await Promise.all([
-      listStudents({ search: search || undefined }),
+      listStudents({ search: search || undefined, classSectionId: classFilter || undefined }),
       listClassSections()
     ]);
     if (res.data) {
@@ -63,7 +64,13 @@ export default function StudentsPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [search]);
+  useEffect(() => { load(); }, [search, classFilter]);
+
+  useEffect(() => {
+    function h() { load(); }
+    window.addEventListener("morfoschools:data-changed", h);
+    return () => window.removeEventListener("morfoschools:data-changed", h);
+  }, []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -81,6 +88,7 @@ export default function StudentsPage() {
     setCreateForm({ displayName: "", email: "", password: "", studentIdNumber: "", gradeLevel: "", classSectionId: "" });
     setCreating(false);
     load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   function openEdit(student: Student) {
@@ -88,7 +96,9 @@ export default function StudentsPage() {
     setEditForm({ 
       studentIdNumber: student.studentIdNumber || "", 
       gradeLevel: student.gradeLevel || "", 
-      status: student.status 
+      status: student.status,
+      email: student.email || "",
+      password: ""
     });
     setFieldErrors({});
     setShowAddGuardian(false);
@@ -161,7 +171,22 @@ export default function StudentsPage() {
     if (!editTarget) return;
     setFieldErrors({});
     setEditing(true);
-    const res = await updateStudent(editTarget.id, editForm);
+
+    // Update user-level fields (email, password)
+    const userUpdate: Record<string, string> = {};
+    if (editForm.email && editForm.email !== editTarget.email) userUpdate.email = editForm.email;
+    if (editForm.password) userUpdate.password = editForm.password;
+    if (Object.keys(userUpdate).length > 0) {
+      const userRes = await updateUser(editTarget.userId, userUpdate);
+      if (userRes.error) {
+        if (userRes.error.fields) setFieldErrors(userRes.error.fields);
+        else toast({ tone: "error", title: "Failed", description: userRes.error.message });
+        setEditing(false);
+        return;
+      }
+    }
+
+    const res = await updateStudent(editTarget.id, { studentIdNumber: editForm.studentIdNumber, gradeLevel: editForm.gradeLevel, status: editForm.status });
     if (res.error) {
       if (res.error.fields) setFieldErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -172,6 +197,7 @@ export default function StudentsPage() {
     setEditTarget(null);
     setEditing(false);
     load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   async function handleArchive(id: string) {
@@ -182,6 +208,19 @@ export default function StudentsPage() {
     toast({ tone: "success", title: "Student archived" });
     setStudentToArchive(null);
     load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
+  }
+
+  async function handleRestore(id: string) {
+    const res = await restoreStudent(id);
+    if (res.error) {
+      const emailMsg = res.error.fields?.email;
+      toast({ tone: "error", title: "Restore failed", description: emailMsg || res.error.message });
+      return;
+    }
+    toast({ tone: "success", title: "Student restored" });
+    load();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   return (
@@ -203,6 +242,35 @@ export default function StudentsPage() {
         loading={archiving}
         destructive
       />
+
+      {/* Class filter */}
+      {classes.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            onClick={() => setClassFilter("")}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+              classFilter === ""
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                : "bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
+            }`}
+          >
+            All
+          </button>
+          {classes.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setClassFilter(c.id)}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                classFilter === c.id
+                  ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                  : "bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
+              }`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
@@ -227,10 +295,16 @@ export default function StudentsPage() {
                 {s.studentIdNumber && <span className="text-[10px] text-[var(--muted-foreground)] font-mono">{s.studentIdNumber}</span>}
                 <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-medium", s.status === "active" ? "bg-[var(--success-soft)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]")}>{s.status}</span>
                 <RowActions
-                  actions={[
-                    { label: "Edit", icon: <Pencil size={14} />, onClick: () => openEdit(s) },
-                    { label: "Archive", icon: <Trash2 size={14} />, onClick: () => setStudentToArchive(s), variant: "danger" }
-                  ]}
+                  actions={
+                    s.status === "archived"
+                      ? [
+                          { label: "Restore", icon: <RotateCcw size={14} />, onClick: () => handleRestore(s.id) },
+                        ]
+                      : [
+                          { label: "Edit", icon: <Pencil size={14} />, onClick: () => openEdit(s) },
+                          { label: "Archive", icon: <Trash2 size={14} />, onClick: () => setStudentToArchive(s), variant: "danger" }
+                        ]
+                  }
                 />
               </div>
             ))}
@@ -298,6 +372,20 @@ export default function StudentsPage() {
     {/* Edit Sheet */}
     <RightPullSheet open={!!editTarget} title="Edit Student" onClose={() => setEditTarget(null)}>
       <form onSubmit={handleEdit} className="space-y-3">
+        <InputField
+          label="Email"
+          type="email"
+          value={editForm.email}
+          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+          error={fieldErrors.email}
+        />
+        <InputField
+          label="New Password (leave blank to keep)"
+          type="password"
+          value={editForm.password}
+          onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+          error={fieldErrors.password}
+        />
         <InputField
           label="Student ID Number"
           value={editForm.studentIdNumber}

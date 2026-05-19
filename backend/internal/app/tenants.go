@@ -160,6 +160,23 @@ func (a *App) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 		tenantID, req.Name,
 	)
 
+	// Seed default roles for the new tenant
+	defaultRoles := []struct{ slug, name string }{
+		{"master_admin", "Master Admin"},
+		{"school_admin", "School Admin"},
+		{"academic_admin", "Academic Admin"},
+		{"teacher", "Teacher"},
+		{"student", "Student"},
+		{"staff", "Staff"},
+		{"guardian", "Guardian"},
+	}
+	for _, role := range defaultRoles {
+		_, _ = a.db.ExecContext(r.Context(),
+			`INSERT INTO roles (tenant_id, slug, name) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+			tenantID, role.slug, role.name,
+		)
+	}
+
 	// Audit
 	a.audit(r.Context(), &tenantID, auth.UserID, "tenants.create", "tenant", tenantID, r)
 

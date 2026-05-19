@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-provider";
+import { useCRUD } from "@/lib/use-crud";
 import { useToast } from "@/components/ui/toast";
 import { listTenants, createTenant, updateTenant, archiveTenant, switchTenant, type Tenant } from "@/lib/modules-api";
 import { InputField } from "@/components/ui/input-field";
@@ -17,96 +18,38 @@ import { cn } from "@/lib/cn";
 export default function TenantsPage() {
   const { refresh } = useAuth();
   const { toast } = useToast();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
 
-  // Create sheet
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newCode, setNewCode] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const crud = useCRUD<Tenant>({
+    name: "Tenant",
+    list: listTenants,
+    create: createTenant,
+    update: updateTenant,
+    archive: archiveTenant,
+  });
 
-  // Edit sheet
-  const [editTarget, setEditTarget] = useState<Tenant | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: "", code: "" });
   const [editForm, setEditForm] = useState({ name: "", status: "" });
 
-  // Confirm dialogs
-  const [archiveTarget, setArchiveTarget] = useState<Tenant | null>(null);
-  const [archiving, setArchiving] = useState(false);
+  // Switch tenant
   const [switchTarget, setSwitchTarget] = useState<Tenant | null>(null);
   const [switching, setSwitching] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    const res = await listTenants({ search: search || undefined });
-    if (res.data) {
-      setTenants(res.data.data);
-      setTotal(res.data.pagination.total);
-    }
-    setLoading(false);
+  function openEdit(tenant: Tenant) {
+    crud.setEditTarget(tenant);
+    crud.setFieldErrors({});
+    setEditForm({ name: tenant.name, status: tenant.status });
   }
-
-  useEffect(() => { load(); }, [search]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    setFieldErrors({});
-    setCreating(true);
-    const res = await createTenant({ name: newName, code: newCode });
-    if (res.error) {
-      if (res.error.fields) setFieldErrors(res.error.fields);
-      else toast({ tone: "error", title: "Failed", description: res.error.message });
-      setCreating(false);
-      return;
-    }
-    toast({ tone: "success", title: "Tenant created" });
-    setShowCreate(false);
-    setNewName("");
-    setNewCode("");
-    setCreating(false);
-    load();
-  }
-
-  function openEdit(tenant: Tenant) {
-    setEditTarget(tenant);
-    setEditForm({ name: tenant.name, status: tenant.status });
-    setFieldErrors({});
+    const success = await crud.handleCreate(createForm);
+    if (success) setCreateForm({ name: "", code: "" });
   }
 
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editTarget) return;
-    setFieldErrors({});
-    setEditing(true);
-    const res = await updateTenant(editTarget.id, editForm);
-    if (res.error) {
-      if (res.error.fields) setFieldErrors(res.error.fields);
-      else toast({ tone: "error", title: "Failed", description: res.error.message });
-      setEditing(false);
-      return;
-    }
-    toast({ tone: "success", title: "Tenant updated" });
-    setEditTarget(null);
-    setEditing(false);
-    load();
-  }
-
-  async function confirmArchive() {
-    if (!archiveTarget) return;
-    setArchiving(true);
-    const res = await archiveTenant(archiveTarget.id);
-    if (res.error) {
-      toast({ tone: "error", title: "Failed", description: res.error.message });
-    } else {
-      toast({ tone: "success", title: "Tenant archived" });
-      load();
-    }
-    setArchiving(false);
-    setArchiveTarget(null);
+    if (!crud.editTarget) return;
+    await crud.handleEdit(crud.editTarget.id, editForm);
   }
 
   async function confirmSwitch() {
@@ -127,17 +70,16 @@ export default function TenantsPage() {
     <>
       <PageShell
         title="Tenants"
-        subtitle={`${total} school${total !== 1 ? "s" : ""} registered`}
-        search={{ value: search, onChange: setSearch, placeholder: "Search tenants..." }}
-        onAdd={() => setShowCreate(true)}
+        subtitle={`${crud.total} school${crud.total !== 1 ? "s" : ""} registered`}
+        search={{ value: crud.search, onChange: crud.setSearch, placeholder: "Search tenants..." }}
+        onAdd={() => crud.setShowCreate(true)}
         addLabel="Add Tenant"
       >
-        {/* List */}
-        {loading ? (
+        {crud.loading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
-        ) : tenants.length === 0 ? (
+        ) : crud.items.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--accent)] p-10 text-center">
             <Building2 size={24} className="text-[var(--muted-foreground)] mb-2" />
             <p className="text-[13px] font-semibold text-[var(--foreground)]">No tenants yet</p>
@@ -146,7 +88,7 @@ export default function TenantsPage() {
         ) : (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
             <div className="divide-y divide-[var(--border)]">
-              {tenants.map((t) => (
+              {crud.items.map((t) => (
                 <div key={t.id} className="flex items-center gap-3 px-3 py-3 hover:bg-[var(--muted)]/50 transition-colors">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)]">
                     <Building2 size={16} />
@@ -164,7 +106,7 @@ export default function TenantsPage() {
                   <RowActions actions={[
                     { label: "Edit", icon: <Pencil size={13} />, onClick: () => openEdit(t) },
                     { label: "Switch", icon: <ArrowRightLeft size={13} />, onClick: () => setSwitchTarget(t) },
-                    { label: "Archive", icon: <Trash2 size={13} />, onClick: () => setArchiveTarget(t), variant: "danger" },
+                    { label: "Archive", icon: <Trash2 size={13} />, onClick: () => crud.setArchiveTarget(t), variant: "danger" },
                   ]} />
                 </div>
               ))}
@@ -174,28 +116,26 @@ export default function TenantsPage() {
       </PageShell>
 
       {/* Create Sheet */}
-      <RightPullSheet open={showCreate} title="Add Tenant" onClose={() => setShowCreate(false)}>
+      <RightPullSheet open={crud.showCreate} title="Add Tenant" onClose={() => crud.setShowCreate(false)}>
         <form onSubmit={handleCreate} className="space-y-3">
           <InputField
             label="School Name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            error={fieldErrors.name}
+            value={createForm.name}
+            onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+            error={crud.fieldErrors.name}
             prefix={<Building2 size={14} />}
           />
           <InputField
             label="Code"
-            value={newCode}
-            onChange={(e) => setNewCode(e.target.value)}
-            error={fieldErrors.code}
+            value={createForm.code}
+            onChange={(e) => setCreateForm({ ...createForm, code: e.target.value })}
+            error={crud.fieldErrors.code}
             helperText="Unique identifier (e.g. sman1-jkt)"
           />
           <div className="flex gap-2 justify-end pt-3">
-            <button type="button" onClick={() => setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-              {creating && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+            <button type="button" onClick={() => crud.setShowCreate(false)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancel</button>
+            <button type="submit" disabled={crud.creating} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
+              {crud.creating && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" />}
               <Plus size={14} /> Create
             </button>
           </div>
@@ -203,13 +143,13 @@ export default function TenantsPage() {
       </RightPullSheet>
 
       {/* Edit Sheet */}
-      <RightPullSheet open={!!editTarget} title="Edit Tenant" onClose={() => setEditTarget(null)}>
+      <RightPullSheet open={!!crud.editTarget} title="Edit Tenant" onClose={() => crud.setEditTarget(null)}>
         <form onSubmit={handleEdit} className="space-y-3">
           <InputField
             label="School Name"
             value={editForm.name}
             onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-            error={fieldErrors.name}
+            error={crud.fieldErrors.name}
             prefix={<Building2 size={14} />}
           />
           <SelectField
@@ -219,15 +159,13 @@ export default function TenantsPage() {
             options={[
               { value: "active", label: "Active" },
               { value: "inactive", label: "Inactive" },
-              { value: "archived", label: "Archived" }
+              { value: "archived", label: "Archived" },
             ]}
           />
           <div className="flex gap-2 justify-end pt-3">
-            <button type="button" onClick={() => setEditTarget(null)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
-              {editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
+            <button type="button" onClick={() => crud.setEditTarget(null)} className="h-8 px-3 rounded-lg text-[12px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancel</button>
+            <button type="submit" disabled={crud.editing} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] disabled:opacity-50 transition-all">
+              {crud.editing ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : "Save Changes"}
             </button>
           </div>
         </form>
@@ -235,14 +173,14 @@ export default function TenantsPage() {
 
       {/* Archive Confirm */}
       <ConfirmDialog
-        open={!!archiveTarget}
+        open={!!crud.archiveTarget}
         title="Archive Tenant"
-        description={`Are you sure you want to archive "${archiveTarget?.name}"? This will suspend access for all users in this tenant.`}
+        description={`Are you sure you want to archive "${crud.archiveTarget?.name}"? This will suspend access for all users in this tenant.`}
         confirmLabel="Archive"
         destructive
-        loading={archiving}
-        onConfirm={confirmArchive}
-        onCancel={() => setArchiveTarget(null)}
+        loading={crud.archiving}
+        onConfirm={() => crud.archiveTarget && crud.handleArchive(crud.archiveTarget.id)}
+        onCancel={() => crud.setArchiveTarget(null)}
       />
 
       {/* Switch Confirm */}

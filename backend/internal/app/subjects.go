@@ -13,6 +13,7 @@ func (a *App) registerSubjectRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/subjects", a.handleCreateSubject)
 	mux.HandleFunc("PATCH /api/v1/subjects/{id}", a.handleUpdateSubject)
 	mux.HandleFunc("PATCH /api/v1/subjects/{id}/archive", a.handleArchiveSubject)
+	mux.HandleFunc("GET /api/v1/subjects/{id}/teachers", a.handleListSubjectTeachers)
 }
 
 func (a *App) handleListSubjects(w http.ResponseWriter, r *http.Request) {
@@ -230,4 +231,50 @@ func (a *App) handleArchiveSubject(w http.ResponseWriter, r *http.Request) {
 	a.audit(r.Context(), &tenantID, auth.UserID, "subjects.archive", "subject", subjectID, r)
 
 	writeJSON(w, http.StatusOK, map[string]any{"status": "archived"})
+}
+
+func (a *App) handleListSubjectTeachers(w http.ResponseWriter, r *http.Request) {
+	if !a.RequirePermission(w, r, "academic:read") {
+		return
+	}
+	tenantID := a.RequireEffectiveTenant(w, r)
+	if tenantID == "" {
+		return
+	}
+
+	subjectID := r.PathValue("id")
+
+	rows, err := a.db.QueryContext(r.Context(),
+		`SELECT u.id, u.display_name FROM teacher_subjects ts
+		 JOIN teachers t ON t.id = ts.teacher_id
+		 JOIN users u ON u.id = t.user_id
+		 WHERE ts.tenant_id = $1 AND ts.subject_id = $2 AND ts.status = 'active'
+		 ORDER BY u.display_name`,
+		tenantID, subjectID,
+	)
+	if err != nil {
+		a.logger.Error("list subject teachers failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "lookup_failed", "Could not load teachers", r)
+		return
+	}
+	defer rows.Close()
+
+	type TeacherRef struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+	}
+
+	var teachers []TeacherRef
+	for rows.Next() {
+		var t TeacherRef
+		if err := rows.Scan(&t.ID, &t.DisplayName); err != nil {
+			continue
+		}
+		teachers = append(teachers, t)
+	}
+	if teachers == nil {
+		teachers = []TeacherRef{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": teachers})
 }

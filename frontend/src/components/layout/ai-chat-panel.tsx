@@ -3,11 +3,21 @@
 import * as React from "react";
 import { useState, useRef, useEffect } from "react";
 import { Bot, Loader2, SendHorizontal, Sparkles, X, GraduationCap, Plus, Paperclip, Image, FileCode, ChevronDown, Check, Zap, Brain } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  proposal?: {
+    proposalId: string;
+    toolName: string;
+    confirmationText: string;
+    expiresAt: string;
+  };
+  proposalStatus?: "pending" | "confirmed" | "cancelled";
 };
 
 // --- Model Selector ---
@@ -22,7 +32,7 @@ interface Model {
 
 const models: Model[] = [
   { id: "morfoschools", name: "Morfoschools", description: "Default school AI", icon: <Zap className="h-3.5 w-3.5 text-[var(--brand)]" />, badge: "Default" },
-  { id: "gpt-4o", name: "GPT-4o", description: "OpenAI flagship", icon: <Sparkles className="h-3.5 w-3.5 text-emerald-400" /> },
+  { id: "gpt-4o", name: "GPT-4o", description: "OpenAI flagship", icon: <Sparkles className="h-3.5 w-3.5 text-[var(--success)]" /> },
   { id: "claude", name: "Claude", description: "Anthropic", icon: <Brain className="h-3.5 w-3.5 text-purple-400" /> },
 ];
 
@@ -43,7 +53,7 @@ function ModelSelector() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] hover:bg-white/[0.06] transition-colors"
+        className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] hover:bg-[var(--shell-hover)] transition-colors"
       >
         {selected.icon}
         <span>{selected.name}</span>
@@ -51,7 +61,7 @@ function ModelSelector() {
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 mb-1 w-48 rounded-xl border border-white/10 bg-[#1a1a1e]/95 backdrop-blur-xl p-1 shadow-lg z-50">
+        <div className="absolute bottom-full left-0 mb-1 w-48 rounded-xl border border-[var(--shell-border,var(--border))] bg-[var(--shell-elevated,var(--card))]/95 backdrop-blur-xl p-1 shadow-lg z-50">
           <p className="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--shell-muted)]">Select Model</p>
           {models.map((model) => (
             <button
@@ -59,7 +69,7 @@ function ModelSelector() {
               onClick={() => { setSelected(model); setOpen(false); }}
               className={cn(
                 "w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors",
-                selected.id === model.id ? "bg-white/10 text-white" : "text-[var(--shell-muted)] hover:bg-white/[0.06] hover:text-white"
+                selected.id === model.id ? "bg-[var(--shell-active)] text-[var(--shell-foreground)]" : "text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-foreground)]"
               )}
             >
               {model.icon}
@@ -97,19 +107,19 @@ function AttachMenu() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.08] text-[var(--shell-muted)] hover:bg-white/[0.12] hover:text-[var(--shell-foreground)] transition-colors"
+        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--shell-active)] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-foreground)] transition-colors"
       >
         <Plus className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-45")} />
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 mb-1 w-40 rounded-xl border border-white/10 bg-[#1a1a1e]/95 backdrop-blur-xl p-1 shadow-lg z-50">
+        <div className="absolute bottom-full left-0 mb-1 w-40 rounded-xl border border-[var(--shell-border,var(--border))] bg-[var(--shell-elevated,var(--card))]/95 backdrop-blur-xl p-1 shadow-lg z-50">
           {[
             { icon: <Paperclip className="h-3.5 w-3.5" />, label: "Upload file" },
             { icon: <Image className="h-3.5 w-3.5" />, label: "Add image" },
             { icon: <FileCode className="h-3.5 w-3.5" />, label: "Import code" },
           ].map((item, i) => (
-            <button key={i} onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11px] text-[var(--shell-muted)] hover:bg-white/[0.06] hover:text-white transition-colors">
+            <button key={i} onClick={() => setOpen(false)} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[11px] text-[var(--shell-muted)] hover:bg-[var(--shell-hover)] hover:text-[var(--shell-foreground)] transition-colors">
               {item.icon}
               {item.label}
             </button>
@@ -118,6 +128,76 @@ function AttachMenu() {
       )}
     </div>
   );
+}
+
+// --- Message Renderer ---
+
+function renderMessageContent(content: string) {
+  const lines = content.split("\n");
+  const elements: React.ReactNode[] = [];
+  let listItems: string[] = [];
+
+  function flushList() {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`} className="my-1.5 space-y-1 pl-3">
+          {listItems.map((item, i) => (
+            <li key={i} className="flex gap-2 items-start">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--brand)] opacity-70" />
+              <span>{renderInline(item)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      listItems = [];
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const listMatch = line.match(/^\s*(?:[-*•]|\d+[.)]) (.+)/);
+
+    if (listMatch) {
+      listItems.push(listMatch[1]);
+    } else {
+      flushList();
+      if (line.trim() === "") {
+        elements.push(<div key={`br-${i}`} className="h-2" />);
+      } else {
+        elements.push(<p key={`p-${i}`}>{renderInline(line)}</p>);
+      }
+    }
+  }
+  flushList();
+
+  return <>{elements}</>;
+}
+
+function renderInline(text: string): React.ReactNode {
+  // Handle **bold** and *italic*
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    if (match[2]) {
+      parts.push(<strong key={match.index} className="font-semibold">{match[2]}</strong>);
+    } else if (match[3]) {
+      parts.push(<em key={match.index}>{match[3]}</em>);
+    } else if (match[4]) {
+      parts.push(<code key={match.index} className="rounded bg-[var(--shell-input-border)] px-1 py-0.5 text-[10px] font-mono">{match[4]}</code>);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? <>{parts}</> : text;
 }
 
 // --- Main Panel ---
@@ -156,16 +236,54 @@ interface AiChatPanelProps {
 }
 
 export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("morfoschools-ai-session");
+    return null;
+  });
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const restoredRef = useRef(false);
+
+  // Restore messages from session on mount
+  useEffect(() => {
+    if (restoredRef.current || !sessionId) return;
+    restoredRef.current = true;
+    async function restore() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/ai/sessions/${sessionId}/messages`, { credentials: "include" });
+        if (!res.ok) { setSessionId(null); localStorage.removeItem("morfoschools-ai-session"); return; }
+        const data = await res.json();
+        if (data?.data?.length > 0) {
+          setMessages(data.data.map((m: any) => {
+            let content = m.content;
+            // Parse JSON results into readable messages
+            if (content.startsWith("{")) {
+              try {
+                const parsed = JSON.parse(content);
+                if (parsed.success && parsed.message) {
+                  content = `✅ ${parsed.message}`;
+                } else if (parsed.error) {
+                  content = `❌ ${parsed.error}`;
+                }
+              } catch { /* keep original */ }
+            }
+            return { role: m.role, content };
+          }));
+        }
+      } catch { /* ignore */ }
+    }
+    restore();
+  }, [sessionId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, isSending]);
+  }, [messages, isSending, open]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -187,24 +305,118 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
     setIsSending(true);
 
     try {
-      const response = await fetch("/api/ai-chat", {
+      const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
+      const csrfToken = csrfMatch ? csrfMatch[1] : "";
+
+      const response = await fetch(`${API_BASE}/api/v1/ai/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: compactMessages(nextMessages) }),
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          sessionId: sessionId || undefined,
+          message: trimmed,
+          shadow: {
+            route: pathname,
+            activeEntities: {},
+          },
+        }),
       });
 
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.message?.content) {
-        throw new Error(data?.error ?? "AI agent belum bisa merespons.");
+        throw new Error(data?.error?.message || data?.error || "AI agent belum bisa merespons.");
       }
 
-      setMessages((curr) => [...curr, { role: "assistant", content: data.message.content }]);
+      if (data.sessionId) {
+        setSessionId(data.sessionId);
+        localStorage.setItem("morfoschools-ai-session", data.sessionId);
+      }
+
+      // Check if response contains a proposal (confirmation required)
+      const content = data.message.content;
+      let proposals: any[] = [];
+      if (data.proposal) {
+        proposals = [data.proposal];
+      } else if (data.proposals && data.proposals.length > 0) {
+        proposals = data.proposals;
+      }
+
+      if (proposals.length === 0) {
+        setMessages((curr) => [...curr, { role: "assistant", content }]);
+        // If the response indicates a successful mutation (no proposal = direct execution),
+        // trigger data refresh so the app shell updates
+        if (data.mutated) {
+          router.refresh();
+          window.dispatchEvent(new Event("morfoschools:data-changed"));
+        }
+      } else {
+        // First proposal attached to main message
+        setMessages((curr) => [...curr, { role: "assistant", content, proposal: proposals[0], proposalStatus: "pending" }]);
+        // Additional proposals as separate messages
+        for (let i = 1; i < proposals.length; i++) {
+          setMessages((curr) => [...curr, { role: "assistant", content: proposals[i].confirmationText, proposal: proposals[i], proposalStatus: "pending" }]);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal menghubungi AI.");
       setMessages((curr) => curr.slice(0, -1));
       setInput(trimmed);
     } finally {
       setIsSending(false);
+    }
+  }
+
+  async function handleConfirm(proposalId: string, msgIndex: number) {
+    try {
+      const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
+      const csrfToken = csrfMatch ? csrfMatch[1] : "";
+
+      const response = await fetch(`${API_BASE}/api/v1/ai/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ proposalId }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(data?.error?.message || "Gagal mengeksekusi aksi.");
+        return;
+      }
+
+      // Update message status
+      setMessages((curr) => curr.map((m, i) => i === msgIndex ? { ...m, proposalStatus: "confirmed" as const } : m));
+
+      // Add result message
+      const resultMsg = data?.result?.message || "Aksi berhasil dieksekusi.";
+      setMessages((curr) => [...curr, { role: "assistant", content: `✅ ${resultMsg}` }]);
+
+      // Refresh current page data
+      router.refresh();
+      window.dispatchEvent(new Event("morfoschools:data-changed"));
+    } catch {
+      setError("Gagal menghubungi server.");
+    }
+  }
+
+  async function handleCancel(proposalId: string, msgIndex: number) {
+    try {
+      const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
+      const csrfToken = csrfMatch ? csrfMatch[1] : "";
+
+      await fetch(`${API_BASE}/api/v1/ai/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        credentials: "include",
+        body: JSON.stringify({ proposalId }),
+      });
+
+      setMessages((curr) => curr.map((m, i) => i === msgIndex ? { ...m, proposalStatus: "cancelled" as const } : m));
+    } catch {
+      setError("Gagal membatalkan aksi.");
     }
   }
 
@@ -216,25 +428,25 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
   if (!open) return null;
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-50 flex w-[360px] flex-col bg-[var(--shell)] text-white">
+    <aside className="fixed inset-0 z-50 flex flex-col bg-[var(--shell)] text-[var(--shell-foreground)] md:inset-y-0 md:left-auto md:right-0 md:w-[360px] md:bg-transparent">
       {/* Header */}
-      <div className="shrink-0 px-4 py-3 border-b border-white/[0.06]">
+      <div className="shrink-0 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.08]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--shell-active)]">
               <Bot className="h-4 w-4 text-[var(--shell-foreground)]" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <p className="text-[12px] font-bold text-[var(--shell-foreground)]">MORFOSCHOOLS AI</p>
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-emerald-300">
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--success)]/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-[var(--success)]">
                   <Sparkles className="h-2 w-2" /> Live
                 </span>
               </div>
               <p className="text-[10px] text-[var(--shell-muted)]">School operations assistant</p>
             </div>
           </div>
-          <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] hover:bg-white/[0.06] transition-colors">
+          <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] hover:bg-[var(--shell-hover)] transition-colors">
             <X size={14} />
           </button>
         </div>
@@ -244,7 +456,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {/* Suggestions */}
         {messages.length <= 1 && (
-          <div className="rounded-xl bg-white/[0.03] p-3 space-y-1.5">
+          <div className="rounded-xl bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] p-3 space-y-1.5">
             <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--shell-muted)] mb-2">
               <GraduationCap className="inline h-3 w-3 mr-1" /> Suggested
             </p>
@@ -254,7 +466,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
                 type="button"
                 disabled={isSending}
                 onClick={() => void sendMessage(s.prompt)}
-                className="w-full rounded-lg bg-white/[0.04] px-3 py-2 text-left text-[11px] font-medium text-[var(--shell-foreground)] hover:bg-white/[0.08] transition-colors disabled:opacity-50"
+                className="w-full rounded-lg bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] px-3 py-2 text-left text-[11px] font-medium text-[var(--shell-foreground)] hover:border-[var(--brand)] transition-colors disabled:opacity-50"
               >
                 {s.title}
               </button>
@@ -269,17 +481,54 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
               "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[12px] leading-relaxed",
               msg.role === "user"
                 ? "rounded-tr-md bg-[var(--brand)] text-white"
-                : "rounded-tl-md bg-white/[0.06] text-[var(--shell-foreground)]"
+                : "rounded-tl-md bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[var(--shell-foreground)]"
             )}>
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              <div className="whitespace-pre-wrap [&_strong]:font-semibold [&_em]:italic">
+                {renderMessageContent(msg.content)}
+              </div>
+
+              {/* Confirmation card */}
+              {msg.proposal && msg.proposalStatus === "pending" && (
+                <div className="mt-2.5 pt-2.5 border-t border-[var(--shell-input-border)]">
+                  <p className="text-[11px] font-medium text-[var(--shell-muted)] mb-2">{msg.proposal.confirmationText}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleConfirm(msg.proposal!.proposalId, i)}
+                      className="flex-1 h-7 rounded-lg bg-[var(--brand)] text-[11px] font-semibold text-white hover:opacity-90 active:scale-[0.97] transition-all"
+                    >
+                      Konfirmasi
+                    </button>
+                    <button
+                      onClick={() => handleCancel(msg.proposal!.proposalId, i)}
+                      className="flex-1 h-7 rounded-lg bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[11px] font-medium text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </div>
+              )}
+              {msg.proposalStatus === "confirmed" && (
+                <div className="mt-2 pt-2 border-t border-[var(--shell-input-border)]">
+                  <span className="text-[10px] font-medium text-[var(--success)]">✓ Dikonfirmasi</span>
+                </div>
+              )}
+              {msg.proposalStatus === "cancelled" && (
+                <div className="mt-2 pt-2 border-t border-[var(--shell-input-border)]">
+                  <span className="text-[10px] font-medium text-[var(--shell-muted)]">✗ Dibatalkan</span>
+                </div>
+              )}
             </div>
           </div>
         ))}
 
         {isSending && (
           <div className="flex justify-start">
-            <div className="inline-flex items-center gap-2 rounded-2xl rounded-tl-md bg-white/[0.06] px-3.5 py-2.5 text-[11px] text-[var(--shell-muted)]">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Berpikir...
+            <div className="inline-flex items-center gap-3 rounded-2xl px-4 py-3">
+              <div className="flex items-center gap-1 h-2">
+                <span className="h-1 w-1 rounded-full bg-[var(--brand)] animate-bounce [animation-delay:0ms]" />
+                <span className="h-1 w-1 rounded-full bg-[var(--brand)] animate-bounce [animation-delay:150ms]" />
+                <span className="h-1 w-1 rounded-full bg-[var(--brand)] animate-bounce [animation-delay:300ms]" />
+              </div>
             </div>
           </div>
         )}
@@ -287,14 +536,14 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
 
       {/* Error */}
       {error && (
-        <div className="mx-4 mb-2 rounded-lg bg-red-400/10 border border-red-400/20 px-3 py-2 text-[10px] text-red-200">
+        <div className="mx-4 mb-2 rounded-lg bg-[var(--danger-soft)] border border-[var(--danger)]/20 px-3 py-2 text-[10px] text-[var(--danger)]">
           {error}
         </div>
       )}
 
       {/* Input area */}
       <form onSubmit={handleSubmit} className="shrink-0 p-3 pt-0">
-        <div className="rounded-xl bg-white/[0.05] ring-1 ring-white/[0.08]">
+        <div className="rounded-xl bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] ring-0">
           <textarea
             ref={textareaRef}
             rows={1}

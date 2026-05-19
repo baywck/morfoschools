@@ -7,13 +7,16 @@ type ChatMessage = {
   content: string;
 };
 
-const DEFAULT_BASE_URL = "http://43.156.68.104:20128/v1";
 const DEFAULT_MODEL = "MORFOSCHOOLS";
 const MAX_AI_OUTPUT_TOKENS = 900;
 
 function getConfig() {
+  const baseUrl = process.env.AI_BASE_URL;
+  if (!baseUrl) {
+    throw new Error("AI_BASE_URL is not configured");
+  }
   return {
-    baseUrl: (process.env.AI_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, ""),
+    baseUrl: baseUrl.replace(/\/$/, ""),
     apiKey: process.env.AI_API_KEY,
     model: process.env.AI_MODEL ?? DEFAULT_MODEL,
   };
@@ -22,7 +25,18 @@ function getConfig() {
 const SYSTEM_PROMPT = `Kamu adalah MORFOSCHOOLS AI Agent untuk LMS sekolah Indonesia. Jawab dalam Bahasa Indonesia yang jelas, praktis, dan aman. Bantu guru/admin terkait kelas, siswa, course, exam, grading, jadwal ujian, dan operasional sekolah. Jangan mengklaim sudah membaca data tenant nyata kecuali data itu diberikan eksplisit di chat. Critical path ujian tidak boleh bergantung pada API eksternal.`;
 
 export async function POST(request: Request) {
-  const { baseUrl, apiKey, model } = getConfig();
+  let baseUrl: string;
+  let apiKey: string | undefined;
+  let model: string;
+
+  try {
+    const config = getConfig();
+    baseUrl = config.baseUrl;
+    apiKey = config.apiKey;
+    model = config.model;
+  } catch {
+    return NextResponse.json({ error: "AI service belum dikonfigurasi." }, { status: 500 });
+  }
 
   if (!apiKey) {
     return NextResponse.json({ error: "AI_API_KEY belum dikonfigurasi di server." }, { status: 500 });

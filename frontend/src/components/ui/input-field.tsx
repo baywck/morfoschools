@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { cn } from "@/lib/cn";
 
 interface InputFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "placeholder" | "prefix"> {
@@ -17,9 +17,25 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
     const [focused, setFocused] = useState(false);
     const [internalValue, setInternalValue] = useState(defaultValue || "");
 
+    // Track which error string was dismissed
+    const dismissedErrorRef = useRef<string | undefined>(undefined);
+
+    // If user interacted, we mark the current error as dismissed.
+    // If a NEW different error comes in, it should show.
+    const visibleError = (error && error !== dismissedErrorRef.current) ? error : undefined;
+
     const currentValue = value !== undefined ? value : internalValue;
     const hasValue = String(currentValue).length > 0;
     const isFloating = focused || hasValue;
+
+    function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+      // Dismiss the current error on user interaction
+      if (error) {
+        dismissedErrorRef.current = error;
+      }
+      if (value === undefined) setInternalValue(e.target.value);
+      props.onChange?.(e);
+    }
 
     return (
       <div className="w-full">
@@ -28,7 +44,7 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
             "relative flex h-11 items-center rounded-lg border bg-[var(--card)] transition-all",
             focused
               ? "border-[var(--field-focus)] ring-2 ring-[var(--field-ring)]"
-              : error
+              : visibleError
                 ? "border-[var(--danger)]"
                 : "border-[var(--border)] hover:border-[var(--border-strong)]",
             disabled && "opacity-60 cursor-not-allowed",
@@ -40,7 +56,7 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
             <div className={cn(
               "ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-[var(--muted)] text-[var(--muted-foreground)] transition-colors",
               focused ? "border-[var(--field-focus)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)]",
-              error && "border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger)]"
+              visibleError && "border-[var(--danger)] bg-[var(--danger-soft)] text-[var(--danger)]"
             )}>
               {prefix}
             </div>
@@ -55,7 +71,7 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
             defaultValue={defaultValue}
             onFocus={(e) => { setFocused(true); onFocus?.(e); }}
             onBlur={(e) => { setFocused(false); onBlur?.(e); }}
-            onChange={(e) => { if (value === undefined) setInternalValue(e.target.value); props.onChange?.(e); }}
+            onChange={handleChange}
             placeholder=" "
             className={cn(
               "peer h-full w-full bg-transparent text-[13px] font-medium text-[var(--foreground)] outline-none",
@@ -63,8 +79,8 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
               "pt-3.5 pb-1",
               disabled && "cursor-not-allowed"
             )}
-            aria-invalid={!!error}
-            aria-describedby={error ? `${inputId}-error` : undefined}
+            aria-invalid={!!visibleError}
+            aria-describedby={visibleError ? `${inputId}-error` : undefined}
             {...props}
           />
 
@@ -77,19 +93,19 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
               isFloating
                 ? "top-1 text-[10px] font-medium"
                 : "top-1/2 -translate-y-1/2 text-[13px]",
-              error ? "text-[var(--danger)]" : focused ? "text-[var(--brand)]" : "text-[var(--muted-foreground)]"
+              visibleError ? "text-[var(--danger)]" : focused ? "text-[var(--brand)]" : "text-[var(--muted-foreground)]"
             )}
           >
             {label}
           </label>
         </div>
 
-        {error && (
+        {visibleError && (
           <p id={`${inputId}-error`} className="mt-1 text-[11px] font-medium text-[var(--danger)]" role="alert">
-            {error}
+            {visibleError}
           </p>
         )}
-        {helperText && !error && (
+        {helperText && !visibleError && (
           <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{helperText}</p>
         )}
       </div>

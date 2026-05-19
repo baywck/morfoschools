@@ -13,6 +13,7 @@ func (a *App) registerTeacherRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/teachers", a.handleCreateTeacher)
 	mux.HandleFunc("PATCH /api/v1/teachers/{id}", a.handleUpdateTeacher)
 	mux.HandleFunc("PATCH /api/v1/teachers/{id}/archive", a.handleArchiveTeacher)
+	mux.HandleFunc("PATCH /api/v1/teachers/{id}/restore", a.handleRestoreTeacher)
 }
 
 func (a *App) handleListTeachers(w http.ResponseWriter, r *http.Request) {
@@ -254,10 +255,101 @@ func (a *App) handleArchiveTeacher(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _ = a.db.ExecContext(r.Context(), `UPDATE teachers SET status = 'archived', updated_at = now() WHERE id = $1`, teacherID)
+	userID, _ := userIDForProfile(r.Context(), a.db, "teachers", teacherID)
+
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		a.logger.Error("begin tx failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive teacher", r)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE teachers SET status = 'archived', updated_at = now() WHERE id = $1`, teacherID,
+	); err != nil {
+		a.logger.Error("archive teacher failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive teacher", r)
+		return
+	}
+
+	cascaded, err := cascadeArchiveUserIfOrphan(r.Context(), tx, userID)
+	if err != nil {
+		a.logger.Error("cascade archive user failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive teacher", r)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive teacher", r)
+		return
+	}
 
 	auth := AuthFromContext(r.Context())
 	a.audit(r.Context(), &tenantID, auth.UserID, "teachers.archive", "teacher", teacherID, r)
+	if cascaded {
+		a.audit(r.Context(), &tenantID, auth.UserID, "users.archive_cascade", "user", userID, r)
+	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"status": "archived"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":       "archived",
+		"userArchived": cascaded,
+	})
+}
+
+func (a *App) handleRestoreTeacher(w http.ResponseWriter, r *http.Request) {
+	if !a.RequirePermission(w, r, "users:write") {
+		return
+	}
+	tenantID := a.RequireEffectiveTenant(w, r)
+	if tenantID == "" {
+		return
+	}
+	if !a.RequireCSRF(w, r) {
+		return
+	}
+
+	teacherID := r.PathValue("id")
+	var exists bool
+	_ = a.db.QueryRowContext(r.Context(),
+		`SELECT EXISTS(SELECT 1 FROM teachers WHERE id = $1 AND tenant_id = $2)`,
+		teacherID, tenantID,
+	).Scan(&exists)
+	if !exists {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Teacher not found", r)
+		return
+	}
+
+	userID, _ := userIDForProfile(r.Context(), a.db, "teachers", teacherID)
+
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore teacher", r)
+		return
+	}
+	defer tx.Rollback()
+
+	if err := restoreProfile(r.Context(), tx, "teachers", teacherID, "active"); err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore teacher", r)
+		return
+	}
+	resolved, taken, err := restoreUser(r.Context(), tx, userID, "")
+	if err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore teacher", r)
+		return
+	}
+	if taken {
+		writeValidationError(w, map[string]string{
+			"email": "Email " + resolved + " is already in use. Restore the user account manually with a new email first.",
+		}, r)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore teacher", r)
+		return
+	}
+
+	auth := AuthFromContext(r.Context())
+	a.audit(r.Context(), &tenantID, auth.UserID, "teachers.restore", "teacher", teacherID, r)
+
+	writeJSON(w, http.StatusOK, map[string]any{"id": teacherID, "status": "active"})
 }

@@ -32,6 +32,9 @@ function formatDisplay(value: string) {
 export function DatePicker({ label, value, onChange, error, helperText }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dismissedErrorRef = useRef<string | undefined>(undefined);
+
+  const visibleError = (error && error !== dismissedErrorRef.current) ? error : undefined;
 
   const today = new Date();
   const selected = value ? new Date(value + "T00:00:00") : null;
@@ -65,6 +68,7 @@ export function DatePicker({ label, value, onChange, error, helperText }: DatePi
   function selectDay(day: number) {
     const m = String(viewMonth + 1).padStart(2, "0");
     const d = String(day).padStart(2, "0");
+    if (error) dismissedErrorRef.current = error;
     onChange(`${viewYear}-${m}-${d}`);
     setOpen(false);
   }
@@ -87,7 +91,7 @@ export function DatePicker({ label, value, onChange, error, helperText }: DatePi
           "relative flex h-11 items-center rounded-lg border bg-[var(--card)] transition-all cursor-pointer",
           open
             ? "border-[var(--field-focus)] ring-2 ring-[var(--field-ring)]"
-            : error
+            : visibleError
               ? "border-[var(--danger)]"
               : "border-[var(--border)] hover:border-[var(--border-strong)]"
         )}
@@ -101,7 +105,7 @@ export function DatePicker({ label, value, onChange, error, helperText }: DatePi
             isFloating
               ? "top-1 text-[10px] font-medium"
               : "top-1/2 -translate-y-1/2 text-[13px]",
-            error ? "text-[var(--danger)]" : open ? "text-[var(--brand)]" : "text-[var(--muted-foreground)]"
+            visibleError ? "text-[var(--danger)]" : open ? "text-[var(--brand)]" : "text-[var(--muted-foreground)]"
           )}>
             {label}
           </span>
@@ -172,6 +176,7 @@ export function DatePicker({ label, value, onChange, error, helperText }: DatePi
               onClick={() => {
                 const m = String(today.getMonth() + 1).padStart(2, "0");
                 const d = String(today.getDate()).padStart(2, "0");
+                if (error) dismissedErrorRef.current = error;
                 onChange(`${today.getFullYear()}-${m}-${d}`);
                 setOpen(false);
               }}
@@ -183,8 +188,8 @@ export function DatePicker({ label, value, onChange, error, helperText }: DatePi
         </div>
       )}
 
-      {error && <p className="mt-1 text-[11px] font-medium text-[var(--danger)]" role="alert">{error}</p>}
-      {helperText && !error && <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{helperText}</p>}
+      {visibleError && <p className="mt-1 text-[11px] font-medium text-[var(--danger)]" role="alert">{visibleError}</p>}
+      {helperText && !visibleError && <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{helperText}</p>}
     </div>
   );
 }

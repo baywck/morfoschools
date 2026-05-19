@@ -25,11 +25,18 @@ export function useToast() {
   return ctx;
 }
 
-const toneBorder: Record<ToastTone, string> = {
-  success: "border-l-[var(--success)]",
-  error: "border-l-[var(--danger)]",
-  info: "border-l-[var(--info)]",
-  warning: "border-l-[var(--warning)]",
+const toneStyles: Record<ToastTone, string> = {
+  success: "bg-[var(--success-soft)] border-[var(--success)]/20 text-[var(--success)]",
+  error: "bg-[var(--danger-soft)] border-[var(--danger)]/20 text-[var(--danger)]",
+  info: "bg-[var(--info-soft)] border-[var(--info)]/20 text-[var(--info)]",
+  warning: "bg-[var(--warning-soft)] border-[var(--warning)]/20 text-[var(--warning)]",
+};
+
+const toneIcon: Record<ToastTone, string> = {
+  success: "bg-[var(--success)]/10",
+  error: "bg-[var(--danger)]/10",
+  info: "bg-[var(--info)]/10",
+  warning: "bg-[var(--warning)]/10",
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -55,20 +62,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             className={cn(
-              "flex items-start gap-3 rounded-xl border border-l-4 bg-[var(--card)] p-4 shadow-sm",
-              "min-w-[300px] max-w-[400px]",
-              toneBorder[t.tone]
+              "flex items-start gap-3 rounded-xl border p-3.5 shadow-sm backdrop-blur-sm",
+              "min-w-[300px] max-w-[400px] animate-[slideIn_0.2s_ease-out]",
+              toneStyles[t.tone]
             )}
           >
+            <div className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full", toneIcon[t.tone])}>
+              <span className="block h-2 w-2 rounded-full bg-current" />
+            </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-[var(--foreground)]">{t.title}</p>
+              <p className="text-[12px] font-semibold">{t.title}</p>
               {t.description && (
-                <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{t.description}</p>
+                <p className="mt-0.5 text-[11px] opacity-80">{t.description}</p>
               )}
             </div>
             <button
               onClick={() => dismiss(t.id)}
-              className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+              className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
               aria-label="Dismiss"
             >
               <X size={13} />

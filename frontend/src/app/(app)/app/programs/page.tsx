@@ -58,6 +58,13 @@ export default function ProgramsPage() {
     return () => clearTimeout(debounce);
   }, [search]);
 
+  // Refresh when AI or other actions modify data
+  useEffect(() => {
+    function h() { fetchData(); }
+    window.addEventListener("morfoschools:data-changed", h);
+    return () => window.removeEventListener("morfoschools:data-changed", h);
+  }, []);
+
   const resetForm = () => {
     setTitle("");
     setDescription("");

@@ -26,11 +26,12 @@ export interface UserListResponse {
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
 }
 
-export function listUsers(params?: { page?: number; search?: string; status?: string }) {
+export function listUsers(params?: { page?: number; search?: string; status?: string; role?: string }) {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.search) query.set("search", params.search);
   if (params?.status) query.set("status", params.status);
+  if (params?.role) query.set("role", params.role);
   const qs = query.toString();
   return get<UserListResponse>(`/api/v1/users${qs ? `?${qs}` : ""}`);
 }
@@ -39,12 +40,19 @@ export function createUser(data: { email: string; displayName: string; password:
   return post<User>("/api/v1/users", data);
 }
 
-export function updateUser(id: string, data: { displayName?: string; status?: string }) {
+export function updateUser(id: string, data: { displayName?: string; email?: string; password?: string; status?: string }) {
   return patch<User>(`/api/v1/users/${id}`, data);
 }
 
 export function archiveUser(id: string) {
   return patch<{ status: string }>(`/api/v1/users/${id}/archive`);
+}
+
+export function restoreUser(id: string, email?: string) {
+  return patch<{ id: string; status: string; email: string }>(
+    `/api/v1/users/${id}/restore`,
+    email ? { email } : undefined,
+  );
 }
 
 // --- Tenants ---
@@ -125,6 +133,10 @@ export function archiveTeacher(id: string) {
   return patch<{ status: string }>(`/api/v1/teachers/${id}/archive`);
 }
 
+export function restoreTeacher(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/teachers/${id}/restore`);
+}
+
 // --- Students ---
 export interface Student {
   id: string;
@@ -142,11 +154,12 @@ export interface StudentListResponse {
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
 }
 
-export function listStudents(params?: { page?: number; search?: string; status?: string }) {
+export function listStudents(params?: { page?: number; search?: string; status?: string; classSectionId?: string }) {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.search) query.set("search", params.search);
   if (params?.status) query.set("status", params.status);
+  if (params?.classSectionId) query.set("classSectionId", params.classSectionId);
   const qs = query.toString();
   return get<StudentListResponse>(`/api/v1/students${qs ? `?${qs}` : ""}`);
 }
@@ -161,6 +174,10 @@ export function updateStudent(id: string, data: { studentIdNumber?: string; grad
 
 export function archiveStudent(id: string) {
   return patch<{ status: string }>(`/api/v1/students/${id}/archive`);
+}
+
+export function restoreStudent(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/students/${id}/restore`);
 }
 
 // --- Staff ---
@@ -200,6 +217,10 @@ export function updateStaff(id: string, data: { employeeId?: string; department?
 
 export function archiveStaff(id: string) {
   return patch<{ status: string }>(`/api/v1/staff/${id}/archive`);
+}
+
+export function restoreStaff(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/staff/${id}/restore`);
 }
 
 // --- Academic Years ---
@@ -272,6 +293,15 @@ export function updateSubject(id: string, data: { name?: string; description?: s
 
 export function archiveSubject(id: string) {
   return patch<{ status: string }>(`/api/v1/subjects/${id}/archive`);
+}
+
+export interface SubjectTeacher {
+  id: string;
+  displayName: string;
+}
+
+export function listSubjectTeachers(subjectId: string) {
+  return get<{ data: SubjectTeacher[] }>(`/api/v1/subjects/${subjectId}/teachers`);
 }
 
 // --- Class Sections ---
@@ -365,6 +395,10 @@ export function updateGuardian(id: string, data: { name?: string; phone?: string
 
 export function archiveGuardian(id: string) {
   return patch<{ status: string }>(`/api/v1/guardians/${id}/archive`);
+}
+
+export function restoreGuardian(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/guardians/${id}/restore`);
 }
 
 export function linkStudentGuardian(guardianId: string, data: { studentId: string; isPrimary?: boolean }) {

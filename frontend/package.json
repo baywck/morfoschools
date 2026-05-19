@@ -30,7 +30,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "postcss": "^8.5.3",
+    "postcss": "^8.5.14",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.8",
     "vitest": "^3.1.3"

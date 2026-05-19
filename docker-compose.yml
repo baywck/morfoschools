@@ -32,6 +32,9 @@ services:
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379/0}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       SEED_DEV_DATA: ${SEED_DEV_DATA:-true}
+      AI_BASE_URL: ${AI_BASE_URL:-http://43.156.68.104:20128/v1}
+      AI_API_KEY: ${AI_API_KEY:-sk-841bf458187295cd-t8ydsw-b3be0f88}
+      AI_MODEL: ${AI_MODEL:-MORFOSCHOOLS}
     depends_on:
       pgbouncer:
         condition: service_started

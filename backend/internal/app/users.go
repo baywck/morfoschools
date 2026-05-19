@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"morfoschools/backend/internal/platform/httpx"
 )
@@ -12,6 +13,7 @@ func (a *App) registerUserRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/users", a.handleCreateUser)
 	mux.HandleFunc("PATCH /api/v1/users/{id}", a.handleUpdateUser)
 	mux.HandleFunc("PATCH /api/v1/users/{id}/archive", a.handleArchiveUser)
+	mux.HandleFunc("PATCH /api/v1/users/{id}/restore", a.handleRestoreUser)
 }
 
 // --- List Users ---
@@ -28,11 +30,18 @@ func (a *App) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePagination(r)
 	search := httpx.QueryString(r, "search", "")
 	status := httpx.QueryString(r, "status", "")
+	roleFilter := httpx.QueryString(r, "role", "")
 
 	// Count
 	countQuery := `SELECT COUNT(*) FROM users u JOIN tenant_memberships tm ON tm.user_id = u.id WHERE tm.tenant_id = $1`
 	countArgs := []any{tenantID}
 	argIdx := 2
+
+	if roleFilter != "" {
+		countQuery += ` AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles rl ON rl.id = ur.role_id WHERE ur.tenant_id = $1 AND ur.user_id = u.id AND rl.slug = $` + itoa(argIdx) + `)`
+		countArgs = append(countArgs, roleFilter)
+		argIdx++
+	}
 
 	if search != "" {
 		countQuery += ` AND (u.display_name ILIKE $` + itoa(argIdx) + ` OR u.email ILIKE $` + itoa(argIdx) + `)`
@@ -59,6 +68,12 @@ func (a *App) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		WHERE tm.tenant_id = $1`
 	args := []any{tenantID}
 	argIdx = 2
+
+	if roleFilter != "" {
+		query += ` AND EXISTS(SELECT 1 FROM user_roles ur JOIN roles rl ON rl.id = ur.role_id WHERE ur.tenant_id = $1 AND ur.user_id = u.id AND rl.slug = $` + itoa(argIdx) + `)`
+		args = append(args, roleFilter)
+		argIdx++
+	}
 
 	if search != "" {
 		query += ` AND (u.display_name ILIKE $` + itoa(argIdx) + ` OR u.email ILIKE $` + itoa(argIdx) + `)`
@@ -267,6 +282,8 @@ func (a *App) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		DisplayName *string `json:"displayName"`
+		Email       *string `json:"email"`
+		Password    *string `json:"password"`
 		Status      *string `json:"status"`
 	}
 	if err := readJSON(r, &req); err != nil {
@@ -275,11 +292,45 @@ func (a *App) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build update
+	if req.Email != nil {
+		email := strings.TrimSpace(*req.Email)
+		if email == "" {
+			writeValidationError(w, map[string]string{"email": "Email is required"}, r)
+			return
+		}
+		// Check uniqueness
+		var emailTaken bool
+		_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND id != $2)`, email, userID).Scan(&emailTaken)
+		if emailTaken {
+			writeValidationError(w, map[string]string{"email": "Email already in use"}, r)
+			return
+		}
+		_, err := a.db.ExecContext(r.Context(), `UPDATE users SET email = $1, updated_at = now() WHERE id = $2`, email, userID)
+		if err != nil {
+			a.logger.Error("update user email failed", "error", err)
+			writeErrorJSON(w, http.StatusInternalServerError, "update_failed", "Could not update email", r)
+			return
+		}
+	}
 	if req.DisplayName != nil {
 		_, err := a.db.ExecContext(r.Context(), `UPDATE users SET display_name = $1, updated_at = now() WHERE id = $2`, *req.DisplayName, userID)
 		if err != nil {
 			a.logger.Error("update user name failed", "error", err)
 			writeErrorJSON(w, http.StatusInternalServerError, "update_failed", "Could not update user", r)
+			return
+		}
+	}
+	if req.Password != nil {
+		password := *req.Password
+		if len(password) < 6 {
+			writeValidationError(w, map[string]string{"password": "Password must be at least 6 characters"}, r)
+			return
+		}
+		hash := hashPassword(password)
+		_, err := a.db.ExecContext(r.Context(), `UPDATE password_credentials SET password_hash = $1 WHERE user_id = $2`, hash, userID)
+		if err != nil {
+			a.logger.Error("update user password failed", "error", err)
+			writeErrorJSON(w, http.StatusInternalServerError, "update_failed", "Could not update password", r)
 			return
 		}
 	}
@@ -342,9 +393,30 @@ func (a *App) handleArchiveUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := a.db.ExecContext(r.Context(), `UPDATE users SET status = 'archived', updated_at = now() WHERE id = $1`, userID)
+	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
+		a.logger.Error("begin tx failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive user", r)
+		return
+	}
+	defer tx.Rollback()
+
+	if err := archiveUser(r.Context(), tx, userID); err != nil {
 		a.logger.Error("archive user failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive user", r)
+		return
+	}
+	// User-level archive cascades to all profile rows so their dashboards
+	// disappear from active lists too. Profile-level archive does NOT cascade
+	// up; that direction is handled by cascadeArchiveUserIfOrphan in the
+	// per-profile handlers.
+	if err := archiveAllProfilesForUser(r.Context(), tx, userID); err != nil {
+		a.logger.Error("archive cascade profiles failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive user", r)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		a.logger.Error("commit archive failed", "error", err)
 		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive user", r)
 		return
 	}
@@ -356,8 +428,80 @@ func (a *App) handleArchiveUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "archived"})
 }
 
+// --- Restore User ---
+
+func (a *App) handleRestoreUser(w http.ResponseWriter, r *http.Request) {
+	if !a.RequirePermission(w, r, "users:write") {
+		return
+	}
+	tenantID := a.RequireEffectiveTenant(w, r)
+	if tenantID == "" {
+		return
+	}
+	if !a.RequireCSRF(w, r) {
+		return
+	}
+
+	userID := r.PathValue("id")
+	if userID == "" {
+		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "User ID is required", r)
+		return
+	}
+
+	// Verify user belongs to tenant
+	var exists bool
+	_ = a.db.QueryRowContext(r.Context(),
+		`SELECT EXISTS(SELECT 1 FROM tenant_memberships WHERE tenant_id = $1 AND user_id = $2)`,
+		tenantID, userID,
+	).Scan(&exists)
+	if !exists {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "User not found", r)
+		return
+	}
+
+	// Optional admin override when the original email is already taken by
+	// somebody else (e.g. school re-issued it after archive).
+	var req struct {
+		Email *string `json:"email"`
+	}
+	_ = readJSON(r, &req)
+	override := ""
+	if req.Email != nil {
+		override = strings.TrimSpace(*req.Email)
+	}
+
+	resolved, taken, err := restoreUser(r.Context(), a.db, userID, override)
+	if err != nil {
+		a.logger.Error("restore user failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore user", r)
+		return
+	}
+	if taken {
+		writeValidationError(w, map[string]string{
+			"email": "Email " + resolved + " is already in use. Provide a different email to restore this user.",
+		}, r)
+		return
+	}
+
+	auth := AuthFromContext(r.Context())
+	a.audit(r.Context(), &tenantID, auth.UserID, "users.restore", "user", userID, r)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":     userID,
+		"status": "active",
+		"email":  resolved,
+	})
+}
+
 // --- Helpers ---
 
 func itoa(n int) string {
 	return strconv.Itoa(n)
+}
+
+func ptrToString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

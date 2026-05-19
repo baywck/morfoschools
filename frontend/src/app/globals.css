@@ -116,6 +116,42 @@ body {
 input:-webkit-autofill { animation-name: field-autofill-start; }
 input:not(:-webkit-autofill) { animation-name: field-autofill-cancel; }
 
+/* ─── Shell Mode: Light ─── */
+:root[data-shell="light"] {
+  --shell: oklch(96.7% .001 286.375);
+  --shell-foreground: oklch(21% .006 285.885);
+  --shell-muted: oklch(55.2% .016 285.938);
+  --shell-active: oklch(92% .004 286.32);
+  --shell-hover: oklch(94% .003 286.3);
+  --shell-border: oklch(87.1% .006 286.286);
+  --shell-elevated: oklch(98.5% 0 0);
+  --shell-input-bg: oklch(98.5% 0 0);
+  --shell-input-border: oklch(87.1% .006 286.286);
+}
+
+:root[data-theme="dark"][data-shell="light"] {
+  --shell: oklch(27.4% .006 286.033);
+  --shell-foreground: oklch(96.7% .001 286.375);
+  --shell-muted: oklch(70.5% .015 286.067);
+  --shell-active: oklch(37% .013 285.805);
+  --shell-hover: oklch(32% .01 285.9);
+  --shell-border: oklch(37% .013 285.805);
+  --shell-elevated: oklch(21% .006 285.885);
+  --shell-input-bg: oklch(27.4% .006 286.033);
+  --shell-input-border: oklch(37% .013 285.805);
+}
+
+/* Shell Mode: Dark (default) — add input tokens */
+:root {
+  --shell-input-bg: rgba(255, 255, 255, 0.06);
+  --shell-input-border: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] {
+  --shell-input-bg: rgba(255, 255, 255, 0.06);
+  --shell-input-border: rgba(255, 255, 255, 0.08);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

@@ -13,6 +13,7 @@ func (a *App) registerStudentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/students", a.handleCreateStudent)
 	mux.HandleFunc("PATCH /api/v1/students/{id}", a.handleUpdateStudent)
 	mux.HandleFunc("PATCH /api/v1/students/{id}/archive", a.handleArchiveStudent)
+	mux.HandleFunc("PATCH /api/v1/students/{id}/restore", a.handleRestoreStudent)
 }
 
 func (a *App) handleListStudents(w http.ResponseWriter, r *http.Request) {
@@ -27,11 +28,17 @@ func (a *App) handleListStudents(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePagination(r)
 	search := httpx.QueryString(r, "search", "")
 	status := httpx.QueryString(r, "status", "")
+	classFilter := httpx.QueryString(r, "classSectionId", "")
 
-	countQuery := `SELECT COUNT(*) FROM students s JOIN users u ON u.id = s.user_id WHERE s.tenant_id = $1`
+	countQuery := `SELECT COUNT(*) FROM students s JOIN users u ON u.id = s.user_id WHERE s.tenant_id = $1 AND s.status != 'archived'`
 	countArgs := []any{tenantID}
 	argIdx := 2
 
+	if classFilter != "" {
+		countQuery += ` AND s.class_section_id = $` + strconv.Itoa(argIdx)
+		countArgs = append(countArgs, classFilter)
+		argIdx++
+	}
 	if search != "" {
 		countQuery += ` AND (u.display_name ILIKE $` + strconv.Itoa(argIdx) + ` OR u.email ILIKE $` + strconv.Itoa(argIdx) + `)`
 		countArgs = append(countArgs, "%"+search+"%")
@@ -52,10 +59,15 @@ func (a *App) handleListStudents(w http.ResponseWriter, r *http.Request) {
 
 	query := `SELECT s.id, s.user_id, u.email, u.display_name, s.student_id_number, s.grade_level, s.status, s.created_at
 		FROM students s JOIN users u ON u.id = s.user_id
-		WHERE s.tenant_id = $1`
+		WHERE s.tenant_id = $1 AND s.status != 'archived'`
 	args := []any{tenantID}
 	argIdx = 2
 
+	if classFilter != "" {
+		query += ` AND s.class_section_id = $` + strconv.Itoa(argIdx)
+		args = append(args, classFilter)
+		argIdx++
+	}
 	if search != "" {
 		query += ` AND (u.display_name ILIKE $` + strconv.Itoa(argIdx) + ` OR u.email ILIKE $` + strconv.Itoa(argIdx) + `)`
 		args = append(args, "%"+search+"%")
@@ -243,10 +255,109 @@ func (a *App) handleArchiveStudent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _ = a.db.ExecContext(r.Context(), `UPDATE students SET status = 'archived', updated_at = now() WHERE id = $1`, studentID)
+	userID, _ := userIDForProfile(r.Context(), a.db, "students", studentID)
+
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		a.logger.Error("begin tx failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive student", r)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE students SET status = 'archived', updated_at = now() WHERE id = $1`, studentID,
+	); err != nil {
+		a.logger.Error("archive student failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive student", r)
+		return
+	}
+
+	// Cascade: archive the parent user iff this was their last active profile,
+	// freeing the email slot for re-registration.
+	cascaded, err := cascadeArchiveUserIfOrphan(r.Context(), tx, userID)
+	if err != nil {
+		a.logger.Error("cascade archive user failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive student", r)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		a.logger.Error("commit archive failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "archive_failed", "Could not archive student", r)
+		return
+	}
 
 	auth := AuthFromContext(r.Context())
 	a.audit(r.Context(), &tenantID, auth.UserID, "students.archive", "student", studentID, r)
+	if cascaded {
+		a.audit(r.Context(), &tenantID, auth.UserID, "users.archive_cascade", "user", userID, r)
+	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"status": "archived"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":       "archived",
+		"userArchived": cascaded,
+	})
+}
+
+func (a *App) handleRestoreStudent(w http.ResponseWriter, r *http.Request) {
+	if !a.RequirePermission(w, r, "users:write") {
+		return
+	}
+	tenantID := a.RequireEffectiveTenant(w, r)
+	if tenantID == "" {
+		return
+	}
+	if !a.RequireCSRF(w, r) {
+		return
+	}
+
+	studentID := r.PathValue("id")
+	var exists bool
+	_ = a.db.QueryRowContext(r.Context(),
+		`SELECT EXISTS(SELECT 1 FROM students WHERE id = $1 AND tenant_id = $2)`,
+		studentID, tenantID,
+	).Scan(&exists)
+	if !exists {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Student not found", r)
+		return
+	}
+
+	userID, _ := userIDForProfile(r.Context(), a.db, "students", studentID)
+
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore student", r)
+		return
+	}
+	defer tx.Rollback()
+
+	if err := restoreProfile(r.Context(), tx, "students", studentID, "active"); err != nil {
+		a.logger.Error("restore student failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore student", r)
+		return
+	}
+
+	// Restore the parent user too. If the original email is already taken,
+	// surface a 409 so the admin can supply a new one.
+	resolved, taken, err := restoreUser(r.Context(), tx, userID, "")
+	if err != nil {
+		a.logger.Error("restore user failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore student", r)
+		return
+	}
+	if taken {
+		writeValidationError(w, map[string]string{
+			"email": "Email " + resolved + " is already in use. Restore the user account manually with a new email first.",
+		}, r)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "restore_failed", "Could not restore student", r)
+		return
+	}
+
+	auth := AuthFromContext(r.Context())
+	a.audit(r.Context(), &tenantID, auth.UserID, "students.restore", "student", studentID, r)
+
+	writeJSON(w, http.StatusOK, map[string]any{"id": studentID, "status": "active"})
 }

@@ -103,6 +103,12 @@ export default function ClassesPage() {
 
   useEffect(() => { loadData(); }, [search]);
 
+  useEffect(() => {
+    function h() { loadData(); }
+    window.addEventListener("morfoschools:data-changed", h);
+    return () => window.removeEventListener("morfoschools:data-changed", h);
+  }, []);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFieldErrors({});
@@ -135,6 +141,7 @@ export default function ClassesPage() {
     setNewCapacity("");
     setCreating(false);
     loadData();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   function openEdit(cls: ClassSection) {
@@ -184,6 +191,7 @@ export default function ClassesPage() {
     setEditTarget(null);
     setEditing(false);
     loadData();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   async function confirmArchive() {
@@ -195,6 +203,7 @@ export default function ClassesPage() {
     } else {
       toast({ tone: "success", title: "Class archived" });
       loadData();
+      window.dispatchEvent(new Event("morfoschools:data-changed"));
     }
     setArchiving(false);
     setArchiveTarget(null);

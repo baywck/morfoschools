@@ -29,7 +29,7 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[1px]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-[1px]">
       <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xl">
         <div className="flex items-start gap-3">
           {destructive && (

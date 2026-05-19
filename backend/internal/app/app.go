@@ -27,6 +27,8 @@ type App struct {
 	logger       *slog.Logger
 	db           *sql.DB
 	loginLimiter *loginLimiter
+	toolRegistry *ToolRegistry
+	capRegistry  *CapabilityRegistry
 }
 
 // New creates a new App instance.
@@ -36,7 +38,12 @@ func New(cfg Config, logger *slog.Logger, db *sql.DB) (*App, error) {
 		logger:       logger,
 		db:           db,
 		loginLimiter: newLoginLimiter(),
+		toolRegistry: NewToolRegistry(),
 	}
+	a.RegisterSchoolTools(a.toolRegistry)
+	a.RegisterWriteTools(a.toolRegistry)
+	a.capRegistry = NewCapabilityRegistry()
+	a.RegisterAllCapabilities(a.capRegistry)
 	return a, nil
 }
 
@@ -86,6 +93,7 @@ func (a *App) Handler() http.Handler {
 	// Programs
 	a.registerProgramRoutes(mux)
 	a.registerCourseRoutes(mux)
+	a.registerAIChatRoutes(mux)
 
 	return a.applyMiddleware(mux)
 }

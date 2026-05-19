@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthProvider, useAuth } from "@/lib/auth-provider";
+import { ThemeProvider } from "@/lib/use-theme";
 import { ToastProvider } from "@/components/ui/toast";
 import { AppShell } from "@/components/layout/app-shell";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,13 +56,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       : []),
     ...(session?.effectiveTenantId
       ? [
+          { label: "Academic", href: "/app/academic", icon: CalendarRange },
+          { label: "Subjects", href: "/app/subjects", icon: BookOpen },
           { label: "Admin", href: "/app/admin", icon: Users },
           { label: "Teachers", href: "/app/teachers", icon: GraduationCap },
+          { label: "Classes", href: "/app/classes", icon: School2 },
           { label: "Students", href: "/app/students", icon: BookOpen },
           { label: "Staff", href: "/app/staff", icon: Briefcase },
-          { label: "Academic", href: "/app/academic", icon: CalendarRange },
-          { label: "Classes", href: "/app/classes", icon: School2 },
-          { label: "Subjects", href: "/app/subjects", icon: BookOpen },
           { label: "Programs", href: "/app/programs", icon: BookOpen },
           { label: "Courses", href: "/app/courses", icon: FileText },
         ]
@@ -79,10 +80,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppLayoutInner>{children}</AppLayoutInner>
-      </ToastProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <AppLayoutInner>{children}</AppLayoutInner>
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

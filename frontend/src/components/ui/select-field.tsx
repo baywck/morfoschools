@@ -25,6 +25,9 @@ interface SelectFieldProps {
 export function SelectField({ label, value, options, onChange, error, helperText, prefix, placeholder, disabled }: SelectFieldProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dismissedErrorRef = useRef<string | undefined>(undefined);
+
+  const visibleError = (error && error !== dismissedErrorRef.current) ? error : undefined;
 
   const selectedOption = options.find((o) => o.value === value);
   const displayText = selectedOption?.label || placeholder || "";
@@ -41,6 +44,14 @@ export function SelectField({ label, value, options, onChange, error, helperText
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  function handleSelect(val: string) {
+    if (error) {
+      dismissedErrorRef.current = error;
+    }
+    onChange(val);
+    setOpen(false);
+  }
+
   return (
     <div className="w-full relative" ref={ref}>
       <div
@@ -50,7 +61,7 @@ export function SelectField({ label, value, options, onChange, error, helperText
           disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
           open
             ? "border-[var(--field-focus)] ring-2 ring-[var(--field-ring)]"
-            : error
+            : visibleError
               ? "border-[var(--danger)]"
               : disabled
                 ? "border-[var(--border)]"
@@ -74,7 +85,7 @@ export function SelectField({ label, value, options, onChange, error, helperText
             isFloating
               ? "top-1 text-[10px] font-medium"
               : "top-1/2 -translate-y-1/2 text-[13px]",
-            error ? "text-[var(--danger)]" : open ? "text-[var(--brand)]" : "text-[var(--muted-foreground)]"
+            visibleError ? "text-[var(--danger)]" : open ? "text-[var(--brand)]" : "text-[var(--muted-foreground)]"
           )}>
             {label}
           </span>
@@ -102,7 +113,7 @@ export function SelectField({ label, value, options, onChange, error, helperText
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => { onChange(opt.value); setOpen(false); }}
+                onClick={() => handleSelect(opt.value)}
                 className={cn(
                   "flex w-full items-center rounded-md px-2.5 py-2 text-[12px] transition-colors",
                   opt.value === value
@@ -117,8 +128,8 @@ export function SelectField({ label, value, options, onChange, error, helperText
         </div>
       )}
 
-      {error && <p className="mt-1 text-[11px] font-medium text-[var(--danger)]" role="alert">{error}</p>}
-      {helperText && !error && <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{helperText}</p>}
+      {visibleError && <p className="mt-1 text-[11px] font-medium text-[var(--danger)]" role="alert">{visibleError}</p>}
+      {helperText && !visibleError && <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{helperText}</p>}
     </div>
   );
 }
