@@ -8,8 +8,10 @@
 - [ ] Exam Gate Windows
 - [ ] Phase 10: Exam Critical Path (take, autosave, submit, receipt)
 - [ ] Phase 11: Teacher Operations (monitor, grading)
-- [ ] Phase 12: AI Agent Runtime
+- [ ] Phase 12: AI Agent Runtime (continue from Phase 2 chatbot baseline)
 - [ ] Tenant logo upload (R2/local)
+- [ ] Consolidate `ToolRegistry` and `CapabilityRegistry`
+- [ ] AI Phase 3: task states for long workflows (50 exam questions)
 
 ## Completed
 - [x] Phase 0: .ai/ memory files, ADRs, AGENTS.md, standards
@@ -31,6 +33,17 @@
   - Programs: CRUD + sections + items + publish/archive
   - Courses: CRUD + publish/archive
   - Program sections with nested items (json_agg)
+- [x] AI Chatbot Phase 1-2 (ADR-0006)
+  - CapabilityRegistry + domain-routed tool injection
+  - Structured ToolError envelopes with recovery hints
+  - Self-correction protocol in system prompt
+  - Multi-proposal confirmation flow
+  - `morfoschools:data-changed` event for cross-component refresh
+- [x] Email Reuse After Archive (ADR-0007)
+  - Migration 12: partial unique index + `original_email` column
+  - Cascade rules (profile→user up, user→profiles down)
+  - Restore endpoints per module with 409 conflict resolution
+  - Synthetic email format `archived+<uuid>@archived.morfoschools.local`
 
 ## UI Components Built
 - [x] InputField (floating label, h-11, prefix icon)

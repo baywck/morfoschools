@@ -20,6 +20,94 @@ const (
 	maxSummaryChars = 500
 )
 
+// affirmativeRe matches short free-text confirmation replies in Indonesian and
+// English. We keep it intentionally tight so phrases like "oke tapi ganti
+// emailnya" do NOT auto-execute (that's a follow-up instruction, not consent).
+var affirmativeWords = map[string]bool{
+	"ya": true, "iya": true, "yup": true, "yep": true, "yes": true,
+	"ok": true, "oke": true, "okay": true, "okeh": true,
+	"lanjut": true, "lanjutkan": true, "jalankan": true, "eksekusi": true,
+	"setuju": true, "konfirmasi": true, "benar": true, "betul": true,
+	"sip": true, "siap": true, "go": true, "do it": true, "proceed": true, "confirm": true,
+}
+
+var negativeWords = map[string]bool{
+	"tidak": true, "engga": true, "enggak": true, "nggak": true, "ga": true, "gak": true,
+	"jangan": true, "batal": true, "batalkan": true, "cancel": true, "stop": true,
+	"no": true, "nope": true, "abort": true,
+}
+
+// classifyShortReply returns "affirm", "deny", or "". Only fires for messages
+// short enough to plausibly be a one-shot confirmation; anything longer is
+// treated as a fresh instruction so the LLM can route it normally.
+func classifyShortReply(msg string) string {
+	normalized := strings.ToLower(strings.TrimSpace(msg))
+	normalized = strings.TrimRight(normalized, ".!?,")
+	if normalized == "" || len(normalized) > 24 {
+		return ""
+	}
+	if affirmativeWords[normalized] {
+		return "affirm"
+	}
+	if negativeWords[normalized] {
+		return "deny"
+	}
+	// Multi-word: check first word only (e.g. "oke lanjutkan")
+	parts := strings.Fields(normalized)
+	if len(parts) > 0 && len(parts) <= 3 {
+		if affirmativeWords[parts[0]] {
+			return "affirm"
+		}
+		if negativeWords[parts[0]] {
+			return "deny"
+		}
+	}
+	return ""
+}
+
+// pendingProposalForSession returns up to N pending proposals on the session,
+// oldest first. Used to resolve free-text confirmation replies.
+func (a *App) pendingProposalsForSession(ctx context.Context, sessionID, userID string) []struct {
+	ID       string
+	ToolName string
+	ToolArgs json.RawMessage
+	TenantID string
+	Confirm  string
+} {
+	rows, err := a.db.QueryContext(ctx, `
+		SELECT id, tool_name, tool_args, COALESCE(tenant_id::text,''), confirmation_text
+		  FROM ai_pending_actions
+		 WHERE session_id = $1 AND user_id = $2
+		   AND status = 'pending' AND expires_at > now()
+		 ORDER BY created_at ASC
+		 LIMIT 10`,
+		sessionID, userID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []struct {
+		ID       string
+		ToolName string
+		ToolArgs json.RawMessage
+		TenantID string
+		Confirm  string
+	}
+	for rows.Next() {
+		var p struct {
+			ID       string
+			ToolName string
+			ToolArgs json.RawMessage
+			TenantID string
+			Confirm  string
+		}
+		if err := rows.Scan(&p.ID, &p.ToolName, &p.ToolArgs, &p.TenantID, &p.Confirm); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func (a *App) registerAIChatRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/ai/chat", a.handleAIChat)
 	mux.HandleFunc("POST /api/v1/ai/confirm", a.handleAIConfirm)
@@ -70,6 +158,108 @@ type llmResponse struct {
 	} `json:"usage"`
 }
 
+// handleShortReplyForProposals executes (affirm) or cancels (deny) all
+// matching pending proposals and writes a normal chat-style response. Returns
+// true when the request was fully handled and the caller should return.
+func (a *App) handleShortReplyForProposals(
+	w http.ResponseWriter, r *http.Request, sessionID, userID, intent string,
+	pendings []struct {
+		ID       string
+		ToolName string
+		ToolArgs json.RawMessage
+		TenantID string
+		Confirm  string
+	},
+) bool {
+	ctx := r.Context()
+
+	if intent == "deny" {
+		for _, p := range pendings {
+			_, _ = a.db.ExecContext(ctx,
+				`UPDATE ai_pending_actions SET status = 'cancelled' WHERE id = $1 AND status = 'pending'`,
+				p.ID)
+		}
+		msg := fmt.Sprintf("Baik, %d aksi dibatalkan. Apa yang ingin Anda lakukan selanjutnya?", len(pendings))
+		_, _ = a.db.ExecContext(ctx,
+			`INSERT INTO ai_messages (session_id, role, content) VALUES ($1, 'assistant', $2)`,
+			sessionID, msg)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"message":   map[string]string{"role": "assistant", "content": msg},
+			"sessionId": sessionID,
+			"tokens":    0,
+			"cancelled": true,
+		})
+		return true
+	}
+
+	// affirm: execute each proposal, collect results
+	var successes, failures []string
+	var lastErr string
+	for _, p := range pendings {
+		result, err := a.executeConfirmedAction(ctx, p.TenantID, userID, p.ToolName, p.ToolArgs)
+		if err != nil {
+			a.logger.Error("short-reply execute failed", "tool", p.ToolName, "error", err)
+			failures = append(failures, p.Confirm)
+			lastErr = err.Error()
+			_, _ = a.db.ExecContext(ctx,
+				`UPDATE ai_pending_actions SET status = 'cancelled' WHERE id = $1`, p.ID)
+			continue
+		}
+		_, _ = a.db.ExecContext(ctx,
+			`UPDATE ai_pending_actions SET status = 'confirmed' WHERE id = $1`, p.ID)
+		successes = append(successes, summarizeToolResult(p.ToolName, result))
+	}
+
+	// Build a friendly summary in Indonesian
+	var sb strings.Builder
+	switch {
+	case len(failures) == 0:
+		sb.WriteString(fmt.Sprintf("✅ Berhasil! %d aksi dijalankan:\n", len(successes)))
+		for _, s := range successes {
+			sb.WriteString("• " + s + "\n")
+		}
+	case len(successes) == 0:
+		sb.WriteString(fmt.Sprintf("❌ Gagal menjalankan %d aksi.", len(failures)))
+		if lastErr != "" {
+			sb.WriteString(" Penyebab: " + lastErr)
+		}
+	default:
+		sb.WriteString(fmt.Sprintf("⚠️ %d aksi berhasil, %d gagal.\n", len(successes), len(failures)))
+		for _, s := range successes {
+			sb.WriteString("• " + s + "\n")
+		}
+	}
+
+	content := sb.String()
+	_, _ = a.db.ExecContext(ctx,
+		`INSERT INTO ai_messages (session_id, role, content) VALUES ($1, 'assistant', $2)`,
+		sessionID, content)
+	_, _ = a.db.ExecContext(ctx,
+		`UPDATE ai_sessions SET message_count = message_count + 1, last_active_at = now() WHERE id = $1`,
+		sessionID)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message":   map[string]string{"role": "assistant", "content": content},
+		"sessionId": sessionID,
+		"tokens":    0,
+		"mutated":   len(successes) > 0,
+	})
+	return true
+}
+
+// summarizeToolResult extracts a short success message from a tool's JSON
+// result. Falls back to the raw result if the structure is unexpected.
+func summarizeToolResult(toolName, result string) string {
+	var parsed struct {
+		Message string `json:"message"`
+		Success bool   `json:"success"`
+	}
+	if err := json.Unmarshal([]byte(result), &parsed); err == nil && parsed.Message != "" {
+		return parsed.Message
+	}
+	return toolName
+}
+
 func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	auth := AuthFromContext(r.Context())
 	if auth == nil || auth.UserID == "" {
@@ -118,6 +308,19 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		`UPDATE ai_sessions SET message_count = message_count + 1, last_active_at = now() WHERE id = $1`,
 		sessionID,
 	)
+
+	// Short-circuit: if there are pending proposals AND the user typed a short
+	// affirmative/deny reply, resolve them directly without burning an LLM
+	// round-trip. Free-text confirmation is what users actually do; the
+	// inline buttons only catch the click path.
+	if intent := classifyShortReply(req.Message); intent != "" {
+		pendings := a.pendingProposalsForSession(r.Context(), sessionID, auth.UserID)
+		if len(pendings) > 0 {
+			if a.handleShortReplyForProposals(w, r, sessionID, auth.UserID, intent, pendings) {
+				return
+			}
+		}
+	}
 
 	// Assemble context
 	messages := a.assembleContext(r.Context(), sessionID, tenantID, auth, req)
@@ -219,7 +422,20 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 			}
 			finalContent = "Saya telah menyiapkan aksi berikut untuk dikonfirmasi:\n\n" + strings.Join(parts, "\n")
 		} else {
-			finalContent = "Maaf, saya tidak bisa memproses permintaan ini saat ini."
+			// Last-resort fallback: surface any pre-existing pending proposals
+			// so the user is reminded of what's awaiting their decision rather
+			// than seeing a dead-end "cannot process" message.
+			existing := a.pendingProposalsForSession(r.Context(), sessionID, auth.UserID)
+			if len(existing) > 0 {
+				var parts []string
+				for _, p := range existing {
+					parts = append(parts, "• "+p.Confirm)
+				}
+				finalContent = "Masih ada aksi menunggu konfirmasi:\n\n" + strings.Join(parts, "\n") +
+					"\n\nKetik **\"ya\"** untuk lanjutkan atau **\"batal\"** untuk membatalkan."
+			} else {
+				finalContent = "Maaf, saya tidak bisa memproses permintaan ini saat ini."
+			}
 		}
 	}
 
@@ -306,8 +522,10 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 	sb.WriteString("Jika info kurang, tanya user — jangan menyerah.\n")
 	sb.WriteString("Untuk batch (buat banyak item), eksekusi satu per satu.\n")
 	sb.WriteString("Selalu lookup data terkait sebelum create (cari UUID via search tool).\n")
+	sb.WriteString("SEBELUM batch-create (>1 item dari jenis sama), WAJIB panggil list_* atau search_* dulu untuk lihat data existing. JANGAN mengusulkan nama/email/kode yang sudah ada.\n")
 	sb.WriteString("Jika user bilang \"lanjutkan\", teruskan task sebelumnya dari context.\n")
 	sb.WriteString("JANGAN PERNAH klaim aksi berhasil tanpa tool result yang mengkonfirmasi.\n")
+	sb.WriteString("Setelah propose action, jika user balas \"ya/oke/lanjut/setuju\" → sistem auto-eksekusi proposal. Jika balas \"tidak/batal\" → auto-cancel. Kamu tidak perlu memanggil tool lagi untuk konfirmasi tersebut.\n")
 	// Self-correction protocol
 	sb.WriteString("\nON TOOL ERROR:\n")
 	sb.WriteString("1. Baca error.recovery — panggil tool yang disarankan — retry aksi awal (DIAM, jangan beritahu user)\n")

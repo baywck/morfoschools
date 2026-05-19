@@ -122,6 +122,14 @@ func (a *App) toolCreateStudent(ctx context.Context, tenantID, userID string, ar
 		return errInvalidUUID("classSectionId", params.ClassSectionID, "class"), nil
 	}
 
+	// Pre-propose duplicate guard: catch collisions before the user is asked
+	// to confirm. Without this, the bot proposes plausible names/emails in a
+	// batch and the user only finds out at execute time that some already
+	// exist. Cheaper to fail here and let the bot pick a fresh value.
+	if dup := a.checkStudentDuplicate(ctx, tenantID, params.Email, params.StudentIDNumber, params.DisplayName); dup != "" {
+		return dup, nil
+	}
+
 	confirmText := fmt.Sprintf("Buat siswa baru: %s (%s)", params.DisplayName, params.Email)
 	if params.GradeLevel != "" {
 		confirmText += fmt.Sprintf(", kelas %s", params.GradeLevel)
@@ -159,6 +167,11 @@ func (a *App) toolCreateTeacher(ctx context.Context, tenantID, userID string, ar
 		}
 	}
 
+	// Pre-propose duplicate guard.
+	if dup := a.checkTeacherDuplicate(ctx, tenantID, params.Email, params.EmployeeID, params.DisplayName); dup != "" {
+		return dup, nil
+	}
+
 	confirmText := fmt.Sprintf("Buat guru baru: %s (%s)", params.DisplayName, params.Email)
 	if params.Specialization != "" {
 		confirmText += fmt.Sprintf(", spesialisasi: %s", params.Specialization)
@@ -194,6 +207,12 @@ func (a *App) toolCreateClass(ctx context.Context, tenantID, userID string, args
 		return errInvalidUUID("homeroomTeacherId", params.HomeroomTeacherID, "teacher"), nil
 	}
 
+	// Pre-propose duplicate guard: a class with the same (academicYearId, name)
+	// will fail the unique constraint at execute time, so catch it here.
+	if dup := a.checkClassDuplicate(ctx, tenantID, params.AcademicYearID, params.Name); dup != "" {
+		return dup, nil
+	}
+
 	confirmText := fmt.Sprintf("Buat kelas baru: %s (grade %s)", params.Name, params.GradeLevel)
 
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
@@ -213,6 +232,11 @@ func (a *App) toolCreateSubject(ctx context.Context, tenantID, userID string, ar
 	}
 	if params.Name == "" {
 		return errValidationFailed("name", "subject name is required"), nil
+	}
+
+	// Pre-propose duplicate guard.
+	if dup := a.checkSubjectDuplicate(ctx, tenantID, params.Code, params.Name); dup != "" {
+		return dup, nil
 	}
 
 	confirmText := fmt.Sprintf("Buat mata pelajaran baru: %s (%s)", params.Name, params.Code)

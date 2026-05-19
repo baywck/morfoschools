@@ -86,6 +86,25 @@ func errDuplicateEntry(entity, field, value string) string {
 	return te.JSON()
 }
 
+// errDuplicateEntryWithRecovery returns a duplicate-entry error with a hint
+// telling the bot to choose a different value. Used when the bot is in a
+// batch loop and needs to know which input collided so the next item can use
+// a fresh value (e.g. a different email).
+func errDuplicateEntryWithRecovery(entity, field, value, recoveryHint string) string {
+	te := &ToolError{
+		Code:        "DUPLICATE_ENTRY",
+		Message:     fmt.Sprintf("%s with %s='%s' already exists", entity, field, value),
+		Field:       field,
+		Entity:      entity,
+		Recoverable: true,
+		Recovery: &RecoveryHint{
+			Tool: "list_" + pluralize(entity),
+			Hint: recoveryHint,
+		},
+	}
+	return te.JSON()
+}
+
 func errPermissionDenied(action string) string {
 	te := &ToolError{
 		Code:        "PERMISSION_DENIED",
