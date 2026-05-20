@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -45,8 +46,8 @@ func (a *App) handleCreateTeacherFull(w http.ResponseWriter, r *http.Request) {
 	if req.Password == "" {
 		fields["password"] = "Password is required"
 	}
-	if len(req.Password) > 0 && len(req.Password) < 6 {
-		fields["password"] = "Password must be at least 6 characters"
+	if len(req.Password) > 0 && len(req.Password) < PasswordMinLength {
+		fields["password"] = fmt.Sprintf("Password must be at least %d characters", PasswordMinLength)
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
@@ -176,8 +177,8 @@ func (a *App) handleCreateStudentFull(w http.ResponseWriter, r *http.Request) {
 	if req.Password == "" {
 		fields["password"] = "Password is required"
 	}
-	if len(req.Password) > 0 && len(req.Password) < 6 {
-		fields["password"] = "Password must be at least 6 characters"
+	if len(req.Password) > 0 && len(req.Password) < PasswordMinLength {
+		fields["password"] = fmt.Sprintf("Password must be at least %d characters", PasswordMinLength)
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
@@ -281,8 +282,8 @@ func (a *App) handleCreateStaffFull(w http.ResponseWriter, r *http.Request) {
 	if req.Password == "" {
 		fields["password"] = "Password is required"
 	}
-	if len(req.Password) > 0 && len(req.Password) < 6 {
-		fields["password"] = "Password must be at least 6 characters"
+	if len(req.Password) > 0 && len(req.Password) < PasswordMinLength {
+		fields["password"] = fmt.Sprintf("Password must be at least %d characters", PasswordMinLength)
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)

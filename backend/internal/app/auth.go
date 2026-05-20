@@ -433,6 +433,27 @@ func verifyPassword(password, hash string) bool {
 	return subtle.ConstantTimeCompare(computed, expectedHash) == 1
 }
 
+// PasswordMinLength is the enforced floor for new passwords across
+// every create/update path. Raised from 6 to 12 per H-4 of the
+// 2026-05-20 security audit (NIST SP 800-63B baseline + offline
+// brute-force margin).
+const PasswordMinLength = 12
+
+// validatePasswordPolicy returns a fields-style error map when the
+// candidate password fails the minimum policy. Empty map means
+// acceptable. Callers feed this into writeValidationError.
+func validatePasswordPolicy(field, password string) map[string]string {
+	out := map[string]string{}
+	if password == "" {
+		out[field] = "Password is required"
+		return out
+	}
+	if len(password) < PasswordMinLength {
+		out[field] = fmt.Sprintf("Password must be at least %d characters", PasswordMinLength)
+	}
+	return out
+}
+
 func hashPassword(password string) string {
 	salt := make([]byte, 16)
 	_, _ = rand.Read(salt)
