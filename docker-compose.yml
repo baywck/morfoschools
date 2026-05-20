@@ -32,7 +32,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       PORT: 8080
-      DATABASE_URL: ${DATABASE_URL:-postgres://morfoschools:change-me@pgbouncer:5432/morfoschools?sslmode=disable}
+      DATABASE_URL: ${DATABASE_URL:-postgres://morfoschools:${POSTGRES_PASSWORD}@pgbouncer:5432/morfoschools?sslmode=disable}
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379/0}
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       SEED_DEV_DATA: ${SEED_DEV_DATA:-true}
