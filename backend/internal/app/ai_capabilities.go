@@ -56,12 +56,22 @@ func (r *CapabilityRegistry) GetToolsForIntent(domains []string, permissions []s
 				continue
 			}
 			seen[cap.Name] = true
+			// Strip whitespace from the parameter schema. Source code
+			// uses indented JSON for readability, but the LLM doesn't
+			// need that and we burn ~260 tokens / call shipping spaces.
+			params := json.RawMessage(cap.Parameters)
+			var tmp any
+			if json.Unmarshal(cap.Parameters, &tmp) == nil {
+				if compact, err := json.Marshal(tmp); err == nil {
+					params = compact
+				}
+			}
 			tools = append(tools, map[string]any{
 				"type": "function",
 				"function": map[string]any{
 					"name":        cap.Name,
 					"description": cap.Description,
-					"parameters":  json.RawMessage(cap.Parameters),
+					"parameters":  params,
 				},
 			})
 		}

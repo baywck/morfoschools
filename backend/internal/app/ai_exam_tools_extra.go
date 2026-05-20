@@ -71,8 +71,7 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 	// --- Create exam section ---
 	reg.Register(Capability{
 		Name: "create_exam_section",
-		Description: "Tambah section baru ke exam. Section adalah container urutan soal. " +
-			"Default sortOrder = MAX(existing) + 1.",
+		Description: "Add new section to exam.",
 		Permission: "exams:write",
 		Risk:       "write",
 		Domain:     "exams",
@@ -123,8 +122,7 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 	// --- Move question ---
 	reg.Register(Capability{
 		Name: "move_question",
-		Description: "Pindah soal ke section / group / posisi yang berbeda di dalam exam yang sama. " +
-			"Set hanya field yang ingin diubah. Untuk reorder, set sortOrder.",
+		Description: "Move question to different section/group/order in same exam. Set hanya field yang ingin diubah.",
 		Permission: "exams:write",
 		Risk:       "write",
 		Domain:     "exams",

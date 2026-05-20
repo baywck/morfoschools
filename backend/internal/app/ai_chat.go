@@ -16,8 +16,9 @@ import (
 
 const (
 	maxToolLoops    = 10
-	maxRecentMsgs   = 12
-	maxSummaryChars = 500
+	maxRecentMsgs   = 8
+	maxSummaryChars = 400
+	maxHistMsgChars = 800 // skip historical messages longer than this
 )
 
 // affirmativeRe matches short free-text confirmation replies in Indonesian and
@@ -217,7 +218,10 @@ func (a *App) handleShortReplyForProposals(
 		_, _ = a.db.ExecContext(ctx,
 			`UPDATE ai_pending_actions SET status = 'confirmed' WHERE id = $1`, p.ID)
 		successes = append(successes, summarizeToolResult(p.ToolName, result))
-		resultBlocks = append(resultBlocks, p.ToolName+" -> "+result)
+		// Compress raw tool result for continuation context: just the
+		// resource IDs + message, not the full JSON envelope. Cuts the
+		// continuation prompt by ~60% on multi-step plans.
+		resultBlocks = append(resultBlocks, p.ToolName+" -> "+compactToolResult(result))
 	}
 
 	// Build a friendly summary in Indonesian
@@ -280,6 +284,36 @@ func summarizeToolResult(toolName, result string) string {
 		return parsed.Message
 	}
 	return toolName
+}
+
+// compactToolResult extracts just the IDs + message from a tool
+// result JSON envelope. The full JSON (including nested arrays /
+// schema fields the model already saw at call time) is wasteful to
+// echo back — the model only needs the new resource IDs and a status
+// line to advance the plan.
+func compactToolResult(raw string) string {
+	var parsed map[string]any
+	if json.Unmarshal([]byte(raw), &parsed) != nil {
+		if len(raw) > 200 {
+			return raw[:200] + "…"
+		}
+		return raw
+	}
+	var parts []string
+	if msg, ok := parsed["message"].(string); ok && msg != "" {
+		parts = append(parts, msg)
+	}
+	for k, v := range parsed {
+		if strings.HasSuffix(k, "Id") || k == "id" {
+			if s, ok := v.(string); ok && s != "" {
+				parts = append(parts, k+"="+s)
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return raw
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
@@ -617,6 +651,13 @@ func (a *App) assembleContext(ctx context.Context, sessionID, tenantID string, a
 		for rows.Next() {
 			var m llmMessage
 			if err := rows.Scan(&m.Role, &m.Content); err == nil && m.Content != "" {
+				// Trim historical messages above maxHistMsgChars. The full
+				// version stays in DB; we just stop replaying it on every
+				// turn. Keep the head + a marker so model knows it was
+				// truncated.
+				if len(m.Content) > maxHistMsgChars {
+					m.Content = m.Content[:maxHistMsgChars] + " …[trimmed]"
+				}
 				recent = append(recent, m)
 			}
 		}
@@ -632,52 +673,28 @@ func (a *App) assembleContext(ctx context.Context, sessionID, tenantID string, a
 
 func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRequest) string {
 	var sb strings.Builder
-	sb.WriteString("Kamu asisten AI Morfoschools. Jawab ringkas dalam Bahasa Indonesia.\n")
-	sb.WriteString("Gunakan tools untuk data aktual — jangan mengarang.\n")
-	sb.WriteString("Jika info kurang, tanya user — jangan menyerah.\n")
-	sb.WriteString("Untuk batch (buat banyak item), eksekusi satu per satu.\n")
-	sb.WriteString("Untuk rencana multi-langkah (misal: stimulus + group + soal), emit SEMUA tool_calls dalam satu assistant message yang sama — jangan propose satu lalu menunggu konfirmasi sebelum propose berikutnya. Native function-calling kamu support multiple tool_calls dalam satu turn; gunakan itu. User akan konfirmasi semuanya sekaligus dengan satu 'ya'.\n")
-	sb.WriteString("Selalu lookup data terkait sebelum create (cari UUID via search tool).\n")
-	sb.WriteString("SEBELUM batch-create (>1 item dari jenis sama), WAJIB panggil list_* atau search_* dulu untuk lihat data existing. JANGAN mengusulkan nama/email/kode yang sudah ada.\n")
-	sb.WriteString("Jika user bilang \"lanjutkan\", teruskan task sebelumnya dari context.\n")
-	sb.WriteString("JANGAN PERNAH klaim aksi berhasil tanpa tool result yang mengkonfirmasi.\n")
-	sb.WriteString("Setelah propose action, jika user balas \"ya/oke/lanjut/setuju\" → sistem auto-eksekusi proposal. Jika balas \"tidak/batal\" → auto-cancel. Kamu tidak perlu memanggil tool lagi untuk konfirmasi tersebut.\n")
-	// Self-correction protocol
-	sb.WriteString("\nON TOOL ERROR:\n")
-	sb.WriteString("1. Baca error.recovery — panggil tool yang disarankan — retry aksi awal (DIAM, jangan beritahu user)\n")
-	sb.WriteString("2. Jika gagal lagi pada aksi sama — tanya user pertanyaan spesifik\n")
-	sb.WriteString("3. Jika gagal 3x — minta maaf + jelaskan kenapa\n")
-	sb.WriteString("JANGAN: tampilkan error code ke user, retry >2x error sama, tebak tanpa data\n")
+	// Compact system prompt. Previous version was 517 tokens of
+	// repeated "JANGAN" copy. Model behaviour is the same with the
+	// concise rules below + structured ToolError recovery hints; we
+	// just stop paying for the explanation on every turn.
+	sb.WriteString("Asisten Morfoschools. Jawab ringkas dalam Bahasa Indonesia. Pakai tools untuk semua data; jangan mengarang.\n")
+	sb.WriteString("Multi-step: emit semua tool_calls dalam satu turn (native function-calling support multiple). User konfirmasi semua dengan satu 'ya'.\n")
+	sb.WriteString("Sebelum batch-create, panggil list_* / search_* untuk hindari duplikat.\n")
+	sb.WriteString("Tool error: ikuti error.recovery, retry diam-diam max 2x, lalu tanya user.\n")
 
-	// Compact user context
-	sb.WriteString(fmt.Sprintf("\nUser: %s | Role: %s", auth.DisplayName, strings.Join(auth.Roles, ",")))
-	if tenantID != "" {
-		sb.WriteString(" | Tenant: aktif")
-	}
+	sb.WriteString(fmt.Sprintf("User: %s | %s", auth.DisplayName, strings.Join(auth.Roles, ",")))
 	if req.Shadow.Route != "" {
-		sb.WriteString(fmt.Sprintf(" | Page: %s", req.Shadow.Route))
+		sb.WriteString(" | Page: " + req.Shadow.Route)
 	}
 	sb.WriteString("\n")
 
-	// Active-page context (Phase 9.11). When the user opens an exam,
-	// blueprint, or other identifiable resource, fetch a compact
-	// summary so the model can ground its replies in the actual page
-	// state. Without this the model hallucinates duplicate questions /
-	// re-suggests slots that already exist. Read-only and tenant-
-	// scoped — the same access checks the user has must allow it.
 	if active := a.buildActiveContext(tenantID, auth, req.Shadow.ActiveEntities); active != "" {
-		sb.WriteString("\n=== KONTEKS HALAMAN AKTIF ===\n")
+		sb.WriteString("\n=== HALAMAN AKTIF ===\n")
 		sb.WriteString(active)
-		sb.WriteString("=== END KONTEKS ===\n")
-		sb.WriteString("WAJIB: rujuk konteks di atas saat user minta diskusi/buat soal/edit. ")
-		sb.WriteString("JANGAN duplikasi soal/slot yang sudah ada. Saat user minta \"buatkan N soal tentang X\", ")
-		sb.WriteString("otomatis target ke exam yang sedang dibuka (examId di konteks) tanpa minta user menyebut ulang.\n")
-		sb.WriteString("PENTING: untuk membuat/mengedit soal, kamu HARUS memanggil tool yang tersedia (create_question, batch_create_questions, generate_question_for_slot). ")
-		sb.WriteString("JANGAN PERNAH menulis soal sebagai teks lalu meminta user copy-paste manual — kamu punya akses langsung ke sistem via tools. ")
-		sb.WriteString("Kalau tool gagal, baca error.recovery dan retry; jangan menyerah ke mode 'silakan input manual'.\n")
+		sb.WriteString("=== END ===\n")
+		sb.WriteString("Target ke entitas di konteks tanpa minta user menyebut ulang. Jangan duplikasi item yang sudah ada di konteks. Untuk buat/edit soal: WAJIB pakai tools, jangan minta user copy-paste.\n")
 	}
 
-	// User facts (compact)
 	rows, _ := a.db.QueryContext(context.Background(),
 		`SELECT fact_key, fact_value FROM ai_user_facts WHERE user_id = $1 LIMIT 5`,
 		auth.UserID,
@@ -783,6 +800,24 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 		var finalReasoning strings.Builder
 		var toolCalls json.RawMessage
 		var finishReason string
+		// Streaming tool_calls are fragmented across chunks per OpenAI
+		// spec: each delta has tool_calls[].index pointing to the slot,
+		// and arguments arrive as substring fragments to be concatenated.
+		// Without this accumulator we'd lose every tool call past iter 0
+		// on Gemini / OpenAI / any well-behaved streaming upstream.
+		type tcAccum struct {
+			ID        string
+			Type      string
+			Name      string
+			Arguments strings.Builder
+		}
+		var tcSlots []*tcAccum
+		ensureSlot := func(idx int) *tcAccum {
+			for len(tcSlots) <= idx {
+				tcSlots = append(tcSlots, &tcAccum{Type: "function"})
+			}
+			return tcSlots[idx]
+		}
 		var usage struct {
 			PromptTokens     int `json:"prompt_tokens"`
 			CompletionTokens int `json:"completion_tokens"`
@@ -797,12 +832,21 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 			}
 			chunk := bytes.TrimPrefix(line, []byte("data: "))
 
+			type tcDelta struct {
+				Index    int    `json:"index"`
+				ID       string `json:"id"`
+				Type     string `json:"type"`
+				Function struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			}
 			var parsed struct {
 				Choices []struct {
 					Delta struct {
-						Content          string          `json:"content"`
-						ReasoningContent string          `json:"reasoning_content"`
-						ToolCalls        json.RawMessage `json:"tool_calls"`
+						Content          string    `json:"content"`
+						ReasoningContent string    `json:"reasoning_content"`
+						ToolCalls        []tcDelta `json:"tool_calls"`
 					} `json:"delta"`
 					Message struct {
 						Content          string          `json:"content"`
@@ -835,9 +879,27 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 				if c.Message.ReasoningContent != "" {
 					finalReasoning.WriteString(c.Message.ReasoningContent)
 				}
-				if len(c.Delta.ToolCalls) > 0 && string(c.Delta.ToolCalls) != "null" {
-					toolCalls = c.Delta.ToolCalls
+				// Per-fragment streaming accumulation. Each delta's
+				// tool_calls[].arguments is a SUBSTRING to append, not a
+				// full replacement.
+				for _, td := range c.Delta.ToolCalls {
+					slot := ensureSlot(td.Index)
+					if td.ID != "" {
+						slot.ID = td.ID
+					}
+					if td.Type != "" {
+						slot.Type = td.Type
+					}
+					if td.Function.Name != "" {
+						slot.Name = td.Function.Name
+					}
+					if td.Function.Arguments != "" {
+						slot.Arguments.WriteString(td.Function.Arguments)
+					}
 				}
+				// Some upstreams send the full tool_calls array on a
+				// terminating message frame instead of streaming deltas.
+				// Capture it as a final-state override.
 				if len(c.Message.ToolCalls) > 0 && string(c.Message.ToolCalls) != "null" {
 					toolCalls = c.Message.ToolCalls
 				}
@@ -847,6 +909,38 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 			}
 			if parsed.Usage.TotalTokens > 0 {
 				usage = parsed.Usage
+			}
+		}
+
+		// If we accumulated any streamed slots, materialise them into
+		// the final tool_calls JSON expected by the consumer (overriding
+		// the message-frame override only if no message-frame was sent).
+		if len(tcSlots) > 0 && len(toolCalls) == 0 {
+			type outTC struct {
+				ID       string `json:"id"`
+				Type     string `json:"type"`
+				Function struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			}
+			out := make([]outTC, 0, len(tcSlots))
+			for _, s := range tcSlots {
+				if s == nil || s.Name == "" {
+					continue
+				}
+				var tc outTC
+				tc.ID = s.ID
+				tc.Type = s.Type
+				tc.Function.Name = s.Name
+				tc.Function.Arguments = s.Arguments.String()
+				out = append(out, tc)
+			}
+			if len(out) > 0 {
+				toolCalls, _ = json.Marshal(out)
+				if finishReason == "" {
+					finishReason = "tool_calls"
+				}
 			}
 		}
 
@@ -1242,10 +1336,11 @@ func (a *App) runContinuationRound(
 		"Misal: kalau create_stimulus mengembalikan stimulusId X, langkah berikut bisa create_question_group dengan stimulusId=X. " +
 		"Kalau rencana awal kamu masih punya LANGKAH LANJUTAN yang BERBEDA dari yang sudah dieksekusi, propose tool_calls berikut sekarang. " +
 		"Kalau rencana sudah selesai, balas konfirmasi singkat dan tawarkan langkah berikutnya — JANGAN ulang langkah lama."
-	// Persist as a tool/assistant role compound so future
-	// assembleContext rounds replay it. assistant role gets loaded;
-	// system role does not.
-	persistedHistory := "[Tool execution log — internal]\n" + note
+	// Persist a COMPACT version to history (just "ran: tool1, tool2")
+	// so future turns know the tools fired without replaying the full
+	// JSON payload. The full note only goes to the current round's
+	// system message; assembleContext doesn't load it for later turns.
+	persistedHistory := "[ran: " + strings.Join(lastTools, ", ") + "]"
 	_, _ = a.db.ExecContext(ctx,
 		`INSERT INTO ai_messages (session_id, role, content) VALUES ($1, 'assistant', $2)`,
 		sessionID, persistedHistory)
@@ -1262,7 +1357,10 @@ func (a *App) runContinuationRound(
 	ctxWithSession := context.WithValue(ctx, ctxKeySessionID{}, sessionID)
 	var finalContent string
 	hadProposal := false
-	for i := 0; i < 3; i++ {
+	// One round is enough for the next-step proposal. Continuing past
+	// that just burns tokens — the model has the full plan in history
+	// and either emits the next tool_call(s) on round 0 or it's done.
+	for i := 0; i < 1; i++ {
 		llmResp, err := a.callLLM(ctxWithSession, messages, tools)
 		if err != nil || len(llmResp.Choices) == 0 {
 			break

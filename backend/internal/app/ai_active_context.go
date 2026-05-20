@@ -153,11 +153,11 @@ func (a *App) appendExamContext(
 	// duplicates. Cap at 30 to keep budget sane on big exams.
 	qrows, err := a.db.QueryContext(ctx, `
 		SELECT q.id::text, q.sort_order, q.question_type, q.points,
-		       LEFT(COALESCE(q.content,''), 120)
+		       LEFT(COALESCE(q.content,''), 80)
 		  FROM exam_questions q
 		 WHERE q.exam_id = $1 AND q.tenant_id = $2
 		 ORDER BY q.sort_order
-		 LIMIT 30`,
+		 LIMIT 20`,
 		examID, tenantID,
 	)
 	if err == nil {

@@ -38,7 +38,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 	// ───── Read ─────
 	reg.Register(Capability{
 		Name:        "list_blueprint_templates",
-		Description: "Daftar blueprint templates (kisi-kisi reusable). Filter by curriculum (k13/merdeka/akm_*), blueprintType (reguler/akm_literasi/akm_numerasi), atau status.",
+		Description: "List blueprint templates. Filter: curriculum, blueprintType, status.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "blueprints",
@@ -53,7 +53,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "get_blueprint_template",
-		Description: "Detail satu blueprint template + semua slot di dalamnya. Wajib dipanggil sebelum bulk_add_blueprint_slots untuk memastikan tidak ada slot di posisi yang sama.",
+		Description: "Get blueprint template + slots.",
 		Permission:  "blueprints:read",
 		Risk:        "read",
 		Domain:      "blueprints",
@@ -64,7 +64,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "get_exam_blueprint",
-		Description: "Lihat blueprint sebuah exam (jika ada) plus coverage % (slot yang sudah punya soal terhubung).",
+		Description: "Get exam blueprint + slot coverage %.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "blueprints",
@@ -75,7 +75,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "list_blueprint_slots",
-		Description: "List semua slot dari sebuah exam blueprint, termasuk status terisi (apakah sudah ada exam_question yang terhubung). Wajib dipanggil sebelum generate_question_for_slot.",
+		Description: "List slots of exam blueprint with filled status.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "blueprints",
@@ -86,10 +86,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name: "analyze_questions_to_blueprint",
-		Description: "Reverse-engineer kisi-kisi dari soal-soal yang sudah ada di exam. " +
-			"TIDAK menulis ke DB — hanya mengembalikan analisis (proposed_slots + proposed_links + distribution + unlinked). " +
-			"Cap 50 soal per invocation. minConfidence default 0.5; soal di bawah threshold masuk unlinkedQuestions tanpa link slot. " +
-			"User review hasilnya, lalu panggil apply_blueprint_analysis dengan acceptedSlotIndices/acceptedLinkIndices.",
+		Description: "Reverse-engineer kisi-kisi from existing questions. Read-only — returns proposed_slots/links/distribution. Cap 50 questions. minConfidence default 0.5.",
 		Permission: "exams:read",
 		Risk:       "read",
 		Domain:     "blueprints",
@@ -103,10 +100,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 	// ───── Write (proposal-first) ─────
 	reg.Register(Capability{
 		Name: "create_blueprint_template",
-		Description: "Buat blueprint template baru (kisi-kisi reusable di tenant library). " +
-			"curriculumCode wajib (k13/merdeka/akm_numerasi/akm_literasi). " +
-			"blueprintType default 'reguler' kecuali curriculum AKM. " +
-			"Slot ditambahkan terpisah via add_blueprint_slot atau bulk_add_blueprint_slots.",
+		Description: "Create blueprint template (reusable kisi-kisi). curriculumCode required.",
 		Permission: "blueprints:write",
 		Risk:       "write",
 		Domain:     "blueprints",
@@ -123,10 +117,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name: "add_blueprint_slot",
-		Description: "Tambah satu slot ke template. Position auto-assign jika tidak diberi. " +
-			"competencyCode + competencyDescription bersifat free-text (belum ada master data). " +
-			"cognitiveLevel: C1..C6. difficulty: mudah/sedang/sulit. questionType: multiple_choice/true_false/short_answer/essay. " +
-			"AKM fields (akmKonten/akmKonteks/akmProses/akmLevel) hanya relevan untuk blueprintType=akm_*.",
+		Description: "Add slot to template. Position auto. cognitiveLevel: C1-C6. difficulty: mudah/sedang/sulit.",
 		Permission: "blueprints:write",
 		Risk:       "write",
 		Domain:     "blueprints",
@@ -150,7 +141,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name: "bulk_add_blueprint_slots",
-		Description: "Tambah banyak slot sekaligus ke satu template. WAJIB panggil get_blueprint_template dulu untuk lihat slot yang sudah ada agar tidak duplikat di posisi yang sama. Maksimal 50 slot per batch.",
+		Description: "Bulk add slots to template (max 50).",
 		Permission: "blueprints:write",
 		Risk:       "write",
 		Domain:     "blueprints",
@@ -176,7 +167,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name: "clone_blueprint_to_exam",
-		Description: "Clone blueprint template ke sebuah exam. Snapshot — perubahan template setelahnya tidak mengubah exam. Default replace=false; jika exam sudah punya blueprint, request ditolak kecuali replace=true.",
+		Description: "Clone blueprint template to exam (snapshot). replace=true overrides existing.",
 		Permission: "blueprints:write",
 		Risk:       "write",
 		Domain:     "blueprints",
@@ -189,9 +180,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name: "generate_question_for_slot",
-		Description: "Buat soal yang memenuhi spesifikasi sebuah slot. WAJIB panggil list_blueprint_slots dulu untuk lihat slot yang masih kosong. " +
-			"Slot menentukan questionType, cognitiveLevel, difficulty, dan points — bot hanya mengisi content/options/correctAnswer/explanation yang RELEVAN dengan slot. " +
-			"Soal otomatis terhubung ke slot tersebut.",
+		Description: "Generate question matching slot spec. Slot defines type/cognitive/difficulty/points; you fill content/options/answer.",
 		Permission: "exams:write",
 		Risk:       "write",
 		Domain:     "blueprints",
@@ -209,10 +198,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name: "apply_blueprint_analysis",
-		Description: "Companion untuk analyze_questions_to_blueprint. Membuat exam_blueprint baru di exam berdasarkan analisis yang sudah di-review user. " +
-			"Bot meneruskan acceptedSlots (slot proposals user terima) dan optional acceptedLinkIndices (subset link yang user setujui dari proposedLinks). " +
-			"mergeDecisions: array {keepIndex, dropIndices} untuk konsolidasi slot yang nyaris-duplikat. " +
-			"Jika exam sudah punya blueprint, request ditolak kecuali replace=true.",
+		Description: "Apply analyze_questions_to_blueprint result. Pass acceptedSlots + optional acceptedLinkIndices + mergeDecisions.",
 		Permission: "blueprints:write",
 		Risk:       "write",
 		Domain:     "blueprints",
@@ -249,10 +235,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 	// ───── Kisi-kisi toggle (ADR-0012) ─────
 	reg.Register(Capability{
 		Name: "set_uses_kisi_kisi",
-		Description: "Enable or disable kisi-kisi (assessment blueprint) enforcement on an exam. " +
-			"Saat enabled=true, setiap soal wajib terikat ke slot blueprint dan publish gate cek coverage. " +
-			"Saat enabled=false, soal bebas tanpa anchor; slot dan binding existing TETAP disimpan, hanya gate yang dimatikan. " +
-			"Hanya boleh saat exam draft, kecuali platform/master admin.",
+		Description: "Toggle kisi-kisi enforcement on exam. enabled=true requires slot binding for every question.",
 		Permission: "exams:write",
 		Risk:       "write",
 		Domain:     "blueprints",
@@ -264,10 +247,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name: "convert_questions_to_kisi_kisi",
-		Description: "Generate kisi-kisi dari soal-soal existing dalam exam (reverse flow). " +
-			"Ini wrapper satu-langkah: panggil analyze_questions_to_blueprint, auto-accept proposal dengan confidence ≥ minConfidence (default 0.7), " +
-			"lalu apply_blueprint_analysis. Mengembalikan ringkasan {createdSlots, linkedQuestions, unlinkedQuestions}. " +
-			"User harus konfirmasi via chat — tetap proposal-first.",
+		Description: "One-shot convert: analyze + auto-accept proposals ≥ minConfidence (default 0.7) + apply.",
 		Permission: "blueprints:write",
 		Risk:       "write",
 		Domain:     "blueprints",

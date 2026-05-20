@@ -24,7 +24,7 @@ import (
 func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 	reg.Register(Capability{
 		Name:        "list_exams",
-		Description: "Daftar exam dalam tenant aktif. Filter optional by status (draft/published/archived) dan subjectId.",
+		Description: "List exams in tenant. Filter: status, subjectId.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -33,7 +33,7 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "get_exam",
-		Description: "Detail satu exam beserta jumlah soal dan total points",
+		Description: "Get exam detail + question count + total points.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -42,7 +42,7 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "list_questions",
-		Description: "List semua soal di sebuah exam (untuk cek isi sebelum batch-add).",
+		Description: "List questions of an exam.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -51,7 +51,7 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "create_exam",
-		Description: "Buat exam baru. Butuh: title. Opsional: description, subjectId, examType (quiz/midterm/final/tryout/daily), durationMinutes, maxScore, passingScore, shuffleQuestions, shuffleOptions.",
+		Description: "Create new exam. title required.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -70,7 +70,7 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "create_question",
-		Description: "Buat satu soal untuk exam. Tipe: multiple_choice (butuh options[] dengan minimal satu isCorrect), true_false (2 options), short_answer (correctAnswer optional), essay (rubric optional). MCQ scoringMode: correct_all (default), correct_one, percentage.",
+		Description: "Create one question. Types: multiple_choice, true_false, short_answer, essay.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -90,7 +90,7 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "batch_create_questions",
-		Description: "Buat banyak soal sekaligus untuk satu exam. WAJIB panggil list_questions dulu untuk lihat soal yang sudah ada agar tidak duplikat. Setiap item adalah satu objek soal lengkap (lihat schema create_question).",
+		Description: "Create multiple questions in one exam (batch).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",

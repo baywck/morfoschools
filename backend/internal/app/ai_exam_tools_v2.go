@@ -37,7 +37,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "list_exam_sections",
-		Description: "List sections of an exam (id, title, sort_order). Panggil ini sebelum create_question/move_question kalau butuh sectionId yang valid.",
+		Description: "List exam sections (id, title, sort_order).",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -46,7 +46,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "list_exam_groups",
-		Description: "List question groups in an exam dengan sectionId, stimulusId, judul stimulus snapshot, jumlah soal di group. Panggil ini untuk dapat groupId saat move_question.",
+		Description: "List question groups in exam with section/stimulus/count.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -55,7 +55,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "get_question",
-		Description: "Get full detail of one question: content, options, kisi-kisi metadata, group/section linkage. Panggil sebelum update_question kalau butuh state existing.",
+		Description: "Get question detail (content, options, links).",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -64,7 +64,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "list_stimuli",
-		Description: "List stimuli library (id, title, lifecycle, type, owner). Filter optional by lifecycle (exam_scoped/shared/archived) atau search.",
+		Description: "List stimuli library. Filter: lifecycle, search.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "stimuli",
@@ -76,7 +76,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "get_stimulus",
-		Description: "Get full stimulus content (title + body + source + lifecycle).",
+		Description: "Get stimulus detail.",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "stimuli",
@@ -85,7 +85,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "list_exam_gates",
-		Description: "List gate windows of an exam (opens_at, closes_at, access_code, password presence). Untuk admin scheduling exam.",
+		Description: "List exam gate windows (schedule).",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -94,7 +94,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "list_slots_with_questions",
-		Description: "Get blueprint slots of an exam paired dengan soal yang sudah di-assign. Penting untuk track progress fill-in dari kisi-kisi.",
+		Description: "Get blueprint slots paired with assigned questions (track fill progress).",
 		Permission:  "exams:read",
 		Risk:        "read",
 		Domain:      "exams",
@@ -107,7 +107,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "update_exam",
-		Description: "Edit metadata exam: title, description, durationMinutes, maxScore, passingScore, examType, shuffleQuestions, shuffleOptions, showResultImmediately. Hanya field yang di-set yang diubah.",
+		Description: "Edit exam metadata. Hanya field yang di-set diubah.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -127,7 +127,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "publish_exam",
-		Description: "Publish an exam (status draft→published). Setelah published baru bisa dipakai siswa via gate.",
+		Description: "Publish exam (draft → published).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -150,7 +150,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "delete_exam_section",
-		Description: "Hapus sebuah section. Soal di dalamnya jadi unsectioned (section_id=NULL via ON DELETE SET NULL).",
+		Description: "Delete section (questions become unsectioned).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -159,7 +159,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "update_question_group",
-		Description: "Edit group: ganti section, ganti stimulus, edit snapshot title/body, atau ubah display_order.",
+		Description: "Edit group (section/stimulus/snapshot/order).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -175,7 +175,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "delete_question_group",
-		Description: "Hapus sebuah group. Soal di dalamnya jadi ungrouped (group_id=NULL).",
+		Description: "Delete group (questions become ungrouped).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -184,7 +184,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "update_stimulus",
-		Description: "Edit stimulus: title, content, source, atau lifecycle (exam_scoped/shared).",
+		Description: "Edit stimulus.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "stimuli",
@@ -199,7 +199,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "archive_stimulus",
-		Description: "Archive stimulus (lifecycle→archived). Tidak bisa lagi dipakai untuk group baru tapi snapshot lama tetap utuh.",
+		Description: "Archive stimulus (lifecycle→archived).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "stimuli",
@@ -208,7 +208,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "promote_stimulus",
-		Description: "Promosikan stimulus exam_scoped menjadi shared sehingga bisa dipakai exam lain.",
+		Description: "Promote stimulus exam_scoped → shared.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "stimuli",
@@ -217,7 +217,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "create_exam_gate",
-		Description: "Buat gate window untuk exam: opens_at, closes_at (ISO 8601), optional password atau access_code.",
+		Description: "Create exam gate window (ISO 8601 timestamps).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -256,7 +256,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "assign_question_to_slot",
-		Description: "Assign existing question ke blueprint slot tertentu. Membuat link slot↔question; satu slot hanya bisa punya satu question.",
+		Description: "Assign existing question to blueprint slot (1:1 link).",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -268,7 +268,7 @@ func (a *App) RegisterExamV2Capabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "export_exam_to_template",
-		Description: "Export blueprint kisi-kisi dari exam ini ke blueprint template baru (draft). Berguna untuk reuse pola exam yang sudah jadi.",
+		Description: "Export exam blueprint to new draft template.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "blueprints",
