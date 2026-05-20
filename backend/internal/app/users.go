@@ -170,7 +170,7 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Check email uniqueness
 	var exists bool
-	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`, req.Email).Scan(&exists)
+	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND status != 'archived')`, req.Email).Scan(&exists)
 	if exists {
 		writeValidationError(w, map[string]string{"email": "Email already in use"}, r)
 		return
@@ -301,7 +301,7 @@ func (a *App) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		// Check uniqueness
 		var emailTaken bool
-		_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND id != $2)`, email, userID).Scan(&emailTaken)
+		_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND id != $2 AND status != 'archived')`, email, userID).Scan(&emailTaken)
 		if emailTaken {
 			writeValidationError(w, map[string]string{"email": "Email already in use"}, r)
 			return

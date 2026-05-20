@@ -274,10 +274,16 @@ func (a *App) authMiddleware(next http.Handler) http.Handler {
 			auth.EffectiveTenantID = &effectiveTenantID.String
 		}
 
-		// Load roles and permissions
+		// Load roles and permissions. M-7: a load error here used to
+		// silently leave Permissions empty, which fails closed for
+		// permission-gated handlers but fails OPEN for any handler that
+		// gates on isPlatformAdmin (set above from users.is_platform_admin
+		// directly). Refuse the request instead.
 		auth.Roles, auth.Permissions, err = a.loadRolesAndPermissions(r.Context(), auth.UserID, auth.EffectiveTenantID)
 		if err != nil {
 			a.logger.Error("load roles failed", "error", err)
+			writeErrorJSON(w, http.StatusInternalServerError, "internal_error", "Could not load authorization context", r)
+			return
 		}
 
 		ctx := context.WithValue(r.Context(), ctxKeyAuth, &auth)
@@ -405,7 +411,9 @@ func hashSessionToken(token string) string {
 }
 
 func generateCSRFToken() string {
-	b := make([]byte, 16)
+	// L-3: bump from 128 to 256 bits to match the session token. Cheap
+	// upgrade; subtle.ConstantTimeCompare cost is constant in length.
+	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
