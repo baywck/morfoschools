@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -53,9 +54,13 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rate limiting
+	// Rate limiting. M-3: limit by both IP and lower(email) so a
+	// single-account brute-force attack is bounded even if the attacker
+	// rotates source IPs. The in-memory limiter is per-replica; scaling
+	// past a single API instance requires moving this to Valkey —
+	// tracked as TODO in security-audit-2026-05-20.md.
 	ip := clientIP(r)
-	if !a.loginLimiter.allow(ip) {
+	if !a.loginLimiter.allow("ip:" + ip) {
 		writeErrorJSON(w, http.StatusTooManyRequests, "rate_limited", "Too many login attempts. Try again later.", r)
 		return
 	}
@@ -82,6 +87,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	normalizedEmail := strings.ToLower(strings.TrimSpace(req.Email))
+	// Per-account budget. Stricter than the IP cap so a single account
+	// can't be brute-forced even from a botnet of fresh IPs.
+	if !a.loginLimiter.allow("email:" + normalizedEmail) {
+		writeErrorJSON(w, http.StatusTooManyRequests, "rate_limited", "Too many login attempts. Try again later.", r)
+		return
+	}
+
 	// Find user
 	var userID, displayName, passwordHash string
 	var isPlatformAdmin bool
@@ -90,7 +103,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		 FROM users u
 		 JOIN password_credentials pc ON pc.user_id = u.id
 		 WHERE u.email = $1 AND u.status = 'active'`,
-		strings.ToLower(strings.TrimSpace(req.Email)),
+		normalizedEmail,
 	).Scan(&userID, &displayName, &isPlatformAdmin, &passwordHash)
 	if err == sql.ErrNoRows {
 		writeErrorJSON(w, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password", r)
@@ -488,18 +501,48 @@ func hashPassword(password string) string {
 }
 
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
+	// M-3: X-Forwarded-For is only trusted when the request comes from
+	// a known reverse proxy. Without that gate, any attacker can spoof
+	// the header to evade IP-based rate limiting. We trust the header
+	// only when TRUSTED_PROXIES env lists the immediate peer.
+	if isTrustedProxy(r.RemoteAddr) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			return strings.TrimSpace(parts[0])
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
+		}
 	}
 	parts := strings.Split(r.RemoteAddr, ":")
 	if len(parts) > 0 {
 		return parts[0]
 	}
 	return r.RemoteAddr
+}
+
+// isTrustedProxy returns true when the immediate request peer is in
+// the comma-separated TRUSTED_PROXIES env var. Loopback (127.0.0.1)
+// is always trusted to keep dev workflows working through localhost.
+func isTrustedProxy(remoteAddr string) bool {
+	host := remoteAddr
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+	host = strings.Trim(host, "[]")
+	if host == "127.0.0.1" || host == "::1" || host == "localhost" {
+		return true
+	}
+	list := os.Getenv("TRUSTED_PROXIES")
+	if list == "" {
+		return false
+	}
+	for _, p := range strings.Split(list, ",") {
+		if strings.TrimSpace(p) == host {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Rate Limiter ---
