@@ -69,6 +69,23 @@ func (r *CapabilityRegistry) GetToolsForIntent(domains []string, permissions []s
 	return tools
 }
 
+// RequiredPermissionFor returns the permission slug that gates a
+// capability/tool by name, plus whether the capability is registered
+// at all. Used by the AI confirm + short-reply paths to enforce that
+// the user still holds the right permission at execution time — not
+// just at proposal time. Empty permission with ok=true means the tool
+// is freely callable (no perm gate).
+func (r *CapabilityRegistry) RequiredPermissionFor(name string) (perm string, ok bool) {
+	for _, caps := range r.byDomain {
+		for _, c := range caps {
+			if c.Name == name {
+				return c.Permission, true
+			}
+		}
+	}
+	return "", false
+}
+
 // Execute runs a capability handler
 func (r *CapabilityRegistry) Execute(ctx context.Context, tenantID, userID, name, args string) (string, error) {
 	handler, ok := r.handlers[name]
