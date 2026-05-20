@@ -437,6 +437,34 @@ func (a *App) executeConfirmedAction(ctx context.Context, tenantID, userID, tool
 		return a.execCreateStimulus(ctx, tenantID, userID, args)
 	case "move_question":
 		return a.execMoveQuestion(ctx, tenantID, userID, args)
+	case "update_exam":
+		return a.execUpdateExam(ctx, tenantID, userID, args)
+	case "publish_exam":
+		return a.execPublishExam(ctx, tenantID, userID, args)
+	case "update_exam_section":
+		return a.execUpdateExamSection(ctx, tenantID, userID, args)
+	case "delete_exam_section":
+		return a.execDeleteExamSection(ctx, tenantID, userID, args)
+	case "update_question_group":
+		return a.execUpdateQuestionGroup(ctx, tenantID, userID, args)
+	case "delete_question_group":
+		return a.execDeleteQuestionGroup(ctx, tenantID, userID, args)
+	case "update_stimulus":
+		return a.execUpdateStimulus(ctx, tenantID, userID, args)
+	case "archive_stimulus":
+		return a.execArchiveStimulus(ctx, tenantID, userID, args)
+	case "promote_stimulus":
+		return a.execPromoteStimulus(ctx, tenantID, userID, args)
+	case "create_exam_gate":
+		return a.execCreateExamGate(ctx, tenantID, userID, args)
+	case "update_exam_gate":
+		return a.execUpdateExamGate(ctx, tenantID, userID, args)
+	case "delete_exam_gate":
+		return a.execDeleteExamGate(ctx, tenantID, userID, args)
+	case "assign_question_to_slot":
+		return a.execAssignQuestionToSlot(ctx, tenantID, userID, args)
+	case "export_exam_to_template":
+		return a.execExportExamToTemplate(ctx, tenantID, userID, args)
 	default:
 		return "", fmt.Errorf("unknown action: %s", toolName)
 	}
