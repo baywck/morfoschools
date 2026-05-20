@@ -327,6 +327,12 @@ func appendActiveDomains(domains []string, active map[string]string) []string {
 	}
 	if active["templateId"] != "" {
 		add("blueprints")
+		// Blueprint authoring often involves attaching stimulus +
+		// generating questions for slots, which live in exams + stimuli
+		// domains. Without these the AI can propose create_stimulus but
+		// not create_question_group / create_question on the same page.
+		add("exams")
+		add("stimuli")
 	}
 	if active["courseId"] != "" {
 		add("courses")
