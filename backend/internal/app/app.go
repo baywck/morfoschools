@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -166,7 +167,7 @@ func (a *App) applyMiddleware(next http.Handler) http.Handler {
 	// Order: requestID → recovery → securityHeaders → cors → csrf → auth → handler
 	return requestIDMiddleware(
 		recoveryMiddleware(a.logger)(
-			securityHeadersMiddleware(
+			securityHeadersMiddleware(a.cfg.AppEnv)(
 				corsMiddleware(a.cfg.AllowedOrigins)(
 					a.csrfMiddleware(
 						a.authMiddleware(next),
@@ -211,14 +212,40 @@ func recoveryMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-func securityHeadersMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		next.ServeHTTP(w, r)
-	})
+func securityHeadersMiddleware(appEnv string) func(http.Handler) http.Handler {
+	// Build CSP once at startup. The defaults below are intentionally
+	// conservative; relax per-route only when a feature genuinely needs
+	// it. 'unsafe-inline' on script/style is a Next.js / Tailwind
+	// requirement today — revisit when nonce-based CSP is wired through
+	// _document.
+	csp := strings.Join([]string{
+		"default-src 'self'",
+		"script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data: blob:",
+		"font-src 'self' data:",
+		"connect-src 'self'",
+		"frame-ancestors 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+	}, "; ")
+	isProduction := appEnv != "" && appEnv != "development" && appEnv != "test"
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			w.Header().Set("Content-Security-Policy", csp)
+			if isProduction {
+				// HSTS is dangerous to enable while serving over HTTP in dev,
+				// so we gate on APP_ENV. preload + 2-year max-age matches the
+				// hstspreload.org submission requirements.
+				w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {

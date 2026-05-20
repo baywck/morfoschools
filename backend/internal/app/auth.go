@@ -555,7 +555,14 @@ func readJSON(r *http.Request, v any) error {
 	if r.Body == nil {
 		return fmt.Errorf("empty body")
 	}
+	// M-5: cap inbound payloads to keep a single large POST from
+	// monopolising memory and parser CPU. 1 MiB covers every legitimate
+	// path (longest is the rich-editor question content with embedded
+	// images base64-encoded; bumped via the per-handler override pattern
+	// when we add image upload). The middleware-level cap defends every
+	// JSON write endpoint without per-handler ceremony.
 	defer r.Body.Close()
-	dec := jsonDecoder(r.Body)
+	limited := http.MaxBytesReader(nil, r.Body, 1<<20) // 1 MiB
+	dec := jsonDecoder(limited)
 	return dec.Decode(v)
 }
