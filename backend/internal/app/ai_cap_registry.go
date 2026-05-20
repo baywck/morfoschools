@@ -188,6 +188,12 @@ func (a *App) RegisterAllCapabilities(reg *CapabilityRegistry) {
 		Domain:      "tenants",
 		Parameters:  json.RawMessage(`{"type":"object","properties":{"search":{"type":"string"}}}`),
 	}, a.capListTenants)
+
+	// ─── Exams ───
+	a.registerExamCapabilities(reg)
+
+	// ─── Blueprints (Phase 9.5) ───
+	a.registerBlueprintCapabilities(reg)
 }
 
 // ─── Capability Handlers ───

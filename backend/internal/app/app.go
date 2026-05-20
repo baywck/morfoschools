@@ -93,6 +93,17 @@ func (a *App) Handler() http.Handler {
 	// Programs
 	a.registerProgramRoutes(mux)
 	a.registerCourseRoutes(mux)
+	a.registerExamRoutes(mux)
+	a.registerExamSectionRoutes(mux)
+	a.registerExamQuestionRoutes(mux)
+	a.registerQuestionMoveRoutes(mux)
+	a.registerExamGateRoutes(mux)
+	a.registerCollaboratorRoutes(mux)
+	a.registerStimuliRoutes(mux)
+	a.registerBlueprintTemplateRoutes(mux)
+	a.registerBlueprintSlotRoutes(mux)
+	mux.HandleFunc("POST /api/v1/exams/{id}/blueprint/clone", a.handleCloneBlueprintToExam)
+	mux.HandleFunc("POST /api/v1/exams/{id}/blueprint/export", a.handleExportExamBlueprintToTemplate)
 	a.registerAIChatRoutes(mux)
 
 	return a.applyMiddleware(mux)

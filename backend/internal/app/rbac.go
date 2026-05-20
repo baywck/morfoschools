@@ -24,6 +24,22 @@ func (a *App) RequirePermission(w http.ResponseWriter, r *http.Request, permissi
 	return false
 }
 
+// hasPermission is the non-HTTP predicate version of RequirePermission. It
+// answers "does this auth context hold the given permission?" without
+// emitting a response. Use this for branching logic (e.g. authors bypass
+// gate-window enforcement).
+func hasPermission(auth *AuthContext, permission string) bool {
+	if auth == nil {
+		return false
+	}
+	for _, p := range auth.Permissions {
+		if p == permission {
+			return true
+		}
+	}
+	return false
+}
+
 // RequireEffectiveTenant checks if the request has an effective tenant context.
 // Returns the tenant ID if present, empty string + 403 if not.
 func (a *App) RequireEffectiveTenant(w http.ResponseWriter, r *http.Request) string {

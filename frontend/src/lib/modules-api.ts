@@ -547,3 +547,842 @@ export function archiveCourse(id: string) {
 export function publishCourse(id: string) {
   return patch<{ id: string; status: string }>(`/api/v1/courses/${id}/publish`);
 }
+
+// --- Exams ---
+export interface Exam {
+  id: string;
+  title: string;
+  description: string | null;
+  subjectId: string | null;
+  subjectName?: string | null;
+  examType: string;
+  durationMinutes: number | null;
+  maxScore: number;
+  passingScore: number;
+  status: string;
+  usesKisiKisi: boolean;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  showResultImmediately: boolean;
+  publishedAt: string | null;
+  createdAt: string;
+  questionCount: number;
+  totalPoints: number;
+}
+
+export interface ExamListResponse {
+  data: Exam[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listExams(params?: { page?: number; search?: string; status?: string; subjectId?: string }) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.search) query.set("search", params.search);
+  if (params?.status) query.set("status", params.status);
+  if (params?.subjectId) query.set("subjectId", params.subjectId);
+  const qs = query.toString();
+  return get<ExamListResponse>(`/api/v1/exams${qs ? `?${qs}` : ""}`);
+}
+
+export function getExam(id: string) {
+  return get<Exam>(`/api/v1/exams/${id}`);
+}
+
+export interface CreateExamPayload {
+  title: string;
+  description?: string;
+  subjectId?: string;
+  examType?: string;
+  durationMinutes?: number;
+  maxScore?: number;
+  passingScore?: number;
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+  showResultImmediately?: boolean;
+  usesKisiKisi?: boolean;
+}
+
+export function createExam(data: CreateExamPayload) {
+  return post<{ id: string; status: string; usesKisiKisi?: boolean }>("/api/v1/exams", data);
+}
+
+export function updateExam(id: string, data: Partial<CreateExamPayload>) {
+  return patch<{ id: string; status: string; warning?: string; hint?: string }>(
+    `/api/v1/exams/${id}`,
+    data,
+  );
+}
+
+/**
+ * Convenience helper for the kisi-kisi toggle in the exam header
+ * (ADR-0012). The earlier 3-mode picker was never shipped — this is
+ * the canonical kisi-kisi toggle.
+ */
+export function updateExamKisiKisi(id: string, enabled: boolean) {
+  return updateExam(id, { usesKisiKisi: enabled });
+}
+
+export function publishExam(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/exams/${id}/publish`);
+}
+
+export function archiveExam(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/exams/${id}/archive`);
+}
+
+export function restoreExam(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/exams/${id}/restore`);
+}
+
+// --- Exam Sections ---
+export interface ExamSection {
+  id: string;
+  examId: string;
+  title: string;
+  description: string | null;
+  sortOrder: number;
+  questionCount: number;
+  createdAt: string;
+}
+
+export function listExamSections(examId: string) {
+  return get<{ data: ExamSection[] }>(`/api/v1/exams/${examId}/sections`);
+}
+
+export function createExamSection(examId: string, data: { title: string; description?: string; sortOrder?: number }) {
+  return post<{ id: string }>(`/api/v1/exams/${examId}/sections`, data);
+}
+
+export function updateExamSection(sectionId: string, data: { title?: string; description?: string; sortOrder?: number }) {
+  return patch<{ id: string }>(`/api/v1/exam-sections/${sectionId}`, data);
+}
+
+export function deleteExamSection(sectionId: string) {
+  return del<{ status: string }>(`/api/v1/exam-sections/${sectionId}`);
+}
+
+// --- Questions ---
+export type QuestionType = "multiple_choice" | "true_false" | "short_answer" | "essay";
+export type ScoringMode = "correct_all" | "correct_one" | "percentage";
+
+export interface QuestionOption {
+  id?: string;
+  content: string;
+  isCorrect: boolean;
+  sortOrder?: number;
+  pointsWeight?: number | null;
+}
+
+export interface QuestionSlotRef {
+  id: string;
+  position: number;
+  competencyCode?: string | null;
+  competencyDescription?: string | null;
+  materi?: string | null;
+  indikator?: string | null;
+  cognitiveLevel?: string | null;
+  difficulty?: string | null;
+  questionType?: string | null;
+  points: number;
+  /** AKM-specific dimensions, populated when blueprint_type is AKM. */
+  akmKonten?: string | null;
+  akmKonteks?: string | null;
+  akmProses?: string | null;
+  akmLevel?: number | null;
+  /** Phase 9.8 — true when the slot's parent blueprint was cloned
+   *  from a template. The accordion locks pedagogical fields when
+   *  this is set; auto-blueprint slots stay editable. */
+  fromTemplate?: boolean;
+}
+
+export interface QuestionStimulusRef {
+  id: string;
+  title: string;
+}
+
+export interface QuestionGroupRef {
+  id: string;
+  stimulusTitle?: string | null;
+}
+
+export interface Question {
+  id: string;
+  examId: string;
+  sectionId: string | null;
+  groupId?: string | null;
+  questionType: QuestionType;
+  content: string;
+  explanation: string | null;
+  correctAnswer?: string | null;
+  rubric?: any;
+  points: number;
+  sortOrder: number;
+  scoringMode: ScoringMode;
+  wrongPenaltyPct?: number | null;
+  shuffleOptionsOverride?: boolean | null;
+  correctCount: number;
+  blueprintSlotId?: string | null;
+  stimulusId?: string | null;
+  slot?: QuestionSlotRef | null;
+  stimulus?: QuestionStimulusRef | null;
+  group?: QuestionGroupRef | null;
+  options?: QuestionOption[];
+  createdAt: string;
+}
+
+export function listQuestions(examId: string) {
+  return get<{ data: Question[] }>(`/api/v1/exams/${examId}/questions`);
+}
+
+export interface CreateQuestionPayload {
+  sectionId?: string;
+  groupId?: string;
+  stimulusId?: string;
+  questionType: QuestionType;
+  content: string;
+  explanation?: string;
+  correctAnswer?: string;
+  rubric?: any;
+  points?: number;
+  sortOrder?: number;
+  scoringMode?: ScoringMode;
+  wrongPenaltyPct?: number;
+  shuffleOptionsOverride?: boolean;
+  blueprintSlotId?: string;
+  forceLink?: boolean;
+  options?: QuestionOption[];
+  // Phase 9.8 — inline kisi-kisi metadata. When the exam tracks
+  // kisi-kisi the backend either auto-creates a slot or writes the
+  // values through to the bound slot in the same transaction.
+  competencyCode?: string;
+  competencyDescription?: string;
+  materi?: string;
+  indikator?: string;
+  cognitiveLevel?: string;
+  difficulty?: string;
+  akmKonten?: string;
+  akmKonteks?: string;
+  akmProses?: string;
+  akmLevel?: number;
+}
+
+export function createQuestion(examId: string, data: CreateQuestionPayload) {
+  return post<{ id: string }>(`/api/v1/exams/${examId}/questions`, data);
+}
+
+/**
+ * Slot-first authoring entry point (ADR-0012).
+ * The slot's metadata provides the defaults for questionType + points;
+ * the link is established server-side in the same transaction as
+ * insert.
+ */
+export interface CreateQuestionFromSlotPayload
+  extends Omit<CreateQuestionPayload, "questionType" | "blueprintSlotId"> {
+  questionType?: QuestionType;
+}
+
+export function createQuestionFromSlot(
+  examId: string,
+  slotId: string,
+  data: CreateQuestionFromSlotPayload,
+) {
+  return post<{ id: string; slotId: string }>(
+    `/api/v1/exams/${examId}/questions/from-slot`,
+    { slotId, ...data },
+  );
+}
+
+// ─── Drag-and-drop move endpoint (ADR-0012) ───
+
+export interface MoveQuestionPayload {
+  questionId: string;
+  /** Pass empty string to clear section assignment, omit to leave unchanged. */
+  sectionId?: string;
+  /** Pass empty string to clear group assignment, omit to leave unchanged. */
+  groupId?: string;
+  sortOrder?: number;
+}
+
+export function moveQuestion(examId: string, body: MoveQuestionPayload) {
+  return post<{ id: string; status: string }>(
+    `/api/v1/exams/${examId}/questions/move`,
+    body,
+  );
+}
+
+// ─── Question groups (stimulus clusters) ───
+
+export interface CreateQuestionGroupPayload {
+  /** Section the group lives inside. Optional — backend defaults to
+   *  the exam's first section when omitted (Phase 9.8 mandate). */
+  sectionId?: string;
+  stimulusId?: string;
+  name?: string;
+  sortOrder?: number;
+}
+
+export function createQuestionGroup(
+  examId: string,
+  data: CreateQuestionGroupPayload,
+) {
+  return post<{
+    id: string;
+    sectionId?: string;
+    groupType: string;
+    displayOrder: number;
+  }>(`/api/v1/exams/${examId}/groups`, data);
+}
+
+export interface UpdateQuestionGroupPayload {
+  /** Move the group between sections. Empty string clears (group
+   *  becomes section-less); omit to leave untouched. */
+  sectionId?: string;
+  stimulusId?: string;
+  resyncSnapshot?: boolean;
+  sortOrder?: number;
+}
+
+export function updateQuestionGroup(
+  groupId: string,
+  data: UpdateQuestionGroupPayload,
+) {
+  return patch<{ id: string; status: string }>(
+    `/api/v1/groups/${groupId}`,
+    data,
+  );
+}
+
+export function deleteQuestionGroup(groupId: string) {
+  return del<{ id: string; status: string }>(`/api/v1/groups/${groupId}`);
+}
+
+// ─── List groups in an exam (ADR-0012 UX rewrite) ───
+
+export interface ExamQuestionGroup {
+  id: string;
+  sectionId?: string | null;
+  stimulusId?: string | null;
+  stimulusTitleSnapshot?: string | null;
+  stimulusBodySnapshot?: string | null;
+  groupType: string;
+  displayOrder: number;
+  questionCount: number;
+  createdAt: string;
+}
+
+export function listExamGroups(examId: string) {
+  return get<{ data: ExamQuestionGroup[] }>(
+    `/api/v1/exams/${examId}/groups`,
+  );
+}
+
+export function updateQuestion(
+  questionId: string,
+  data: Partial<CreateQuestionPayload> & { forceLink?: boolean },
+) {
+  return patch<{ id: string }>(`/api/v1/questions/${questionId}`, data);
+}
+
+export function deleteQuestion(questionId: string) {
+  return del<{ status: string }>(`/api/v1/questions/${questionId}`);
+}
+
+export function createOption(questionId: string, data: { content: string; isCorrect: boolean; sortOrder?: number; pointsWeight?: number }) {
+  return post<{ id: string }>(`/api/v1/questions/${questionId}/options`, data);
+}
+
+export function updateOption(optionId: string, data: { content?: string; isCorrect?: boolean; sortOrder?: number; pointsWeight?: number }) {
+  return patch<{ id: string }>(`/api/v1/options/${optionId}`, data);
+}
+
+export function deleteOption(optionId: string) {
+  return del<{ status: string }>(`/api/v1/options/${optionId}`);
+}
+
+// --- Exam Gate Windows ---
+export interface ExamGate {
+  id: string;
+  examId: string;
+  opensAt: string;
+  closesAt: string;
+  accessCode: string | null;
+  isOpen: boolean;
+  createdAt: string;
+}
+
+export function listExamGates(examId: string) {
+  return get<{ data: ExamGate[] }>(`/api/v1/exams/${examId}/gates`);
+}
+
+export function createExamGate(examId: string, data: { opensAt: string; closesAt: string; accessCode?: string }) {
+  return post<{ id: string }>(`/api/v1/exams/${examId}/gates`, data);
+}
+
+export function updateExamGate(gateId: string, data: { opensAt?: string; closesAt?: string; accessCode?: string }) {
+  return patch<{ id: string }>(`/api/v1/exam-gates/${gateId}`, data);
+}
+
+export function deleteExamGate(gateId: string) {
+  return del<{ status: string }>(`/api/v1/exam-gates/${gateId}`);
+}
+
+// ==========================================================================
+// Phase 9.5 — Collaborators (works for exam/course/blueprint_template)
+// ==========================================================================
+
+export type CollaboratorRole = "editor" | "viewer";
+
+export interface Collaborator {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  role: CollaboratorRole | "owner";
+  createdAt: string;
+}
+
+export type CollabResource = "exams" | "courses" | "blueprint-templates";
+
+export function listCollaborators(resource: CollabResource, resourceId: string) {
+  return get<{ owner: Collaborator | null; collaborators: Collaborator[] }>(
+    `/api/v1/${resource}/${resourceId}/collaborators`,
+  );
+}
+
+export function inviteCollaborator(
+  resource: CollabResource,
+  resourceId: string,
+  data: { userId: string; role: CollaboratorRole },
+) {
+  return post<{ id: string; role: string }>(
+    `/api/v1/${resource}/${resourceId}/collaborators`,
+    data,
+  );
+}
+
+export function updateCollaboratorRole(
+  resource: CollabResource,
+  resourceId: string,
+  collaboratorId: string,
+  role: CollaboratorRole,
+) {
+  // Backend mounts PATCH/DELETE under the singular collab resource:
+  //   /api/v1/exam-collaborators/{collabId}
+  //   /api/v1/course-collaborators/{collabId}
+  //   /api/v1/blueprint-template-collaborators/{collabId}
+  // resourceId stays in the closure for audit context but is not in
+  // the URL.
+  void resourceId;
+  return patch<{ id: string; role: string }>(
+    `/api/v1/${collabResourcePath(resource)}/${collaboratorId}`,
+    { role },
+  );
+}
+
+export function removeCollaborator(
+  resource: CollabResource,
+  resourceId: string,
+  collaboratorId: string,
+) {
+  void resourceId;
+  return del<{ status: string }>(
+    `/api/v1/${collabResourcePath(resource)}/${collaboratorId}`,
+  );
+}
+
+// Maps the plural parent resource to the singular collab table path
+// segment used by the backend mux. Keep in sync with
+// registerCollaboratorRoutes() in collaborator_handlers.go.
+function collabResourcePath(resource: CollabResource): string {
+  switch (resource) {
+    case "exams":
+      return "exam-collaborators";
+    case "courses":
+      return "course-collaborators";
+    case "blueprint-templates":
+      return "blueprint-template-collaborators";
+  }
+}
+
+export function transferOwnership(
+  resource: CollabResource,
+  resourceId: string,
+  newOwnerUserId: string,
+) {
+  return patch<{ ownerUserId: string }>(
+    `/api/v1/${resource}/${resourceId}/transfer-ownership`,
+    { newOwnerUserId },
+  );
+}
+
+// ==========================================================================
+// Phase 9.5 — Stimuli library
+// ==========================================================================
+
+export type StimulusLifecycle = "exam_scoped" | "shared" | "archived";
+
+export interface Stimulus {
+  id: string;
+  ownerUserId: string;
+  ownerName: string;
+  type: string;
+  title: string;
+  content: string;
+  source: string | null;
+  lifecycle: StimulusLifecycle;
+  parentExamId: string;
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StimulusListResponse {
+  data: Stimulus[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listStimuli(params?: {
+  page?: number;
+  search?: string;
+  lifecycle?: StimulusLifecycle | "all";
+  parentExamId?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.search) q.set("search", params.search);
+  if (params?.lifecycle) q.set("lifecycle", params.lifecycle);
+  if (params?.parentExamId) q.set("parentExamId", params.parentExamId);
+  const qs = q.toString();
+  return get<StimulusListResponse>(`/api/v1/stimuli${qs ? `?${qs}` : ""}`);
+}
+
+export function getStimulus(id: string) {
+  return get<Stimulus>(`/api/v1/stimuli/${id}`);
+}
+
+export interface CreateStimulusPayload {
+  title: string;
+  content: string;
+  type?: string;
+  source?: string;
+  lifecycle?: "exam_scoped" | "shared";
+  parentExamId?: string;
+}
+
+export function createStimulus(data: CreateStimulusPayload) {
+  return post<{ id: string; lifecycle: StimulusLifecycle }>("/api/v1/stimuli", data);
+}
+
+export function updateStimulus(
+  id: string,
+  data: Partial<{ title: string; content: string; source: string; type: string }>,
+) {
+  return patch<{ id: string }>(`/api/v1/stimuli/${id}`, data);
+}
+
+export function archiveStimulus(id: string) {
+  return patch<{ status: string }>(`/api/v1/stimuli/${id}/archive`);
+}
+
+export function promoteStimulus(id: string) {
+  return patch<{ id: string; status: string }>(`/api/v1/stimuli/${id}/promote`);
+}
+
+// ==========================================================================
+// Phase 9.5 — Blueprint templates (library)
+// ==========================================================================
+
+export type BlueprintType = "reguler" | "akm_literasi" | "akm_numerasi";
+export type BlueprintStatus = "draft" | "published" | "archived";
+export type CurriculumCode = "k13" | "merdeka" | "akm_numerasi" | "akm_literasi";
+
+export interface BlueprintTemplate {
+  id: string;
+  ownerUserId: string;
+  ownerName: string;
+  title: string;
+  description: string | null;
+  curriculumId: string;
+  curriculumCode: string;
+  competencyLabel: string;
+  subjectCode: string | null;
+  gradeOrPhase: string | null;
+  blueprintType: BlueprintType;
+  totalSlots: number;
+  totalPoints: number;
+  strictCoverage: boolean;
+  status: BlueprintStatus;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  canAccess: boolean;
+}
+
+export interface BlueprintTemplateListResponse {
+  data: BlueprintTemplate[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listBlueprintTemplates(params?: {
+  page?: number;
+  search?: string;
+  curriculum?: CurriculumCode;
+  type?: BlueprintType;
+  status?: BlueprintStatus;
+}) {
+  const q = new URLSearchParams();
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.search) q.set("search", params.search);
+  if (params?.curriculum) q.set("curriculum", params.curriculum);
+  if (params?.type) q.set("type", params.type);
+  if (params?.status) q.set("status", params.status);
+  const qs = q.toString();
+  return get<BlueprintTemplateListResponse>(
+    `/api/v1/blueprint-templates${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function getBlueprintTemplate(id: string) {
+  return get<BlueprintTemplate>(`/api/v1/blueprint-templates/${id}`);
+}
+
+export interface CreateBlueprintTemplatePayload {
+  title: string;
+  description?: string;
+  curriculumCode: CurriculumCode;
+  subjectCode?: string;
+  gradeOrPhase?: string;
+  blueprintType?: BlueprintType;
+  strictCoverage?: boolean;
+}
+
+export function createBlueprintTemplate(data: CreateBlueprintTemplatePayload) {
+  return post<{ id: string; status: string }>("/api/v1/blueprint-templates", data);
+}
+
+export function updateBlueprintTemplate(
+  id: string,
+  data: Partial<{
+    title: string;
+    description: string;
+    subjectCode: string;
+    gradeOrPhase: string;
+    strictCoverage: boolean;
+  }>,
+) {
+  return patch<{ id: string }>(`/api/v1/blueprint-templates/${id}`, data);
+}
+
+export function publishBlueprintTemplate(id: string) {
+  return patch<{ id: string; status: string }>(
+    `/api/v1/blueprint-templates/${id}/publish`,
+  );
+}
+
+export function unpublishBlueprintTemplate(id: string) {
+  return patch<{ id: string; status: string }>(
+    `/api/v1/blueprint-templates/${id}/unpublish`,
+  );
+}
+
+export function archiveBlueprintTemplate(id: string) {
+  return patch<{ id: string; status: string }>(
+    `/api/v1/blueprint-templates/${id}/archive`,
+  );
+}
+
+export function restoreBlueprintTemplate(id: string) {
+  return patch<{ id: string; status: string }>(
+    `/api/v1/blueprint-templates/${id}/restore`,
+  );
+}
+
+// ─── Slots: dual-table (template + exam blueprint) ───
+export interface BlueprintSlot {
+  id: string;
+  position: number;
+  competencyId: string | null;
+  competencyCode: string | null;
+  competencyDescription: string | null;
+  materi: string | null;
+  indikator: string | null;
+  cognitiveLevel: string | null;
+  difficulty: string | null;
+  questionType: string | null;
+  points: number;
+  stimulusId: string | null;
+  akmKonten: string | null;
+  akmKonteks: string | null;
+  akmProses: string | null;
+  akmLevel: number | null;
+  questionId?: string | null;
+  filled?: boolean;
+  createdAt: string;
+}
+
+export interface SlotPayload {
+  position?: number;
+  competencyCode?: string;
+  competencyDescription?: string;
+  materi?: string;
+  indikator?: string;
+  cognitiveLevel?: string;
+  difficulty?: string;
+  questionType?: string;
+  points?: number;
+  stimulusId?: string;
+  akmKonten?: string;
+  akmKonteks?: string;
+  akmProses?: string;
+  akmLevel?: number;
+}
+
+export function listTemplateSlots(templateId: string) {
+  return get<{ data: BlueprintSlot[] }>(
+    `/api/v1/blueprint-templates/${templateId}/slots`,
+  );
+}
+
+export function createTemplateSlot(templateId: string, data: SlotPayload) {
+  return post<{ id: string; position: number }>(
+    `/api/v1/blueprint-templates/${templateId}/slots`,
+    data,
+  );
+}
+
+export function bulkAddTemplateSlots(templateId: string, slots: SlotPayload[]) {
+  return post<{ ids: string[]; count: number }>(
+    `/api/v1/blueprint-templates/${templateId}/slots/bulk`,
+    { slots },
+  );
+}
+
+export function updateTemplateSlot(slotId: string, data: SlotPayload) {
+  return patch<{ id: string }>(`/api/v1/blueprint-template-slots/${slotId}`, data);
+}
+
+export function deleteTemplateSlot(slotId: string) {
+  return del<{ status: string }>(`/api/v1/blueprint-template-slots/${slotId}`);
+}
+
+// ─── Exam blueprints (cloned snapshot) ───
+export interface ExamBlueprint {
+  id: string;
+  examId: string;
+  sourceTemplateId: string | null;
+  sourceTemplateVersion: number | null;
+  createdVia: string;
+  title: string;
+  description: string | null;
+  curriculumCode: string;
+  competencyLabel: string;
+  blueprintType: BlueprintType;
+  totalSlots: number;
+  totalPoints: number;
+  strictCoverage: boolean;
+  status: string;
+  filledSlots: number;
+  coverage: number;
+  createdAt: string;
+}
+
+export function getExamBlueprint(examId: string) {
+  return get<{ blueprint: ExamBlueprint | null }>(
+    `/api/v1/exams/${examId}/blueprint`,
+  );
+}
+
+export function listExamBlueprintSlots(examId: string) {
+  return get<{ data: BlueprintSlot[] }>(
+    `/api/v1/exams/${examId}/blueprint/slots`,
+  );
+}
+
+export function cloneBlueprintToExam(
+  examId: string,
+  data: { templateId: string; replace?: boolean },
+) {
+  return post<{
+    id: string;
+    sourceTemplateId: string;
+    sourceTemplateVersion: number;
+    createdVia: string;
+  }>(`/api/v1/exams/${examId}/blueprint/clone`, data);
+}
+
+export function exportExamBlueprintToTemplate(
+  examId: string,
+  data: {
+    title: string;
+    description?: string;
+    subjectCode?: string;
+    gradeOrPhase?: string;
+  },
+) {
+  return post<{ id: string; status: string }>(
+    `/api/v1/exams/${examId}/blueprint/export`,
+    data,
+  );
+}
+
+export function createExamBlueprintSlot(examId: string, data: SlotPayload) {
+  return post<{ id: string; position: number }>(
+    `/api/v1/exams/${examId}/blueprint/slots`,
+    data,
+  );
+}
+
+export function updateExamBlueprintSlot(slotId: string, data: SlotPayload) {
+  return patch<{ id: string }>(`/api/v1/exam-blueprint-slots/${slotId}`, data);
+}
+
+export function deleteExamBlueprintSlot(slotId: string) {
+  return del<{ status: string }>(`/api/v1/exam-blueprint-slots/${slotId}`);
+}
+
+export function assignQuestionToSlot(slotId: string, questionId: string | null) {
+  return patch<{ slotId: string; questionId: string | null; status: string }>(
+    `/api/v1/exam-blueprint-slots/${slotId}/assign-question`,
+    { questionId },
+  );
+}
+
+// ─── Slot-first canvas (ADR-0012) ───
+
+export interface SlotWithQuestion extends BlueprintSlot {
+  question: {
+    id: string;
+    content: string;
+    questionType: string;
+    points: number;
+    sortOrder: number;
+    stimulus?: { id: string; title: string } | null;
+    group?: { id: string; stimulusTitle?: string | null } | null;
+  } | null;
+}
+
+export interface SlotsWithQuestionsResponse {
+  blueprintType?: string;
+  /** Phase 9.8 — populated when the blueprint was cloned from a
+   *  template. Frontend uses this to gate edit-vs-readonly on slot
+   *  metadata fields rendered inline in the question accordion. */
+  sourceTemplateId?: string | null;
+  slots: SlotWithQuestion[];
+  unlinked: Array<{
+    id: string;
+    content: string;
+    questionType: string;
+    points: number;
+    sortOrder: number;
+    stimulus?: { id: string; title: string } | null;
+    group?: { id: string; stimulusTitle?: string | null } | null;
+  }>;
+  coverage: { filled: number; total: number };
+}
+
+export function getSlotsWithQuestions(examId: string) {
+  return get<SlotsWithQuestionsResponse>(
+    `/api/v1/exams/${examId}/slots-with-questions`,
+  );
+}
