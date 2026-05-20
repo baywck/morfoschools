@@ -97,7 +97,7 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 			"examId":{"type":"string"},
 			"sectionId":{"type":"string"},
 			"stimulusId":{"type":"string","description":"opsional, link ke stimulus library"},
-			"groupType":{"type":"string","enum":["plain","stimulus"],"default":"plain"},
+			"groupType":{"type":"string","enum":["standalone","stimulus"],"default":"standalone"},
 			"titleSnapshot":{"type":"string","description":"manual title kalau stimulusId kosong"},
 			"bodySnapshot":{"type":"string","description":"manual body kalau stimulusId kosong"}
 		},"required":["examId","sectionId"]}`),
@@ -415,7 +415,10 @@ func (a *App) execCreateQuestionGroup(ctx context.Context, tenantID, userID stri
 		return denied, nil
 	}
 	if p.GroupType == "" {
-		p.GroupType = "plain"
+		p.GroupType = "standalone"
+	}
+	if p.GroupType != "standalone" && p.GroupType != "stimulus" {
+		return errValidationFailed("groupType", "groupType must be 'standalone' or 'stimulus'"), nil
 	}
 	// If stimulusId provided, snapshot from library.
 	if p.StimulusID != "" {

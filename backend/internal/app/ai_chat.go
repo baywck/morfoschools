@@ -168,7 +168,8 @@ type llmResponse struct {
 // matching pending proposals and writes a normal chat-style response. Returns
 // true when the request was fully handled and the caller should return.
 func (a *App) handleShortReplyForProposals(
-	w http.ResponseWriter, r *http.Request, sessionID, userID, intent string,
+	w http.ResponseWriter, r *http.Request, sessionID, tenantID string, auth *AuthContext,
+	req aiChatRequest, intent string,
 	pendings []struct {
 		ID       string
 		ToolName string
@@ -177,6 +178,7 @@ func (a *App) handleShortReplyForProposals(
 		Confirm  string
 	},
 ) bool {
+	userID := auth.UserID
 	ctx := r.Context()
 
 	if intent == "deny" {
@@ -200,6 +202,7 @@ func (a *App) handleShortReplyForProposals(
 
 	// affirm: execute each proposal, collect results
 	var successes, failures []string
+	var resultBlocks []string // raw tool outputs for continuation
 	var lastErr string
 	for _, p := range pendings {
 		result, err := a.executeConfirmedAction(ctx, p.TenantID, userID, p.ToolName, p.ToolArgs)
@@ -214,6 +217,7 @@ func (a *App) handleShortReplyForProposals(
 		_, _ = a.db.ExecContext(ctx,
 			`UPDATE ai_pending_actions SET status = 'confirmed' WHERE id = $1`, p.ID)
 		successes = append(successes, summarizeToolResult(p.ToolName, result))
+		resultBlocks = append(resultBlocks, p.ToolName+" -> "+result)
 	}
 
 	// Build a friendly summary in Indonesian
@@ -243,6 +247,18 @@ func (a *App) handleShortReplyForProposals(
 	_, _ = a.db.ExecContext(ctx,
 		`UPDATE ai_sessions SET message_count = message_count + 1, last_active_at = now() WHERE id = $1`,
 		sessionID)
+
+	// Auto-continuation: if confirms succeeded and the AI's previous
+	// response hinted at follow-up steps (e.g. "setelah stimulus, saya
+	// akan buat group + soal"), run one LLM round so the model can
+	// propose those follow-up actions. Without this the conversation
+	// dead-ends at the first proposal even when the model's plan had
+	// 3 steps.
+	if len(successes) > 0 && len(failures) == 0 {
+		if followup := a.runContinuationRound(ctx, r, sessionID, tenantID, auth, req, successes, resultBlocks); followup != "" {
+			content = followup
+		}
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message":   map[string]string{"role": "assistant", "content": content},
@@ -322,7 +338,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if intent := classifyShortReply(req.Message); intent != "" {
 		pendings := a.pendingProposalsForSession(r.Context(), sessionID, auth.UserID)
 		if len(pendings) > 0 {
-			if a.handleShortReplyForProposals(w, r, sessionID, auth.UserID, intent, pendings) {
+			if a.handleShortReplyForProposals(w, r, sessionID, tenantID, auth, req, intent, pendings) {
 				return
 			}
 		}
@@ -620,6 +636,7 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 	sb.WriteString("Gunakan tools untuk data aktual — jangan mengarang.\n")
 	sb.WriteString("Jika info kurang, tanya user — jangan menyerah.\n")
 	sb.WriteString("Untuk batch (buat banyak item), eksekusi satu per satu.\n")
+	sb.WriteString("Untuk rencana multi-langkah (misal: stimulus + group + soal), emit SEMUA tool_calls dalam satu assistant message yang sama — jangan propose satu lalu menunggu konfirmasi sebelum propose berikutnya. Native function-calling kamu support multiple tool_calls dalam satu turn; gunakan itu. User akan konfirmasi semuanya sekaligus dengan satu 'ya'.\n")
 	sb.WriteString("Selalu lookup data terkait sebelum create (cari UUID via search tool).\n")
 	sb.WriteString("SEBELUM batch-create (>1 item dari jenis sama), WAJIB panggil list_* atau search_* dulu untuk lihat data existing. JANGAN mengusulkan nama/email/kode yang sudah ada.\n")
 	sb.WriteString("Jika user bilang \"lanjutkan\", teruskan task sebelumnya dari context.\n")
@@ -737,6 +754,27 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 			preview = preview[:600]
 		}
 		a.logger.Debug("llm response preview", "bytes", len(respBody), "head", string(preview))
+	}
+
+	// Try plain JSON first (Chat Completions non-streaming response).
+	// Some upstreams append a trailing 'data: [DONE]' marker even on
+	// non-streamed responses; that fooled an earlier strings.Contains
+	// check into running the SSE parser, which then dropped the JSON
+	// body entirely. Trying JSON first gives us the canonical shape
+	// when present and only falls back to SSE accumulation when the
+	// body is genuinely streamed.
+	jsonBody2 := respBody
+	// Strip trailing 'data: [DONE]' marker which some upstreams append
+	// directly after the JSON body without a newline separator.
+	if idx := bytes.Index(jsonBody2, []byte("data: [DONE]")); idx > 0 {
+		jsonBody2 = bytes.TrimSpace(jsonBody2[:idx])
+	}
+	if idx := bytes.Index(jsonBody2, []byte("\ndata: ")); idx > 0 {
+		jsonBody2 = bytes.TrimSpace(jsonBody2[:idx])
+	}
+	var llmRespDirect llmResponse
+	if json.Unmarshal(jsonBody2, &llmRespDirect) == nil && len(llmRespDirect.Choices) > 0 {
+		return &llmRespDirect, nil
 	}
 
 	// Parse SSE streaming response — accumulate chunks into final message
@@ -1174,4 +1212,138 @@ func parseXMLToolCalls(content string) []llmToolCall {
 		idx = open + close + len("</function>")
 	}
 	return out
+}
+
+// runContinuationRound is invoked after a short-reply confirm has
+// successfully executed one or more proposals. It runs a single
+// abbreviated LLM round so the model can propose follow-up actions
+// from a multi-step plan (e.g. "setelah stimulus, saya akan bikin
+// group lalu 2 soal"). Returns a friendly user-facing message that
+// supersedes the basic "Berhasil!" summary when new proposals are
+// generated; returns empty string when nothing follow-up was needed.
+func (a *App) runContinuationRound(
+	ctx context.Context, r *http.Request,
+	sessionID, tenantID string, auth *AuthContext, req aiChatRequest,
+	successes []string, resultBlocks []string,
+) string {
+	// Pull tool names that just ran for short-name reference.
+	var lastTools []string
+	for _, b := range resultBlocks {
+		if idx := strings.Index(b, " -> "); idx > 0 {
+			lastTools = append(lastTools, b[:idx])
+		}
+	}
+
+	note := "AKSI BARU SAJA DIEKSEKUSI — hasil tool sebagai berikut:\n\n" +
+		strings.Join(resultBlocks, "\n\n") +
+		"\n\nTool yang sudah berhasil dipanggil: " + strings.Join(lastTools, ", ") + ". " +
+		"JANGAN propose tool yang sama dengan args yang sama lagi — itu duplikasi. " +
+		"Lihat ID baru di hasil tool di atas dan gunakan untuk langkah berikutnya. " +
+		"Misal: kalau create_stimulus mengembalikan stimulusId X, langkah berikut bisa create_question_group dengan stimulusId=X. " +
+		"Kalau rencana awal kamu masih punya LANGKAH LANJUTAN yang BERBEDA dari yang sudah dieksekusi, propose tool_calls berikut sekarang. " +
+		"Kalau rencana sudah selesai, balas konfirmasi singkat dan tawarkan langkah berikutnya — JANGAN ulang langkah lama."
+	// Persist as a tool/assistant role compound so future
+	// assembleContext rounds replay it. assistant role gets loaded;
+	// system role does not.
+	persistedHistory := "[Tool execution log — internal]\n" + note
+	_, _ = a.db.ExecContext(ctx,
+		`INSERT INTO ai_messages (session_id, role, content) VALUES ($1, 'assistant', $2)`,
+		sessionID, persistedHistory)
+
+	messages := a.assembleContext(ctx, sessionID, tenantID, auth, req)
+	// assembleContext only loads role IN ('user','assistant') from
+	// history — inject the continuation note as a fresh system message
+	// so it actually reaches the model on this round.
+	messages = append(messages, llmMessage{Role: "system", Content: note})
+	domains := DetectDomains(req.Message)
+	domains = appendActiveDomains(domains, req.Shadow.ActiveEntities)
+	tools := a.capRegistry.GetToolsForIntent(domains, auth.Permissions)
+
+	ctxWithSession := context.WithValue(ctx, ctxKeySessionID{}, sessionID)
+	var finalContent string
+	hadProposal := false
+	for i := 0; i < 3; i++ {
+		llmResp, err := a.callLLM(ctxWithSession, messages, tools)
+		if err != nil || len(llmResp.Choices) == 0 {
+			break
+		}
+		choice := llmResp.Choices[0]
+		if choice.FinishReason != "tool_calls" || len(choice.Message.ToolCalls) == 0 {
+			if synth := parseXMLToolCalls(choice.Message.Content); len(synth) > 0 {
+				synthJSON, _ := json.Marshal(synth)
+				messages = append(messages, llmMessage{Role: "assistant", Content: " ", ToolCalls: synthJSON, ReasoningContent: choice.Message.ReasoningContent})
+				for _, tc := range synth {
+					var resultContent string
+					if handler, ok := a.capRegistry.handlers[tc.Function.Name]; ok {
+						resultContent, _ = handler(ctxWithSession, tenantID, auth.UserID, json.RawMessage(tc.Function.Arguments))
+					} else {
+						oldResult, _ := a.toolRegistry.Execute(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
+						resultContent = oldResult.Content
+					}
+					messages = append(messages, llmMessage{Role: "tool", Content: resultContent, ToolCallID: tc.ID})
+					if strings.Contains(resultContent, "confirmation_required") {
+						hadProposal = true
+					}
+				}
+				if hadProposal {
+					break
+				}
+				continue
+			}
+			finalContent = choice.Message.Content
+			break
+		}
+		var toolCalls []llmToolCall
+		if err := json.Unmarshal(choice.Message.ToolCalls, &toolCalls); err != nil {
+			finalContent = choice.Message.Content
+			break
+		}
+		assistantContent := choice.Message.Content
+		if assistantContent == "" {
+			assistantContent = " "
+		}
+		messages = append(messages, llmMessage{Role: "assistant", Content: assistantContent, ToolCalls: choice.Message.ToolCalls, ReasoningContent: choice.Message.ReasoningContent})
+		for _, tc := range toolCalls {
+			var resultContent string
+			if handler, ok := a.capRegistry.handlers[tc.Function.Name]; ok {
+				resultContent, _ = handler(ctxWithSession, tenantID, auth.UserID, json.RawMessage(tc.Function.Arguments))
+			} else {
+				oldResult, _ := a.toolRegistry.Execute(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
+				resultContent = oldResult.Content
+			}
+			messages = append(messages, llmMessage{Role: "tool", Content: resultContent, ToolCallID: tc.ID})
+			if strings.Contains(resultContent, "confirmation_required") {
+				hadProposal = true
+			}
+		}
+		if hadProposal {
+			break
+		}
+	}
+
+	if !hadProposal {
+		return ""
+	}
+
+	// Collect new pending proposals for the response. We re-query DB
+	// rather than parsing message bodies because the proposal IDs are
+	// already persisted and the executor returns the canonical struct
+	// in pendingProposalsForSession.
+	pending := a.pendingProposalsForSession(ctx, sessionID, auth.UserID)
+	if len(pending) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, p := range pending {
+		parts = append(parts, "• "+p.Confirm)
+	}
+	if finalContent == "" {
+		finalContent = "✅ Berhasil! " + strings.Join(successes, "; ") + ".\n\nLangkah lanjutan menunggu konfirmasi:\n" + strings.Join(parts, "\n") + "\n\nKetik **ya** untuk lanjutkan."
+	} else {
+		finalContent = finalContent + "\n\nLangkah lanjutan menunggu konfirmasi:\n" + strings.Join(parts, "\n") + "\n\nKetik **ya** untuk lanjutkan."
+	}
+	_, _ = a.db.ExecContext(ctx,
+		`INSERT INTO ai_messages (session_id, role, content) VALUES ($1, 'assistant', $2)`,
+		sessionID, finalContent)
+	return finalContent
 }
