@@ -320,7 +320,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
           message: trimmed,
           shadow: {
             route: pathname,
-            activeEntities: {},
+            activeEntities: parseActiveEntities(pathname),
           },
         }),
       });
@@ -578,4 +578,65 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
       </form>
     </aside>
   );
+}
+
+// parseActiveEntities walks the current pathname and extracts the
+// entity IDs the user is looking at. The backend uses these to enrich
+// the AI system prompt with concrete state (e.g. when the user is on
+// /app/exams/{id} the AI sees the exam title, section + question
+// count, blueprint kisi-kisi slots) so suggestions stay grounded in
+// the page and don't duplicate existing items.
+//
+// Recognised shapes (UUID validated to avoid leaking junk):
+//   /app/exams/{examId}              → { view: 'exam-detail',     examId }
+//   /app/blueprints/{templateId}     → { view: 'blueprint-detail', templateId }
+//   /app/courses/{courseId}          → { view: 'course-detail',   courseId }
+//   /app/stimuli/{stimulusId}        → { view: 'stimulus-detail', stimulusId }
+// Anything else → { view: '<segment>' } so the model can still see
+// where the user is.
+function parseActiveEntities(pathname: string): Record<string, string> {
+  if (!pathname) return {};
+  const segments = pathname.split("/").filter(Boolean);
+  // strip the leading 'app'
+  const after = segments[0] === "app" ? segments.slice(1) : segments;
+  if (after.length === 0) return { view: "home" };
+
+  const entities: Record<string, string> = { view: after.join(":") };
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Match shape /app/{collection}/{id}
+  if (after.length >= 2 && uuid.test(after[1])) {
+    const collection = after[0];
+    const id = after[1];
+    switch (collection) {
+      case "exams":
+        entities.view = "exam-detail";
+        entities.examId = id;
+        break;
+      case "blueprints":
+        entities.view = "blueprint-detail";
+        entities.templateId = id;
+        break;
+      case "courses":
+        entities.view = "course-detail";
+        entities.courseId = id;
+        break;
+      case "stimuli":
+        entities.view = "stimulus-detail";
+        entities.stimulusId = id;
+        break;
+      case "programs":
+        entities.view = "program-detail";
+        entities.programId = id;
+        break;
+      default:
+        entities.view = `${collection}-detail`;
+        entities.resourceId = id;
+    }
+  } else {
+    // List / static page — just record the path so the model knows
+    // "the user is on /app/exams" and can ask for a specific item.
+    entities.view = after.join(":");
+  }
+  return entities;
 }

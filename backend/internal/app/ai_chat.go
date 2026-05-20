@@ -543,6 +543,21 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 	}
 	sb.WriteString("\n")
 
+	// Active-page context (Phase 9.11). When the user opens an exam,
+	// blueprint, or other identifiable resource, fetch a compact
+	// summary so the model can ground its replies in the actual page
+	// state. Without this the model hallucinates duplicate questions /
+	// re-suggests slots that already exist. Read-only and tenant-
+	// scoped — the same access checks the user has must allow it.
+	if active := a.buildActiveContext(tenantID, auth, req.Shadow.ActiveEntities); active != "" {
+		sb.WriteString("\n=== KONTEKS HALAMAN AKTIF ===\n")
+		sb.WriteString(active)
+		sb.WriteString("=== END KONTEKS ===\n")
+		sb.WriteString("WAJIB: rujuk konteks di atas saat user minta diskusi/buat soal/edit. ")
+		sb.WriteString("JANGAN duplikasi soal/slot yang sudah ada. Saat user minta \"buatkan N soal tentang X\", ")
+		sb.WriteString("otomatis target ke exam yang sedang dibuka (examId di konteks) tanpa minta user menyebut ulang.\n")
+	}
+
 	// User facts (compact)
 	rows, _ := a.db.QueryContext(context.Background(),
 		`SELECT fact_key, fact_value FROM ai_user_facts WHERE user_id = $1 LIMIT 5`,
