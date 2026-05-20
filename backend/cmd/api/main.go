@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,7 +20,11 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	loggerLevel := slog.LevelInfo
+	if strings.EqualFold(envOr("LOG_LEVEL", "info"), "debug") {
+		loggerLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggerLevel}))
 
 	cfg := app.Config{
 		Port:    envOr("PORT", "8080"),

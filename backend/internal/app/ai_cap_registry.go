@@ -192,6 +192,9 @@ func (a *App) RegisterAllCapabilities(reg *CapabilityRegistry) {
 	// ─── Exams ───
 	a.registerExamCapabilities(reg)
 
+	// ─── Exams (extra: update / delete / sections / groups / move / stimuli) ───
+	a.RegisterExamExtraCapabilities(reg)
+
 	// ─── Blueprints (Phase 9.5) ───
 	a.registerBlueprintCapabilities(reg)
 }

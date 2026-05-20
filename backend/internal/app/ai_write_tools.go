@@ -425,6 +425,18 @@ func (a *App) executeConfirmedAction(ctx context.Context, tenantID, userID, tool
 		return a.execSetUsesKisiKisi(ctx, tenantID, userID, args)
 	case "convert_questions_to_kisi_kisi":
 		return a.execConvertQuestionsToKisiKisi(ctx, tenantID, userID, args)
+	case "update_question":
+		return a.execUpdateQuestion(ctx, tenantID, userID, args)
+	case "delete_question":
+		return a.execDeleteQuestion(ctx, tenantID, userID, args)
+	case "create_exam_section":
+		return a.execCreateExamSection(ctx, tenantID, userID, args)
+	case "create_question_group":
+		return a.execCreateQuestionGroup(ctx, tenantID, userID, args)
+	case "create_stimulus":
+		return a.execCreateStimulus(ctx, tenantID, userID, args)
+	case "move_question":
+		return a.execMoveQuestion(ctx, tenantID, userID, args)
 	default:
 		return "", fmt.Errorf("unknown action: %s", toolName)
 	}

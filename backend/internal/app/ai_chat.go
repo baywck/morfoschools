@@ -131,6 +131,11 @@ type llmMessage struct {
 	Content    string          `json:"content,omitempty"`
 	ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallID string          `json:"tool_call_id,omitempty"`
+	// ReasoningContent is required by reasoning models (mimo / qwen-cot)
+	// when echoing an assistant message back on subsequent turns. The
+	// upstream rejects with 400 "reasoning_content must be passed back"
+	// otherwise.
+	ReasoningContent string `json:"reasoning_content,omitempty"`
 }
 
 type llmToolCall struct {
@@ -145,9 +150,10 @@ type llmToolCall struct {
 type llmResponse struct {
 	Choices []struct {
 		Message struct {
-			Role      string          `json:"role"`
-			Content   string          `json:"content"`
-			ToolCalls json.RawMessage `json:"tool_calls"`
+			Role             string          `json:"role"`
+			Content          string          `json:"content"`
+			ReasoningContent string          `json:"reasoning_content"`
+			ToolCalls        json.RawMessage `json:"tool_calls"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -346,6 +352,9 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	ctxWithSession := context.WithValue(r.Context(), ctxKeySessionID{}, sessionID)
 
 	for i := 0; i < maxToolLoops; i++ {
+		// Keep tools available on every iteration; some reasoning models
+		// emit XML-style fake tool calls when the native tool list isn't
+		// re-offered. The iteration cap (maxToolLoops) bounds spinning.
 		llmResp, err := a.callLLM(ctxWithSession, messages, tools)
 		if err != nil {
 			a.logger.Error("llm call failed", "error", err)
@@ -355,14 +364,82 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		totalTokens += llmResp.Usage.TotalTokens
 
 		if len(llmResp.Choices) == 0 {
-			writeErrorJSON(w, http.StatusBadGateway, "ai_error", "Empty AI response", r)
-			return
+			a.logger.Warn("llm returned no choices",
+				"loop", i, "tools", len(tools), "messages", len(messages))
+			// If we already collected proposals during earlier
+			// iterations, surface those instead of failing — the user
+			// can still confirm them even though the chat narration is
+			// broken on the upstream side.
+			finalContent = ""
+			break
 		}
 
 		choice := llmResp.Choices[0]
 
+		// Reasoning models can finish_reason='length' having spent the
+		// budget on hidden reasoning. We don't want to fail the request —
+		// surface a graceful message and let the user retry. Same for any
+		// other empty-content + no-tool-calls condition that isn't an
+		// upstream transport error.
+		if strings.TrimSpace(choice.Message.Content) == "" && len(choice.Message.ToolCalls) == 0 {
+			a.logger.Warn("llm returned empty content + no tools",
+				"loop", i, "finishReason", choice.FinishReason,
+				"tools_offered", len(tools), "messages", len(messages))
+			if choice.FinishReason == "length" {
+				finalContent = "Maaf, jawaban terpotong (token habis untuk reasoning). Coba pertanyaan yang lebih spesifik atau ringkas."
+				break
+			}
+			writeErrorJSON(w, http.StatusBadGateway, "ai_error", "Empty AI response", r)
+			return
+		}
+
 		// If no tool calls, we have the final response
 		if choice.FinishReason != "tool_calls" || len(choice.Message.ToolCalls) == 0 {
+			// Some reasoning models occasionally emit tool calls as XML-
+			// style text inside content (<tool_call>...</tool_call>) instead
+			// of the native tool_calls field. Try to parse + execute those
+			// before falling back to plain content; otherwise the user sees
+			// raw XML markup and the action never runs.
+			if synth := parseXMLToolCalls(choice.Message.Content); len(synth) > 0 {
+				// Synthesise a proper assistant message with the native
+				// tool_calls JSON shape upstream expects, then echo each
+				// tool result back with a matching tool_call_id. Without
+				// this the upstream rejects the next call with
+				// 'tool_call_id is not set' / 'content is not set'.
+				synthJSON, _ := json.Marshal(synth)
+				messages = append(messages, llmMessage{
+					Role:             "assistant",
+					Content:          " ",
+					ToolCalls:        synthJSON,
+					ReasoningContent: choice.Message.ReasoningContent,
+				})
+				hasProposal := false
+				for _, tc := range synth {
+					var resultContent string
+					if handler, ok := a.capRegistry.handlers[tc.Function.Name]; ok {
+						resultContent, _ = handler(ctxWithSession, tenantID, auth.UserID, json.RawMessage(tc.Function.Arguments))
+					} else {
+						oldResult, _ := a.toolRegistry.Execute(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
+						resultContent = oldResult.Content
+					}
+					messages = append(messages, llmMessage{
+						Role:       "tool",
+						Content:    resultContent,
+						ToolCallID: tc.ID,
+					})
+					if strings.Contains(resultContent, "confirmation_required") {
+						hasProposal = true
+					}
+				}
+				// Once any tool returned a proposal, stop the loop —
+				// otherwise the model spins trying to confirm via more
+				// XML calls. The proposal summary is built post-loop.
+				if hasProposal {
+					finalContent = ""
+					break
+				}
+				continue
+			}
 			finalContent = choice.Message.Content
 			break
 		}
@@ -374,10 +451,20 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// Add assistant message with tool_calls to context
+		// Add assistant message with tool_calls + reasoning to context.
+		// Reasoning models reject the next call when reasoning_content
+		// from the previous turn is not echoed back. Some upstreams also
+		// reject empty content with 'content is not set' — default to a
+		// space so the message validates.
+		assistantContent := choice.Message.Content
+		if assistantContent == "" {
+			assistantContent = " "
+		}
 		messages = append(messages, llmMessage{
-			Role:      "assistant",
-			ToolCalls: choice.Message.ToolCalls,
+			Role:             "assistant",
+			Content:          assistantContent,
+			ToolCalls:        choice.Message.ToolCalls,
+			ReasoningContent: choice.Message.ReasoningContent,
 		})
 
 		// Execute each tool and add results
@@ -400,9 +487,14 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// If a write tool returned a proposal, stop the loop and let LLM explain
+		// If a write tool returned a proposal, stop the loop — the
+		// proposal summary is rendered post-loop. Continuing here lets
+		// the model spin trying to call confirm_action which doesn't
+		// exist, eventually exhausting maxToolLoops or hitting upstream
+		// rate limits.
 		if hasProposal {
-			continue
+			finalContent = ""
+			break
 		}
 	}
 
@@ -602,7 +694,14 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 		"model":       model,
 		"messages":    messages,
 		"temperature": 0.3,
-		"max_tokens":  1200,
+		// Reasoning models (mimo / qwen-cot / etc) consume a chunk of
+		// the budget on hidden reasoning tokens before emitting visible
+		// content. With our enriched system prompt + tool list a 1200
+		// cap was running out mid-reasoning and yielding empty replies
+		// (finish_reason='length' with content=""). 4096 leaves room
+		// for reasoning + a useful answer; bump again if we add larger
+		// per-page context blocks.
+		"max_tokens":  4096,
 	}
 	if len(tools) > 0 {
 		body["tools"] = tools
@@ -632,10 +731,18 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 	if err != nil {
 		return nil, err
 	}
+	if a.logger != nil && len(respBody) > 0 {
+		preview := respBody
+		if len(preview) > 600 {
+			preview = preview[:600]
+		}
+		a.logger.Debug("llm response preview", "bytes", len(respBody), "head", string(preview))
+	}
 
 	// Parse SSE streaming response — accumulate chunks into final message
 	if bytes.Contains(respBody, []byte("data: ")) {
 		var finalContent strings.Builder
+		var finalReasoning strings.Builder
 		var toolCalls json.RawMessage
 		var finishReason string
 		var usage struct {
@@ -655,12 +762,14 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 			var parsed struct {
 				Choices []struct {
 					Delta struct {
-						Content   string          `json:"content"`
-						ToolCalls json.RawMessage `json:"tool_calls"`
+						Content          string          `json:"content"`
+						ReasoningContent string          `json:"reasoning_content"`
+						ToolCalls        json.RawMessage `json:"tool_calls"`
 					} `json:"delta"`
 					Message struct {
-						Content   string          `json:"content"`
-						ToolCalls json.RawMessage `json:"tool_calls"`
+						Content          string          `json:"content"`
+						ReasoningContent string          `json:"reasoning_content"`
+						ToolCalls        json.RawMessage `json:"tool_calls"`
 					} `json:"message"`
 					FinishReason string `json:"finish_reason"`
 				} `json:"choices"`
@@ -682,6 +791,12 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 				if c.Message.Content != "" {
 					finalContent.WriteString(c.Message.Content)
 				}
+				if c.Delta.ReasoningContent != "" {
+					finalReasoning.WriteString(c.Delta.ReasoningContent)
+				}
+				if c.Message.ReasoningContent != "" {
+					finalReasoning.WriteString(c.Message.ReasoningContent)
+				}
 				if len(c.Delta.ToolCalls) > 0 && string(c.Delta.ToolCalls) != "null" {
 					toolCalls = c.Delta.ToolCalls
 				}
@@ -700,21 +815,24 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 		return &llmResponse{
 			Choices: []struct {
 				Message struct {
-					Role      string          `json:"role"`
-					Content   string          `json:"content"`
-					ToolCalls json.RawMessage `json:"tool_calls"`
+					Role             string          `json:"role"`
+					Content          string          `json:"content"`
+					ReasoningContent string          `json:"reasoning_content"`
+					ToolCalls        json.RawMessage `json:"tool_calls"`
 				} `json:"message"`
 				FinishReason string `json:"finish_reason"`
 			}{
 				{
 					Message: struct {
-						Role      string          `json:"role"`
-						Content   string          `json:"content"`
-						ToolCalls json.RawMessage `json:"tool_calls"`
+						Role             string          `json:"role"`
+						Content          string          `json:"content"`
+						ReasoningContent string          `json:"reasoning_content"`
+						ToolCalls        json.RawMessage `json:"tool_calls"`
 					}{
-						Role:      "assistant",
-						Content:   finalContent.String(),
-						ToolCalls: toolCalls,
+						Role:             "assistant",
+						Content:          finalContent.String(),
+						ReasoningContent: finalReasoning.String(),
+						ToolCalls:        toolCalls,
 					},
 					FinishReason: finishReason,
 				},
@@ -975,4 +1093,85 @@ func (a *App) handleGetAISessionMessages(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"data": messages, "sessionId": sessionID})
+}
+
+// parseXMLToolCalls handles the XML-style tool-call format some
+// reasoning models emit inside content when they get confused about
+// schema. Shape:
+//
+//	<tool_call>
+//	  <function=create_question>
+//	    <parameter=examId>uuid-here</parameter>
+//	    <parameter=content>Apa ibukota...</parameter>
+//	    <parameter=options>[{"content":"Jakarta","isCorrect":true}]</parameter>
+//	  </function>
+//	</tool_call>
+//
+// We extract each <function=NAME> ... </function> block, collect its
+// <parameter=KEY>VALUE</parameter> pairs, and synthesise a real
+// llmToolCall the existing executor path can run. Returns nil when
+// no XML markers found.
+func parseXMLToolCalls(content string) []llmToolCall {
+	if !strings.Contains(content, "<tool_call>") || !strings.Contains(content, "<function=") {
+		return nil
+	}
+	var out []llmToolCall
+	idx := 0
+	for {
+		open := strings.Index(content[idx:], "<function=")
+		if open < 0 {
+			break
+		}
+		open += idx
+		nameEnd := strings.Index(content[open:], ">")
+		if nameEnd < 0 {
+			break
+		}
+		name := content[open+len("<function=") : open+nameEnd]
+		name = strings.TrimSpace(name)
+		close := strings.Index(content[open:], "</function>")
+		if close < 0 {
+			break
+		}
+		body := content[open+nameEnd+1 : open+close]
+		params := map[string]any{}
+		paramIdx := 0
+		for {
+			pOpen := strings.Index(body[paramIdx:], "<parameter=")
+			if pOpen < 0 {
+				break
+			}
+			pOpen += paramIdx
+			pNameEnd := strings.Index(body[pOpen:], ">")
+			if pNameEnd < 0 {
+				break
+			}
+			pName := strings.TrimSpace(body[pOpen+len("<parameter=") : pOpen+pNameEnd])
+			pClose := strings.Index(body[pOpen:], "</parameter>")
+			if pClose < 0 {
+				break
+			}
+			pVal := body[pOpen+pNameEnd+1 : pOpen+pClose]
+			pVal = strings.TrimSpace(pVal)
+			// Try parse as JSON (for arrays/objects/numbers/booleans),
+			// fall back to string for everything else.
+			var parsedVal any
+			if err := json.Unmarshal([]byte(pVal), &parsedVal); err == nil {
+				params[pName] = parsedVal
+			} else {
+				params[pName] = pVal
+			}
+			paramIdx = pOpen + pClose + len("</parameter>")
+		}
+		args, _ := json.Marshal(params)
+		call := llmToolCall{
+			ID:   fmt.Sprintf("xml_%d", len(out)),
+			Type: "function",
+		}
+		call.Function.Name = name
+		call.Function.Arguments = string(args)
+		out = append(out, call)
+		idx = open + close + len("</function>")
+	}
+	return out
 }

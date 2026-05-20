@@ -655,6 +655,18 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 	if p.ScoringMode == "" {
 		p.ScoringMode = "correct_all"
 	}
+	// Section is mandatory (migration 000017). When the LLM omits it,
+	// fall back to the exam's first section so the AI can author soal
+	// with just examId + content. Mirrors the auto-section behaviour
+	// the HTTP handler already provides on direct API calls.
+	if p.SectionID == "" {
+		_ = tx.QueryRowContext(ctx,
+			`SELECT id::text FROM exam_sections
+			  WHERE exam_id = $1 AND tenant_id = $2
+			  ORDER BY sort_order ASC, created_at ASC LIMIT 1`,
+			p.ExamID, tenantID,
+		).Scan(&p.SectionID)
+	}
 	points := 1.0
 	if p.Points != nil {
 		points = *p.Points

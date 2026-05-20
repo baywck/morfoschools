@@ -119,7 +119,7 @@ func (a *App) appendExamContext(
 			var sid, stitle string
 			var sord, qc int
 			if err := srows.Scan(&sid, &stitle, &sord, &qc); err == nil {
-				sections = append(sections, fmt.Sprintf("  - %q: %d soal", stitle, qc))
+				sections = append(sections, fmt.Sprintf("  - %q (id=%s): %d soal", stitle, sid, qc))
 				total += qc
 			}
 		}
@@ -152,7 +152,7 @@ func (a *App) appendExamContext(
 	// the model see what's already written so it doesn't propose
 	// duplicates. Cap at 30 to keep budget sane on big exams.
 	qrows, err := a.db.QueryContext(ctx, `
-		SELECT q.sort_order, q.question_type, q.points,
+		SELECT q.id::text, q.sort_order, q.question_type, q.points,
 		       LEFT(COALESCE(q.content,''), 120)
 		  FROM exam_questions q
 		 WHERE q.exam_id = $1 AND q.tenant_id = $2
@@ -164,17 +164,18 @@ func (a *App) appendExamContext(
 		defer qrows.Close()
 		var lines []string
 		for qrows.Next() {
+			var qid string
 			var ord int
 			var qt string
 			var pts float64
 			var content string
-			if err := qrows.Scan(&ord, &qt, &pts, &content); err == nil {
+			if err := qrows.Scan(&qid, &ord, &qt, &pts, &content); err == nil {
 				content = strings.TrimSpace(content)
 				if content == "" {
 					content = "(kosong)"
 				}
-				lines = append(lines, fmt.Sprintf("  #%d [%s, %.0fpt] %s",
-					ord+1, qt, pts, oneLine(content)))
+				lines = append(lines, fmt.Sprintf("  #%d (id=%s) [%s, %.0fpt] %s",
+					ord+1, qid, qt, pts, oneLine(content)))
 			}
 		}
 		if len(lines) > 0 {
