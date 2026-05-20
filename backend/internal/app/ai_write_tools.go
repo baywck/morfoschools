@@ -403,6 +403,28 @@ func (a *App) executeConfirmedAction(ctx context.Context, tenantID, userID, tool
 		return a.execArchiveStudent(ctx, tenantID, args)
 	case "assign_teacher_subject":
 		return a.execAssignTeacherSubject(ctx, tenantID, args)
+	case "create_exam":
+		return a.execCreateExam(ctx, tenantID, userID, args)
+	case "create_question":
+		return a.execCreateQuestion(ctx, tenantID, userID, args)
+	case "batch_create_questions":
+		return a.execBatchCreateQuestions(ctx, tenantID, userID, args)
+	case "create_blueprint_template":
+		return a.execCreateBlueprintTemplate(ctx, tenantID, userID, args)
+	case "add_blueprint_slot":
+		return a.execAddBlueprintSlot(ctx, tenantID, userID, args)
+	case "bulk_add_blueprint_slots":
+		return a.execBulkAddBlueprintSlots(ctx, tenantID, userID, args)
+	case "clone_blueprint_to_exam":
+		return a.execCloneBlueprintToExam(ctx, tenantID, userID, args)
+	case "generate_question_for_slot":
+		return a.execGenerateQuestionForSlot(ctx, tenantID, userID, args)
+	case "apply_blueprint_analysis":
+		return a.execApplyBlueprintAnalysis(ctx, tenantID, userID, args)
+	case "set_uses_kisi_kisi":
+		return a.execSetUsesKisiKisi(ctx, tenantID, userID, args)
+	case "convert_questions_to_kisi_kisi":
+		return a.execConvertQuestionsToKisiKisi(ctx, tenantID, userID, args)
 	default:
 		return "", fmt.Errorf("unknown action: %s", toolName)
 	}

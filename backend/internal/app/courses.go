@@ -129,8 +129,8 @@ func (a *App) handleCreateCourse(w http.ResponseWriter, r *http.Request) {
 	auth := AuthFromContext(r.Context())
 	var courseID string
 	err := a.db.QueryRowContext(r.Context(),
-		`INSERT INTO courses (tenant_id, title, description, subject_id, created_by, status)
-		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,'')::uuid, $5, 'draft') RETURNING id`,
+		`INSERT INTO courses (tenant_id, title, description, subject_id, created_by, owner_user_id, status)
+		 VALUES ($1, $2, NULLIF($3,''), NULLIF($4,'')::uuid, $5, $5, 'draft') RETURNING id`,
 		tenantID, req.Title, strings.TrimSpace(req.Description), req.SubjectID, auth.UserID,
 	).Scan(&courseID)
 	if err != nil {

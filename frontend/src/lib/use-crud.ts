@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/components/ui/toast";
 import type { ApiResponse } from "@/lib/api-client";
 
@@ -73,6 +73,22 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
   const { name, list, create, update, archive, restore } = options;
   const { toast } = useToast();
 
+  // Latch the list/create/update/archive/restore callbacks in refs so
+  // consumers can pass inline arrow props without triggering an infinite
+  // useEffect loop. Without this, every render rebuilds the function
+  // identity, reload's deps change, useEffect fires forever, setLoading
+  // re-renders, and the cycle repeats.
+  const listRef = useRef(list);
+  const createRef = useRef(create);
+  const updateRef = useRef(update);
+  const archiveRef = useRef(archive);
+  const restoreRef = useRef(restore);
+  useEffect(() => { listRef.current = list; }, [list]);
+  useEffect(() => { createRef.current = create; }, [create]);
+  useEffect(() => { updateRef.current = update; }, [update]);
+  useEffect(() => { archiveRef.current = archive; }, [archive]);
+  useEffect(() => { restoreRef.current = restore; }, [restore]);
+
   // List state
   const [items, setItems] = useState<T[]>([]);
   const [total, setTotal] = useState(0);
@@ -105,16 +121,17 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
     });
   }, []);
 
-  // Load
+  // Load. Depends only on `search` because the list callback is read
+  // through a ref, so reload's identity is stable across renders.
   const reload = useCallback(async () => {
     setLoading(true);
-    const res = await list({ search: search || undefined });
+    const res = await listRef.current({ search: search || undefined });
     if (res.data) {
       setItems(res.data.data);
       setTotal(res.data.pagination.total);
     }
     setLoading(false);
-  }, [list, search]);
+  }, [search]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -127,10 +144,10 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
 
   // Create
   const handleCreate = useCallback(async (data: any): Promise<boolean> => {
-    if (!create) return false;
+    if (!createRef.current) return false;
     setFieldErrors({});
     setCreating(true);
-    const res = await create(data);
+    const res = await createRef.current(data);
     if (res.error) {
       if (res.error.fields) setFieldErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -143,14 +160,14 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
     reload();
     window.dispatchEvent(new Event("morfoschools:data-changed"));
     return true;
-  }, [create, name, toast, reload]);
+  }, [name, toast, reload]);
 
   // Edit
   const handleEdit = useCallback(async (id: string, data: any): Promise<boolean> => {
-    if (!update) return false;
+    if (!updateRef.current) return false;
     setFieldErrors({});
     setEditing(true);
-    const res = await update(id, data);
+    const res = await updateRef.current(id, data);
     if (res.error) {
       if (res.error.fields) setFieldErrors(res.error.fields);
       else toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -163,13 +180,13 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
     reload();
     window.dispatchEvent(new Event("morfoschools:data-changed"));
     return true;
-  }, [update, name, toast, reload]);
+  }, [name, toast, reload]);
 
   // Archive
   const handleArchive = useCallback(async (id: string): Promise<boolean> => {
-    if (!archive) return false;
+    if (!archiveRef.current) return false;
     setArchiving(true);
-    const res = await archive(id);
+    const res = await archiveRef.current(id);
     setArchiving(false);
     if (res.error) {
       toast({ tone: "error", title: "Failed", description: res.error.message });
@@ -180,13 +197,13 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
     reload();
     window.dispatchEvent(new Event("morfoschools:data-changed"));
     return true;
-  }, [archive, name, toast, reload]);
+  }, [name, toast, reload]);
 
   // Restore
   const handleRestore = useCallback(async (id: string): Promise<boolean> => {
-    if (!restore) return false;
+    if (!restoreRef.current) return false;
     setRestoring(true);
-    const res = await restore(id);
+    const res = await restoreRef.current(id);
     setRestoring(false);
     if (res.error) {
       // Backend returns a structured `fields` error when the original email
@@ -204,7 +221,7 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
     reload();
     window.dispatchEvent(new Event("morfoschools:data-changed"));
     return true;
-  }, [restore, name, toast, reload]);
+  }, [name, toast, reload]);
 
   return {
     items, total, loading, search, setSearch, reload,

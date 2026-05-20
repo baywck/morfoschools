@@ -45,6 +45,14 @@ func Run(ctx context.Context, db *sql.DB, logger *slog.Logger, migrationsFS fs.R
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
 
+		// Run pre-flight audit if this migration has one.
+		if preFlight, ok := preFlights[name]; ok {
+			logger.Info("running pre-flight audit", "name", name)
+			if err := preFlight(ctx, db); err != nil {
+				return fmt.Errorf("pre-flight failed for %s: %w", name, err)
+			}
+		}
+
 		logger.Info("applying migration", "name", name)
 		start := time.Now()
 

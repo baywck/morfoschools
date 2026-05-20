@@ -96,6 +96,8 @@ func DetectDomains(message string) []string {
 		"tenants":  {"tenant", "sekolah", "school", "institusi"},
 		"staff":    {"staff", "staf", "karyawan", "pegawai"},
 		"admin":    {"admin", "administrator", "pengguna", "user", "akun"},
+		"exams":      {"ujian", "exam", "tes", "test", "soal", "question", "kuis", "quiz", "nilai pasing", "essay", "pilihan ganda", "multiple choice", "true false", "benar salah"},
+		"blueprints": {"blueprint", "kisi", "kisi-kisi", "kisi kisi", "slot", "kompetensi", "competency", "akm", "literasi", "numerasi", "kurikulum k13", "kurikulum merdeka", "reverse", "analisis soal", "stimulus", "stimuli"},
 		"stats":    {"statistik", "jumlah", "berapa", "total", "count", "data", "info", "laporan"},
 	}
 

@@ -3,6 +3,7 @@
 import { AuthProvider, useAuth } from "@/lib/auth-provider";
 import { ThemeProvider } from "@/lib/use-theme";
 import { ToastProvider } from "@/components/ui/toast";
+import { PromptProvider } from "@/components/ui/prompt-dialog";
 import { AppShell } from "@/components/layout/app-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
@@ -14,10 +15,12 @@ import {
   GraduationCap,
   BookOpen,
   Briefcase,
-  Heart,
   CalendarRange,
   School2,
   FileText,
+  ClipboardCheck,
+  ClipboardList,
+  Library,
 } from "lucide-react";
 import type { NavItem } from "@/components/layout/sidebar";
 
@@ -65,6 +68,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           { label: "Staff", href: "/app/staff", icon: Briefcase },
           { label: "Programs", href: "/app/programs", icon: BookOpen },
           { label: "Courses", href: "/app/courses", icon: FileText },
+          { label: "Exams", href: "/app/exams", icon: ClipboardCheck },
+          { label: "Blueprints", href: "/app/blueprints", icon: ClipboardList },
+          { label: "Stimuli", href: "/app/stimuli", icon: Library },
         ]
       : []),
   ];
@@ -83,7 +89,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ThemeProvider>
       <AuthProvider>
         <ToastProvider>
-          <AppLayoutInner>{children}</AppLayoutInner>
+          <PromptProvider>
+            <AppLayoutInner>{children}</AppLayoutInner>
+          </PromptProvider>
         </ToastProvider>
       </AuthProvider>
     </ThemeProvider>

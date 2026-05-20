@@ -114,6 +114,29 @@ func errPermissionDenied(action string) string {
 	return te.JSON()
 }
 
+// errInvalidState signals a state-machine violation (e.g. trying to
+// publish an exam already published, or applying a blueprint to a
+// non-draft exam). Bot can't recover automatically — user must change
+// the resource state first.
+func errInvalidState(message string) string {
+	te := &ToolError{
+		Code:        "INVALID_STATE",
+		Message:     message,
+		Recoverable: false,
+	}
+	return te.JSON()
+}
+
+// errInternal wraps unexpected server-side failures.
+func errInternal(message string) string {
+	te := &ToolError{
+		Code:        "INTERNAL_ERROR",
+		Message:     message,
+		Recoverable: false,
+	}
+	return te.JSON()
+}
+
 func errWithSuggestions(entity, field, searchValue string, suggestions []string) string {
 	te := &ToolError{
 		Code:        "ENTITY_NOT_FOUND",

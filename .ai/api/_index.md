@@ -57,6 +57,29 @@
 | PATCH | /api/v1/courses/{id} | [courses](courses.md) | Update course |
 | PATCH | /api/v1/courses/{id}/archive | [courses](courses.md) | Archive course |
 | PATCH | /api/v1/courses/{id}/publish | [courses](courses.md) | Publish course |
+| GET | /api/v1/exams | [exams](exams.md) | List exams |
+| POST | /api/v1/exams | [exams](exams.md) | Create exam |
+| GET | /api/v1/exams/{id} | [exams](exams.md) | Get exam |
+| PATCH | /api/v1/exams/{id} | [exams](exams.md) | Update exam |
+| PATCH | /api/v1/exams/{id}/publish | [exams](exams.md) | Publish exam (gates: ≥1 question) |
+| PATCH | /api/v1/exams/{id}/archive | [exams](exams.md) | Archive exam |
+| PATCH | /api/v1/exams/{id}/restore | [exams](exams.md) | Restore archived exam to draft |
+| GET | /api/v1/exams/{id}/sections | [exams](exams.md) | List exam sections |
+| POST | /api/v1/exams/{id}/sections | [exams](exams.md) | Create exam section |
+| PATCH | /api/v1/exam-sections/{sectionId} | [exams](exams.md) | Update exam section |
+| DELETE | /api/v1/exam-sections/{sectionId} | [exams](exams.md) | Delete exam section |
+| GET | /api/v1/exams/{id}/questions | [exams](exams.md) | List questions |
+| POST | /api/v1/exams/{id}/questions | [exams](exams.md) | Create question (4 types, MCQ scoring modes) |
+| GET | /api/v1/questions/{questionId} | [exams](exams.md) | Get question |
+| PATCH | /api/v1/questions/{questionId} | [exams](exams.md) | Update question |
+| DELETE | /api/v1/questions/{questionId} | [exams](exams.md) | Delete question |
+| POST | /api/v1/questions/{questionId}/options | [exams](exams.md) | Add option |
+| PATCH | /api/v1/options/{optionId} | [exams](exams.md) | Update option |
+| DELETE | /api/v1/options/{optionId} | [exams](exams.md) | Delete option |
+| GET | /api/v1/exams/{id}/gates | [exams](exams.md) | List gate windows |
+| POST | /api/v1/exams/{id}/gates | [exams](exams.md) | Create gate window |
+| PATCH | /api/v1/exam-gates/{gateId} | [exams](exams.md) | Update gate window |
+| DELETE | /api/v1/exam-gates/{gateId} | [exams](exams.md) | Delete gate window |
 | GET | /api/v1/programs | [programs](programs.md) | List programs |
 | POST | /api/v1/programs | [programs](programs.md) | Create program |
 | PATCH | /api/v1/programs/{id} | [programs](programs.md) | Update program |
