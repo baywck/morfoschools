@@ -296,6 +296,49 @@ func dash(s string) string {
 	return s
 }
 
+// appendActiveDomains augments the keyword-derived domain list with
+// domains implied by the active page. The page is a much stronger
+// intent signal than message keywords — a teacher on /app/exams/{id}
+// who types "buatkan 10 soal tentang himpunan" should see exam tools
+// even if their message happens to lack a recognisable trigger word.
+//
+// Idempotent and safe to call with empty active map: returns the
+// input unchanged.
+func appendActiveDomains(domains []string, active map[string]string) []string {
+	if len(active) == 0 {
+		return domains
+	}
+	seen := make(map[string]bool, len(domains))
+	for _, d := range domains {
+		seen[d] = true
+	}
+	add := func(d string) {
+		if !seen[d] {
+			domains = append(domains, d)
+			seen[d] = true
+		}
+	}
+	if active["examId"] != "" {
+		add("exams")
+		// Authoring on an exam often touches blueprints + stimuli too.
+		add("blueprints")
+		add("stimuli")
+	}
+	if active["templateId"] != "" {
+		add("blueprints")
+	}
+	if active["courseId"] != "" {
+		add("courses")
+	}
+	if active["stimulusId"] != "" {
+		add("stimuli")
+	}
+	if active["programId"] != "" {
+		add("programs")
+	}
+	return domains
+}
+
 // oneLine collapses internal newlines + carriage returns to spaces and
 // trims runs of whitespace so a multi-line indikator fits on one
 // system-prompt row.

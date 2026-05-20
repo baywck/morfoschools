@@ -328,6 +328,13 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Detect relevant domains from user message
 	domains := DetectDomains(req.Message)
 
+	// Active-page domain inference (Phase 9.11). When the user is on a
+	// detail page, the page itself is a stronger signal than keywords.
+	// Force-include the matching domain so tools like create_question /
+	// batch_create_questions are exposed even when the user message
+	// doesn't contain the word "soal".
+	domains = appendActiveDomains(domains, req.Shadow.ActiveEntities)
+
 	// Get capabilities for detected domains + user permissions
 	tools := a.capRegistry.GetToolsForIntent(domains, auth.Permissions)
 
@@ -556,6 +563,9 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 		sb.WriteString("WAJIB: rujuk konteks di atas saat user minta diskusi/buat soal/edit. ")
 		sb.WriteString("JANGAN duplikasi soal/slot yang sudah ada. Saat user minta \"buatkan N soal tentang X\", ")
 		sb.WriteString("otomatis target ke exam yang sedang dibuka (examId di konteks) tanpa minta user menyebut ulang.\n")
+		sb.WriteString("PENTING: untuk membuat/mengedit soal, kamu HARUS memanggil tool yang tersedia (create_question, batch_create_questions, generate_question_for_slot). ")
+		sb.WriteString("JANGAN PERNAH menulis soal sebagai teks lalu meminta user copy-paste manual — kamu punya akses langsung ke sistem via tools. ")
+		sb.WriteString("Kalau tool gagal, baca error.recovery dan retry; jangan menyerah ke mode 'silakan input manual'.\n")
 	}
 
 	// User facts (compact)
