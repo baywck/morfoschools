@@ -253,12 +253,20 @@ func (a *App) authMiddleware(next http.Handler) http.Handler {
 
 		var auth AuthContext
 		var effectiveTenantID sql.NullString
+		// M-6: idle timeout. A session is valid only when it has not
+		// passed its absolute expires_at AND has been touched within the
+		// idle window. The window is generous (30 min) so casual UX is
+		// unaffected; a stolen token without active use is auto-expired.
+		const idleWindow = 30 * time.Minute
 		err = a.db.QueryRowContext(r.Context(),
 			`SELECT s.id, s.user_id, s.effective_tenant_id, u.email, u.display_name, u.is_platform_admin
 			 FROM sessions s
 			 JOIN users u ON u.id = s.user_id
-			 WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'`,
-			tokenHash,
+			 WHERE s.token_hash = $1
+			   AND s.expires_at > now()
+			   AND s.last_activity_at > now() - $2::interval
+			   AND u.status = 'active'`,
+			tokenHash, fmt.Sprintf("%d seconds", int(idleWindow.Seconds())),
 		).Scan(&auth.SessionID, &auth.UserID, &effectiveTenantID, &auth.Email, &auth.DisplayName, &auth.IsPlatformAdmin)
 		if err == sql.ErrNoRows {
 			writeErrorJSON(w, http.StatusUnauthorized, "session_expired", "Session expired or invalid", r)
@@ -273,6 +281,13 @@ func (a *App) authMiddleware(next http.Handler) http.Handler {
 		if effectiveTenantID.Valid {
 			auth.EffectiveTenantID = &effectiveTenantID.String
 		}
+
+		// Bump idle timer (best-effort, non-fatal). Done before role load
+		// so a slow role query still extends the session liveness window.
+		_, _ = a.db.ExecContext(r.Context(),
+			`UPDATE sessions SET last_activity_at = now() WHERE id = $1`,
+			auth.SessionID,
+		)
 
 		// Load roles and permissions. M-7: a load error here used to
 		// silently leave Permissions empty, which fails closed for
