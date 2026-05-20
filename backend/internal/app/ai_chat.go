@@ -161,8 +161,51 @@ type llmResponse struct {
 // handleShortReplyForProposals executes (affirm) or cancels (deny) all
 // matching pending proposals and writes a normal chat-style response. Returns
 // true when the request was fully handled and the caller should return.
+// authorizeConfirmedAction enforces, at execution time, the same
+// permission and tenant invariants that gated tool exposure when the
+// proposal was created. Critical because between proposal and
+// confirm:
+//   - the user's role/permissions may have been revoked
+//   - the user may have switched tenants
+// We re-check both before invoking the executor. Returns a non-nil
+// error with a stable code so callers can surface the right HTTP
+// status; an empty proposalTenantID means "no tenant scope on this
+// proposal" (rare; platform-level tools).
+func (a *App) authorizeConfirmedAction(auth *AuthContext, toolName, proposalTenantID string) (code string, err error) {
+	if auth == nil || auth.UserID == "" {
+		return "unauthorized", fmt.Errorf("not authenticated")
+	}
+	// Tenant must match the proposal's tenant. Platform admins may
+	// confirm any tenant's proposal as long as their effective tenant
+	// is set to that same tenant; we do not implicitly cross tenants.
+	effective := ""
+	if auth.EffectiveTenantID != nil {
+		effective = *auth.EffectiveTenantID
+	}
+	if proposalTenantID != "" && proposalTenantID != effective {
+		return "tenant_mismatch", fmt.Errorf("proposal belongs to a different tenant")
+	}
+	// Re-check permission gate. Capability registry is the source of
+	// truth for what each tool requires.
+	if a.capRegistry != nil {
+		if perm, ok := a.capRegistry.RequiredPermissionFor(toolName); ok && perm != "" {
+			has := false
+			for _, p := range auth.Permissions {
+				if p == perm {
+					has = true
+					break
+				}
+			}
+			if !has {
+				return "forbidden", fmt.Errorf("permission %s required for %s", perm, toolName)
+			}
+		}
+	}
+	return "", nil
+}
+
 func (a *App) handleShortReplyForProposals(
-	w http.ResponseWriter, r *http.Request, sessionID, userID, intent string,
+	w http.ResponseWriter, r *http.Request, auth *AuthContext, sessionID, intent string,
 	pendings []struct {
 		ID       string
 		ToolName string
@@ -196,7 +239,20 @@ func (a *App) handleShortReplyForProposals(
 	var successes, failures []string
 	var lastErr string
 	for _, p := range pendings {
-		result, err := a.executeConfirmedAction(ctx, p.TenantID, userID, p.ToolName, p.ToolArgs)
+		// H-1 hardening: re-check permission + tenant ownership at
+		// execution time. The proposal carries the snapshot from when
+		// it was created; the user's role / effective tenant may have
+		// changed since then, and we must refuse to execute under
+		// stale authority.
+		if _, err := a.authorizeConfirmedAction(auth, p.ToolName, p.TenantID); err != nil {
+			a.logger.Warn("short-reply authorize failed", "tool", p.ToolName, "error", err)
+			failures = append(failures, p.Confirm)
+			lastErr = err.Error()
+			_, _ = a.db.ExecContext(ctx,
+				`UPDATE ai_pending_actions SET status = 'cancelled' WHERE id = $1`, p.ID)
+			continue
+		}
+		result, err := a.executeConfirmedAction(ctx, p.TenantID, auth.UserID, p.ToolName, p.ToolArgs)
 		if err != nil {
 			a.logger.Error("short-reply execute failed", "tool", p.ToolName, "error", err)
 			failures = append(failures, p.Confirm)
@@ -316,7 +372,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if intent := classifyShortReply(req.Message); intent != "" {
 		pendings := a.pendingProposalsForSession(r.Context(), sessionID, auth.UserID)
 		if len(pendings) > 0 {
-			if a.handleShortReplyForProposals(w, r, sessionID, auth.UserID, intent, pendings) {
+			if a.handleShortReplyForProposals(w, r, auth, sessionID, intent, pendings) {
 				return
 			}
 		}
@@ -850,6 +906,23 @@ func (a *App) handleAIConfirm(w http.ResponseWriter, r *http.Request) {
 	if time.Now().After(expiresAt) {
 		_, _ = a.db.ExecContext(r.Context(), `UPDATE ai_pending_actions SET status = 'expired' WHERE id = $1`, req.ProposalID)
 		writeErrorJSON(w, http.StatusGone, "expired", "This action has expired. Please try again.", r)
+		return
+	}
+
+	// H-1 hardening: re-check permission + tenant ownership at
+	// execution time. Between proposal creation and confirm the
+	// caller's role may have been revoked, or they may have switched
+	// effective tenants — in either case the original proposal must
+	// not execute under stale authority.
+	if code, err := a.authorizeConfirmedAction(auth, toolName, tenantID); err != nil {
+		status := http.StatusForbidden
+		if code == "tenant_mismatch" {
+			status = http.StatusConflict
+		}
+		if code == "" {
+			code = "forbidden"
+		}
+		writeErrorJSON(w, status, code, err.Error(), r)
 		return
 	}
 

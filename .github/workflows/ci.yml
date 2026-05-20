@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**", "feature/**"]
+  pull_request:
+    branches: [main, "feat/**"]
+
+jobs:
+  unit:
+    name: Unit (no DB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - name: Build
+        working-directory: backend
+        run: go build ./...
+      - name: Vet
+        working-directory: backend
+        run: go vet ./...
+      - name: Test
+        working-directory: backend
+        run: go test ./...
+      - name: Govulncheck
+        working-directory: backend
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+      - name: Typecheck
+        working-directory: frontend
+        run: npx tsc --noEmit
+      - name: Audit (production deps)
+        working-directory: frontend
+        run: npm audit --omit=dev
+      - name: Build
+        working-directory: frontend
+        run: npx next build
+
+  integration:
+    name: Integration (DB-backed)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: morfoschools_test
+          POSTGRES_USER: morfoschools
+          POSTGRES_PASSWORD: ci-password-not-for-prod
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      INTEGRATION_DATABASE_URL: postgres://morfoschools:ci-password-not-for-prod@127.0.0.1:5432/morfoschools_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h 127.0.0.1 -p 5432 -U morfoschools && break
+            sleep 1
+          done
+      - name: Run integration tests
+        working-directory: backend
+        run: go test -tags integration ./internal/app/... -run "TestCollab|TestSecurity"

@@ -9,16 +9,22 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // Config holds application configuration.
 type Config struct {
-	Port    string
-	AppEnv  string
-	DBUrl   string
-	Valkey  string
-	NatsUrl string
+	Port           string
+	AppEnv         string
+	DBUrl          string
+	Valkey         string
+	NatsUrl        string
+	// AllowedOrigins lists exact origin URLs (scheme + host + port) the
+	// CORS middleware will accept credentialed requests from. Populated
+	// from ALLOWED_ORIGINS (comma-separated) at startup. Defaults to the
+	// dev frontend on localhost:1666 / 127.0.0.1:1666 when unset.
+	AllowedOrigins []string
 }
 
 // App is the main application container.
@@ -161,8 +167,8 @@ func (a *App) applyMiddleware(next http.Handler) http.Handler {
 	// Order: requestID → recovery → securityHeaders → cors → csrf → auth → handler
 	return requestIDMiddleware(
 		recoveryMiddleware(a.logger)(
-			securityHeadersMiddleware(
-				corsMiddleware(
+			securityHeadersMiddleware(a.cfg.AppEnv)(
+				corsMiddleware(a.cfg.AllowedOrigins)(
 					a.csrfMiddleware(
 						a.authMiddleware(next),
 					),
@@ -206,37 +212,68 @@ func recoveryMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-func securityHeadersMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		next.ServeHTTP(w, r)
-	})
+func securityHeadersMiddleware(appEnv string) func(http.Handler) http.Handler {
+	// Build CSP once at startup. The defaults below are intentionally
+	// conservative; relax per-route only when a feature genuinely needs
+	// it. 'unsafe-inline' on script/style is a Next.js / Tailwind
+	// requirement today — revisit when nonce-based CSP is wired through
+	// _document.
+	csp := strings.Join([]string{
+		"default-src 'self'",
+		"script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data: blob:",
+		"font-src 'self' data:",
+		"connect-src 'self'",
+		"frame-ancestors 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+	}, "; ")
+	isProduction := appEnv != "" && appEnv != "development" && appEnv != "test"
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			w.Header().Set("Content-Security-Policy", csp)
+			if isProduction {
+				// HSTS is dangerous to enable while serving over HTTP in dev,
+				// so we gate on APP_ENV. preload + 2-year max-age matches the
+				// hstspreload.org submission requirements.
+				w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	allowed := map[string]bool{
-		"http://localhost:1666":  true,
-		"http://127.0.0.1:1666": true,
+func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		if o == "" {
+			continue
+		}
+		allowed[o] = true
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if allowed[origin] {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Add("Vary", "Origin")
-		}
-		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, X-Tenant-ID, X-CSRF-Token")
-			w.Header().Set("Access-Control-Max-Age", "600")
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && allowed[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Add("Vary", "Origin")
+			}
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, X-Tenant-ID, X-CSRF-Token")
+				w.Header().Set("Access-Control-Max-Age", "600")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // --- Helpers ---

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -155,8 +156,8 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if req.Password == "" {
 		fields["password"] = "Password is required"
 	}
-	if len(req.Password) > 0 && len(req.Password) < 6 {
-		fields["password"] = "Password must be at least 6 characters"
+	if len(req.Password) > 0 && len(req.Password) < PasswordMinLength {
+		fields["password"] = fmt.Sprintf("Password must be at least %d characters", PasswordMinLength)
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
@@ -169,7 +170,7 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// Check email uniqueness
 	var exists bool
-	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`, req.Email).Scan(&exists)
+	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND status != 'archived')`, req.Email).Scan(&exists)
 	if exists {
 		writeValidationError(w, map[string]string{"email": "Email already in use"}, r)
 		return
@@ -300,7 +301,7 @@ func (a *App) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		// Check uniqueness
 		var emailTaken bool
-		_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND id != $2)`, email, userID).Scan(&emailTaken)
+		_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND id != $2 AND status != 'archived')`, email, userID).Scan(&emailTaken)
 		if emailTaken {
 			writeValidationError(w, map[string]string{"email": "Email already in use"}, r)
 			return
@@ -322,8 +323,8 @@ func (a *App) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password != nil {
 		password := *req.Password
-		if len(password) < 6 {
-			writeValidationError(w, map[string]string{"password": "Password must be at least 6 characters"}, r)
+		if len(password) < PasswordMinLength {
+			writeValidationError(w, map[string]string{"password": fmt.Sprintf("Password must be at least %d characters", PasswordMinLength)}, r)
 			return
 		}
 		hash := hashPassword(password)

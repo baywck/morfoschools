@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -53,9 +54,13 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rate limiting
+	// Rate limiting. M-3: limit by both IP and lower(email) so a
+	// single-account brute-force attack is bounded even if the attacker
+	// rotates source IPs. The in-memory limiter is per-replica; scaling
+	// past a single API instance requires moving this to Valkey —
+	// tracked as TODO in security-audit-2026-05-20.md.
 	ip := clientIP(r)
-	if !a.loginLimiter.allow(ip) {
+	if !a.loginLimiter.allow("ip:" + ip) {
 		writeErrorJSON(w, http.StatusTooManyRequests, "rate_limited", "Too many login attempts. Try again later.", r)
 		return
 	}
@@ -82,6 +87,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	normalizedEmail := strings.ToLower(strings.TrimSpace(req.Email))
+	// Per-account budget. Stricter than the IP cap so a single account
+	// can't be brute-forced even from a botnet of fresh IPs.
+	if !a.loginLimiter.allow("email:" + normalizedEmail) {
+		writeErrorJSON(w, http.StatusTooManyRequests, "rate_limited", "Too many login attempts. Try again later.", r)
+		return
+	}
+
 	// Find user
 	var userID, displayName, passwordHash string
 	var isPlatformAdmin bool
@@ -90,7 +103,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		 FROM users u
 		 JOIN password_credentials pc ON pc.user_id = u.id
 		 WHERE u.email = $1 AND u.status = 'active'`,
-		strings.ToLower(strings.TrimSpace(req.Email)),
+		normalizedEmail,
 	).Scan(&userID, &displayName, &isPlatformAdmin, &passwordHash)
 	if err == sql.ErrNoRows {
 		writeErrorJSON(w, http.StatusUnauthorized, "invalid_credentials", "Invalid email or password", r)
@@ -253,12 +266,20 @@ func (a *App) authMiddleware(next http.Handler) http.Handler {
 
 		var auth AuthContext
 		var effectiveTenantID sql.NullString
+		// M-6: idle timeout. A session is valid only when it has not
+		// passed its absolute expires_at AND has been touched within the
+		// idle window. The window is generous (30 min) so casual UX is
+		// unaffected; a stolen token without active use is auto-expired.
+		const idleWindow = 30 * time.Minute
 		err = a.db.QueryRowContext(r.Context(),
 			`SELECT s.id, s.user_id, s.effective_tenant_id, u.email, u.display_name, u.is_platform_admin
 			 FROM sessions s
 			 JOIN users u ON u.id = s.user_id
-			 WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'`,
-			tokenHash,
+			 WHERE s.token_hash = $1
+			   AND s.expires_at > now()
+			   AND s.last_activity_at > now() - $2::interval
+			   AND u.status = 'active'`,
+			tokenHash, fmt.Sprintf("%d seconds", int(idleWindow.Seconds())),
 		).Scan(&auth.SessionID, &auth.UserID, &effectiveTenantID, &auth.Email, &auth.DisplayName, &auth.IsPlatformAdmin)
 		if err == sql.ErrNoRows {
 			writeErrorJSON(w, http.StatusUnauthorized, "session_expired", "Session expired or invalid", r)
@@ -274,10 +295,23 @@ func (a *App) authMiddleware(next http.Handler) http.Handler {
 			auth.EffectiveTenantID = &effectiveTenantID.String
 		}
 
-		// Load roles and permissions
+		// Bump idle timer (best-effort, non-fatal). Done before role load
+		// so a slow role query still extends the session liveness window.
+		_, _ = a.db.ExecContext(r.Context(),
+			`UPDATE sessions SET last_activity_at = now() WHERE id = $1`,
+			auth.SessionID,
+		)
+
+		// Load roles and permissions. M-7: a load error here used to
+		// silently leave Permissions empty, which fails closed for
+		// permission-gated handlers but fails OPEN for any handler that
+		// gates on isPlatformAdmin (set above from users.is_platform_admin
+		// directly). Refuse the request instead.
 		auth.Roles, auth.Permissions, err = a.loadRolesAndPermissions(r.Context(), auth.UserID, auth.EffectiveTenantID)
 		if err != nil {
 			a.logger.Error("load roles failed", "error", err)
+			writeErrorJSON(w, http.StatusInternalServerError, "internal_error", "Could not load authorization context", r)
+			return
 		}
 
 		ctx := context.WithValue(r.Context(), ctxKeyAuth, &auth)
@@ -405,7 +439,9 @@ func hashSessionToken(token string) string {
 }
 
 func generateCSRFToken() string {
-	b := make([]byte, 16)
+	// L-3: bump from 128 to 256 bits to match the session token. Cheap
+	// upgrade; subtle.ConstantTimeCompare cost is constant in length.
+	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
@@ -433,6 +469,27 @@ func verifyPassword(password, hash string) bool {
 	return subtle.ConstantTimeCompare(computed, expectedHash) == 1
 }
 
+// PasswordMinLength is the enforced floor for new passwords across
+// every create/update path. Raised from 6 to 12 per H-4 of the
+// 2026-05-20 security audit (NIST SP 800-63B baseline + offline
+// brute-force margin).
+const PasswordMinLength = 12
+
+// validatePasswordPolicy returns a fields-style error map when the
+// candidate password fails the minimum policy. Empty map means
+// acceptable. Callers feed this into writeValidationError.
+func validatePasswordPolicy(field, password string) map[string]string {
+	out := map[string]string{}
+	if password == "" {
+		out[field] = "Password is required"
+		return out
+	}
+	if len(password) < PasswordMinLength {
+		out[field] = fmt.Sprintf("Password must be at least %d characters", PasswordMinLength)
+	}
+	return out
+}
+
 func hashPassword(password string) string {
 	salt := make([]byte, 16)
 	_, _ = rand.Read(salt)
@@ -444,18 +501,48 @@ func hashPassword(password string) string {
 }
 
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
+	// M-3: X-Forwarded-For is only trusted when the request comes from
+	// a known reverse proxy. Without that gate, any attacker can spoof
+	// the header to evade IP-based rate limiting. We trust the header
+	// only when TRUSTED_PROXIES env lists the immediate peer.
+	if isTrustedProxy(r.RemoteAddr) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			return strings.TrimSpace(parts[0])
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
+		}
 	}
 	parts := strings.Split(r.RemoteAddr, ":")
 	if len(parts) > 0 {
 		return parts[0]
 	}
 	return r.RemoteAddr
+}
+
+// isTrustedProxy returns true when the immediate request peer is in
+// the comma-separated TRUSTED_PROXIES env var. Loopback (127.0.0.1)
+// is always trusted to keep dev workflows working through localhost.
+func isTrustedProxy(remoteAddr string) bool {
+	host := remoteAddr
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		host = host[:idx]
+	}
+	host = strings.Trim(host, "[]")
+	if host == "127.0.0.1" || host == "::1" || host == "localhost" {
+		return true
+	}
+	list := os.Getenv("TRUSTED_PROXIES")
+	if list == "" {
+		return false
+	}
+	for _, p := range strings.Split(list, ",") {
+		if strings.TrimSpace(p) == host {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Rate Limiter ---
@@ -534,7 +621,14 @@ func readJSON(r *http.Request, v any) error {
 	if r.Body == nil {
 		return fmt.Errorf("empty body")
 	}
+	// M-5: cap inbound payloads to keep a single large POST from
+	// monopolising memory and parser CPU. 1 MiB covers every legitimate
+	// path (longest is the rich-editor question content with embedded
+	// images base64-encoded; bumped via the per-handler override pattern
+	// when we add image upload). The middleware-level cap defends every
+	// JSON write endpoint without per-handler ceremony.
 	defer r.Body.Close()
-	dec := jsonDecoder(r.Body)
+	limited := http.MaxBytesReader(nil, r.Body, 1<<20) // 1 MiB
+	dec := jsonDecoder(limited)
 	return dec.Decode(v)
 }

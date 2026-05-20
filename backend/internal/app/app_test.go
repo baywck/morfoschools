@@ -7,7 +7,16 @@ import (
 )
 
 func newTestApp() *App {
-	a, _ := New(Config{Port: "8080", AppEnv: "test"}, nil, nil)
+	a, _ := New(Config{
+		Port:   "8080",
+		AppEnv: "test",
+		// Tests assert that http://localhost:1666 is whitelisted; mirror
+		// the dev fallback list so the assertions don't depend on env.
+		AllowedOrigins: []string{
+			"http://localhost:1666",
+			"http://127.0.0.1:1666",
+		},
+	}, nil, nil)
 	return a
 }
 
