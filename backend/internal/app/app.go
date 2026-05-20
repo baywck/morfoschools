@@ -14,11 +14,16 @@ import (
 
 // Config holds application configuration.
 type Config struct {
-	Port    string
-	AppEnv  string
-	DBUrl   string
-	Valkey  string
-	NatsUrl string
+	Port           string
+	AppEnv         string
+	DBUrl          string
+	Valkey         string
+	NatsUrl        string
+	// AllowedOrigins lists exact origin URLs (scheme + host + port) the
+	// CORS middleware will accept credentialed requests from. Populated
+	// from ALLOWED_ORIGINS (comma-separated) at startup. Defaults to the
+	// dev frontend on localhost:1666 / 127.0.0.1:1666 when unset.
+	AllowedOrigins []string
 }
 
 // App is the main application container.
@@ -162,7 +167,7 @@ func (a *App) applyMiddleware(next http.Handler) http.Handler {
 	return requestIDMiddleware(
 		recoveryMiddleware(a.logger)(
 			securityHeadersMiddleware(
-				corsMiddleware(
+				corsMiddleware(a.cfg.AllowedOrigins)(
 					a.csrfMiddleware(
 						a.authMiddleware(next),
 					),
@@ -216,27 +221,32 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	allowed := map[string]bool{
-		"http://localhost:1666":  true,
-		"http://127.0.0.1:1666": true,
+func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		if o == "" {
+			continue
+		}
+		allowed[o] = true
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if allowed[origin] {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Add("Vary", "Origin")
-		}
-		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, X-Tenant-ID, X-CSRF-Token")
-			w.Header().Set("Access-Control-Max-Age", "600")
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && allowed[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Add("Vary", "Origin")
+			}
+			if r.Method == http.MethodOptions {
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, X-Tenant-ID, X-CSRF-Token")
+				w.Header().Set("Access-Control-Max-Age", "600")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // --- Helpers ---
