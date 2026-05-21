@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { Bot, Loader2, SendHorizontal, Sparkles, X, GraduationCap, Plus, Paperclip, Image, FileCode, ChevronDown, Check, Zap, Brain } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -202,6 +202,67 @@ function renderInline(text: string): React.ReactNode {
 
 // --- Main Panel ---
 
+// MessageBubble is memoized so typing in the textarea (which only
+// changes the parent's `input` state) doesn't re-render every message
+// + re-parse markdown for each. With 20+ messages and complex
+// markdown rendering, the unmemoized version was the main source of
+// keystroke lag.
+const MessageBubble = memo(function MessageBubble({
+  msg,
+  index,
+  onConfirm,
+  onCancel,
+}: {
+  msg: ChatMessage;
+  index: number;
+  onConfirm: (proposalId: string, index: number) => void;
+  onCancel: (proposalId: string, index: number) => void;
+}) {
+  return (
+    <div className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
+      <div className={cn(
+        "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[12px] leading-relaxed",
+        msg.role === "user"
+          ? "rounded-tr-md bg-[var(--brand)] text-white"
+          : "rounded-tl-md bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[var(--shell-foreground)]"
+      )}>
+        <div className="whitespace-pre-wrap [&_strong]:font-semibold [&_em]:italic">
+          {renderMessageContent(msg.content)}
+        </div>
+        {msg.proposal && msg.proposalStatus === "pending" && (
+          <div className="mt-2.5 pt-2.5 border-t border-[var(--shell-input-border)]">
+            <p className="text-[11px] font-medium text-[var(--shell-muted)] mb-2">{msg.proposal.confirmationText}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onConfirm(msg.proposal!.proposalId, index)}
+                className="flex-1 h-7 rounded-lg bg-[var(--brand)] text-[11px] font-semibold text-white hover:opacity-90 active:scale-[0.97] transition-all"
+              >
+                Konfirmasi
+              </button>
+              <button
+                onClick={() => onCancel(msg.proposal!.proposalId, index)}
+                className="flex-1 h-7 rounded-lg bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[11px] font-medium text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        )}
+        {msg.proposalStatus === "confirmed" && (
+          <div className="mt-2 pt-2 border-t border-[var(--shell-input-border)]">
+            <span className="text-[10px] font-medium text-[var(--success)]">✓ Dikonfirmasi</span>
+          </div>
+        )}
+        {msg.proposalStatus === "cancelled" && (
+          <div className="mt-2 pt-2 border-t border-[var(--shell-input-border)]">
+            <span className="text-[10px] font-medium text-[var(--shell-muted)]">✗ Dibatalkan</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 const MAX_CONTEXT_MESSAGES = 8;
 const MAX_CONTEXT_CHARS = 6_000;
 
@@ -369,7 +430,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
     }
   }
 
-  async function handleConfirm(proposalId: string, msgIndex: number) {
+  const handleConfirm = useCallback(async (proposalId: string, msgIndex: number) => {
     try {
       const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
       const csrfToken = csrfMatch ? csrfMatch[1] : "";
@@ -387,22 +448,17 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
         return;
       }
 
-      // Update message status
       setMessages((curr) => curr.map((m, i) => i === msgIndex ? { ...m, proposalStatus: "confirmed" as const } : m));
-
-      // Add result message
       const resultMsg = data?.result?.message || "Aksi berhasil dieksekusi.";
       setMessages((curr) => [...curr, { role: "assistant", content: `✅ ${resultMsg}` }]);
-
-      // Refresh current page data
       router.refresh();
       window.dispatchEvent(new Event("morfoschools:data-changed"));
     } catch {
       setError("Gagal menghubungi server.");
     }
-  }
+  }, [router]);
 
-  async function handleCancel(proposalId: string, msgIndex: number) {
+  const handleCancel = useCallback(async (proposalId: string, msgIndex: number) => {
     try {
       const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
       const csrfToken = csrfMatch ? csrfMatch[1] : "";
@@ -418,7 +474,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
     } catch {
       setError("Gagal membatalkan aksi.");
     }
-  }
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -476,49 +532,13 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
 
         {/* Chat messages */}
         {messages.map((msg, i) => (
-          <div key={i} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
-            <div className={cn(
-              "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[12px] leading-relaxed",
-              msg.role === "user"
-                ? "rounded-tr-md bg-[var(--brand)] text-white"
-                : "rounded-tl-md bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[var(--shell-foreground)]"
-            )}>
-              <div className="whitespace-pre-wrap [&_strong]:font-semibold [&_em]:italic">
-                {renderMessageContent(msg.content)}
-              </div>
-
-              {/* Confirmation card */}
-              {msg.proposal && msg.proposalStatus === "pending" && (
-                <div className="mt-2.5 pt-2.5 border-t border-[var(--shell-input-border)]">
-                  <p className="text-[11px] font-medium text-[var(--shell-muted)] mb-2">{msg.proposal.confirmationText}</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleConfirm(msg.proposal!.proposalId, i)}
-                      className="flex-1 h-7 rounded-lg bg-[var(--brand)] text-[11px] font-semibold text-white hover:opacity-90 active:scale-[0.97] transition-all"
-                    >
-                      Konfirmasi
-                    </button>
-                    <button
-                      onClick={() => handleCancel(msg.proposal!.proposalId, i)}
-                      className="flex-1 h-7 rounded-lg bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[11px] font-medium text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
-                    >
-                      Batal
-                    </button>
-                  </div>
-                </div>
-              )}
-              {msg.proposalStatus === "confirmed" && (
-                <div className="mt-2 pt-2 border-t border-[var(--shell-input-border)]">
-                  <span className="text-[10px] font-medium text-[var(--success)]">✓ Dikonfirmasi</span>
-                </div>
-              )}
-              {msg.proposalStatus === "cancelled" && (
-                <div className="mt-2 pt-2 border-t border-[var(--shell-input-border)]">
-                  <span className="text-[10px] font-medium text-[var(--shell-muted)]">✗ Dibatalkan</span>
-                </div>
-              )}
-            </div>
-          </div>
+          <MessageBubble
+            key={i}
+            msg={msg}
+            index={i}
+            onConfirm={handleConfirm}
+            onCancel={handleCancel}
+          />
         ))}
 
         {isSending && (
