@@ -407,10 +407,12 @@ func (a *App) handleUpdateQuestionGroup(w http.ResponseWriter, r *http.Request) 
 	auth := AuthFromContext(r.Context())
 
 	var req struct {
-		SectionID  *string `json:"sectionId"`
-		StimulusID *string `json:"stimulusId"`
-		ResyncSnap bool    `json:"resyncSnapshot"`
-		SortOrder  *int    `json:"sortOrder"`
+		SectionID     *string `json:"sectionId"`
+		StimulusID    *string `json:"stimulusId"`
+		ResyncSnap    bool    `json:"resyncSnapshot"`
+		SortOrder     *int    `json:"sortOrder"`
+		TitleSnapshot *string `json:"titleSnapshot"`
+		BodySnapshot  *string `json:"bodySnapshot"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid request body", r)
@@ -495,7 +497,21 @@ func (a *App) handleUpdateQuestionGroup(w http.ResponseWriter, r *http.Request) 
 		add("stimulus_body_snapshot", body)
 	}
 
-	if len(args) == 0 && req.StimulusID == nil && req.SectionID == nil {
+	// Direct snapshot edit — lets the user edit the group's stimulus
+	// content inline without round-tripping through the master stimuli
+	// row. Snapshot model already isolates this from other groups that
+	// reference the same master row, so it's safe.
+	if req.TitleSnapshot != nil {
+		add("stimulus_title_snapshot", *req.TitleSnapshot)
+	}
+	if req.BodySnapshot != nil {
+		add("stimulus_body_snapshot", *req.BodySnapshot)
+		// If the user is writing inline body without a master stimulus,
+		// flip group_type to 'stimulus' so it shows the stimulus header.
+		parts = append(parts, "group_type = 'stimulus'")
+	}
+
+	if len(args) == 0 && req.StimulusID == nil && req.SectionID == nil && req.TitleSnapshot == nil && req.BodySnapshot == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"id": groupID, "status": "no_change"})
 		return
 	}

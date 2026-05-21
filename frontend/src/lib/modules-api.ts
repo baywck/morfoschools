@@ -841,6 +841,11 @@ export interface UpdateQuestionGroupPayload {
   stimulusId?: string;
   resyncSnapshot?: boolean;
   sortOrder?: number;
+  /** Inline edit of the group's stimulus snapshot. Updates only this
+   *  group's local copy; does not touch the master stimuli row, so
+   *  other groups referencing the same stimulus are unaffected. */
+  titleSnapshot?: string;
+  bodySnapshot?: string;
 }
 
 export function updateQuestionGroup(
