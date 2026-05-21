@@ -291,6 +291,30 @@ func summarizeToolResult(toolName, result string) string {
 // schema fields the model already saw at call time) is wasteful to
 // echo back — the model only needs the new resource IDs and a status
 // line to advance the plan.
+// isChitchat returns true when the message is a greeting, thanks,
+// or other short conversational filler that has zero chance of
+// needing tools. Lets us skip shipping the ~5000-token tool catalog
+// for these turns. Conservative — only matches very obvious patterns.
+func isChitchat(msg string) bool {
+	m := strings.TrimSpace(strings.ToLower(msg))
+	if len(m) > 40 {
+		return false
+	}
+	patterns := []string{
+		"halo", "hai", "hi ", "hello", "hei", "selamat pagi", "selamat siang",
+		"selamat sore", "selamat malam", "pagi", "siang", "sore", "malam",
+		"makasih", "terima kasih", "thanks", "thx", "oke", "ok", "sip",
+		"siapa kamu", "kamu siapa", "who are you", "apa kabar",
+		"test", "testing", "coba", "halo bot",
+	}
+	for _, p := range patterns {
+		if m == p || m == p+"." || m == p+"!" || m == p+"?" || strings.HasPrefix(m, p+" ") {
+			return true
+		}
+	}
+	return false
+}
+
 func compactToolResult(raw string) string {
 	var parsed map[string]any
 	if json.Unmarshal([]byte(raw), &parsed) != nil {
@@ -388,11 +412,19 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// detail page, the page itself is a stronger signal than keywords.
 	// Force-include the matching domain so tools like create_question /
 	// batch_create_questions are exposed even when the user message
-	// doesn't contain the word "soal".
-	domains = appendActiveDomains(domains, req.Shadow.ActiveEntities)
+	// doesn't contain the word "soal". Smart variant: only adds adjacent
+	// domains (blueprints/stimuli) when message hints at them.
+	domains = appendActiveDomainsForMessage(domains, req.Shadow.ActiveEntities, req.Message)
 
-	// Get capabilities for detected domains + user permissions
-	tools := a.capRegistry.GetToolsForIntent(domains, auth.Permissions)
+	// Chitchat fast-path: if message is a short greeting or meta
+	// question, ship NO tools at all. Saves ~5000 tokens per turn on
+	// every "halo", "makasih", "siapa kamu". The model can still
+	// answer normally; we just don't burn the catalog for messages
+	// that have zero chance of needing tools.
+	var tools []map[string]any
+	if !isChitchat(req.Message) {
+		tools = a.capRegistry.GetToolsForIntent(domains, auth.Permissions)
+	}
 
 	// LLM call loop (tool calls may require multiple rounds)
 	var finalContent string
@@ -1366,7 +1398,7 @@ func (a *App) runContinuationRound(
 		{Role: "system", Content: note},
 	}
 	domains := DetectDomains(req.Message)
-	domains = appendActiveDomains(domains, req.Shadow.ActiveEntities)
+	domains = appendActiveDomainsForMessage(domains, req.Shadow.ActiveEntities, req.Message)
 	tools := a.capRegistry.GetToolsForIntent(domains, auth.Permissions)
 
 	ctxWithSession := context.WithValue(ctx, ctxKeySessionID{}, sessionID)

@@ -304,8 +304,21 @@ func dash(s string) string {
 // even if their message happens to lack a recognisable trigger word.
 //
 // Idempotent and safe to call with empty active map: returns the
-// input unchanged.
+// input unchanged. Token-economy version: includes blueprint+stimuli
+// only when the message actually hints at those domains, since the
+// majority of exam-authoring requests don't need them.
 func appendActiveDomains(domains []string, active map[string]string) []string {
+	return appendActiveDomainsForMessage(domains, active, "")
+}
+
+// appendActiveDomainsForMessage is the smart variant: filters which
+// adjacent domains to include based on what the user message hints at.
+// On /app/exams/{id} we expose:
+//   - exams (always when examId active)
+//   - blueprints only if message mentions kisi/blueprint/slot/AKM/etc.
+//   - stimuli only if message mentions stimulus/passage/bacaan/teks
+// Reduces tool count from ~48 to ~28 on the typical "buat soal" flow.
+func appendActiveDomainsForMessage(domains []string, active map[string]string, msg string) []string {
 	if len(active) == 0 {
 		return domains
 	}
@@ -319,20 +332,38 @@ func appendActiveDomains(domains []string, active map[string]string) []string {
 			seen[d] = true
 		}
 	}
+	lower := strings.ToLower(msg)
+	hintsBlueprint := strings.Contains(lower, "kisi") || strings.Contains(lower, "blueprint") ||
+		strings.Contains(lower, "slot") || strings.Contains(lower, "akm") ||
+		strings.Contains(lower, "kompetensi") || strings.Contains(lower, "kompeten") ||
+		strings.Contains(lower, "template") || strings.Contains(lower, "reverse") ||
+		strings.Contains(lower, "analis")
+	hintsStimulus := strings.Contains(lower, "stimulus") || strings.Contains(lower, "stimuli") ||
+		strings.Contains(lower, "passage") || strings.Contains(lower, "bacaan") ||
+		strings.Contains(lower, "teks") || strings.Contains(lower, "wacana") ||
+		strings.Contains(lower, "kasus")
+
 	if active["examId"] != "" {
 		add("exams")
-		// Authoring on an exam often touches blueprints + stimuli too.
-		add("blueprints")
-		add("stimuli")
+		if hintsBlueprint {
+			add("blueprints")
+		}
+		if hintsStimulus {
+			add("stimuli")
+		}
 	}
 	if active["templateId"] != "" {
 		add("blueprints")
-		// Blueprint authoring often involves attaching stimulus +
-		// generating questions for slots, which live in exams + stimuli
-		// domains. Without these the AI can propose create_stimulus but
-		// not create_question_group / create_question on the same page.
-		add("exams")
-		add("stimuli")
+		// Blueprint authoring may involve creating questions/stimuli
+		// from slots; include those only when the message hints at it.
+		if strings.Contains(lower, "soal") || strings.Contains(lower, "question") ||
+			strings.Contains(lower, "isi") || strings.Contains(lower, "buat") ||
+			strings.Contains(lower, "generate") {
+			add("exams")
+		}
+		if hintsStimulus {
+			add("stimuli")
+		}
 	}
 	if active["courseId"] != "" {
 		add("courses")
