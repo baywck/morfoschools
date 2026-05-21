@@ -402,10 +402,19 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	ctxWithSession := context.WithValue(r.Context(), ctxKeySessionID{}, sessionID)
 
 	for i := 0; i < maxToolLoops; i++ {
-		// Keep tools available on every iteration; some reasoning models
-		// emit XML-style fake tool calls when the native tool list isn't
-		// re-offered. The iteration cap (maxToolLoops) bounds spinning.
-		llmResp, err := a.callLLM(ctxWithSession, messages, tools)
+		// Token economy: only ship the full tool list on iter 0. After
+		// the first round the model has either (a) emitted tool_calls
+		// and now just needs to summarise the result — no tools needed,
+		// or (b) said its piece in content and we're already breaking
+		// out of the loop. The tool list is dead weight on every call
+		// after iter 0. Multi-step plans are handled by emitting
+		// multiple tool_calls in ONE assistant message (system prompt
+		// instructs this) rather than chaining iterations.
+		iterTools := tools
+		if i >= 1 {
+			iterTools = nil
+		}
+		llmResp, err := a.callLLM(ctxWithSession, messages, iterTools)
 		if err != nil {
 			a.logger.Error("llm call failed", "error", err)
 			writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI service unavailable", r)
@@ -1345,11 +1354,17 @@ func (a *App) runContinuationRound(
 		`INSERT INTO ai_messages (session_id, role, content) VALUES ($1, 'assistant', $2)`,
 		sessionID, persistedHistory)
 
-	messages := a.assembleContext(ctx, sessionID, tenantID, auth, req)
-	// assembleContext only loads role IN ('user','assistant') from
-	// history — inject the continuation note as a fresh system message
-	// so it actually reaches the model on this round.
-	messages = append(messages, llmMessage{Role: "system", Content: note})
+	// Continuation context: build a MINIMAL message list rather than
+	// pulling 8 messages of history. The synthetic note already encodes
+	// what just happened (tools ran + IDs returned), and the system
+	// prompt + active-page block carry current state. Skipping history
+	// replay saves ~3-5k tokens per affirm.
+	systemPrompt := a.buildSystemPrompt(tenantID, auth, req)
+	messages := []llmMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: req.Message},
+		{Role: "system", Content: note},
+	}
 	domains := DetectDomains(req.Message)
 	domains = appendActiveDomains(domains, req.Shadow.ActiveEntities)
 	tools := a.capRegistry.GetToolsForIntent(domains, auth.Permissions)
