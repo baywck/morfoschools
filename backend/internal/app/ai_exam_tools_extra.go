@@ -86,9 +86,7 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 	// --- Create question group ---
 	reg.Register(Capability{
 		Name: "create_question_group",
-		Description: "Buat group soal di dalam satu section. Group bisa dipakai untuk " +
-			"mengelompokkan soal yang share satu stimulus (passage, gambar, kasus). " +
-			"Kalau stimulusId di-set, snapshot title+body diambil dari stimuli library.",
+		Description: "Create question group in section. CRITICAL: kalau user mau passage + soal yang merujuk passage, JANGAN pakai tool ini sendiri — pakai 'create_stimulus_block' yang atomic (stimulus + group + soal sekaligus). Tool ini hanya untuk group kosong (akan diisi soal manual nanti).",
 		Permission: "exams:write",
 		Risk:       "write",
 		Domain:     "exams",

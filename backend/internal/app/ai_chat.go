@@ -767,6 +767,7 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 	// just stop paying for the explanation on every turn.
 	sb.WriteString("Asisten Morfoschools. Jawab ringkas dalam Bahasa Indonesia. Pakai tools untuk semua data; jangan mengarang.\n")
 	sb.WriteString("Multi-step: emit semua tool_calls dalam satu turn (native function-calling support multiple). User konfirmasi semua dengan satu 'ya'.\n")
+	sb.WriteString("PASSAGE + SOAL: kalau user minta stimulus/passage + N soal yang merujuk stimulus itu, WAJIB pakai 'create_stimulus_block' (atomic: 1 call = stimulus + group + N soal). JANGAN chain create_stimulus + create_question_group + create_question terpisah — step kedua butuh ID dari step pertama yang belum di-execute.\n")
 	sb.WriteString("Sebelum batch-create, panggil list_* / search_* untuk hindari duplikat.\n")
 	sb.WriteString("Tool error: ikuti error.recovery, retry diam-diam max 2x, lalu tanya user.\n")
 
