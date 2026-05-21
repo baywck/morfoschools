@@ -202,6 +202,71 @@ function renderInline(text: string): React.ReactNode {
 
 // --- Main Panel ---
 
+// ScopeBadge displays which resource the AI conversation is
+// scoped to. Resolves a friendly label by hitting the matching
+// API endpoint (one call, cached in module scope per id). Falls
+// back to the scope key suffix when label fetch fails.
+const scopeLabelCache: Record<string, string> = {};
+
+function ScopeBadge({ scopeKey }: { scopeKey: string }) {
+  const [label, setLabel] = useState<string | null>(
+    scopeLabelCache[scopeKey] ?? null
+  );
+
+  useEffect(() => {
+    if (scopeKey === "global") {
+      setLabel(null);
+      return;
+    }
+    if (scopeLabelCache[scopeKey]) {
+      setLabel(scopeLabelCache[scopeKey]);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      const [kind, id] = scopeKey.split(":");
+      let endpoint = "";
+      if (kind === "exam") endpoint = `${API_BASE}/api/v1/exams/${id}`;
+      else if (kind === "blueprint") endpoint = `${API_BASE}/api/v1/blueprint-templates/${id}`;
+      if (!endpoint) return;
+      try {
+        const res = await fetch(endpoint, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const title: string | undefined = data?.title || data?.data?.title;
+        if (title && !cancelled) {
+          scopeLabelCache[scopeKey] = title;
+          setLabel(title);
+        }
+      } catch { /* ignore */ }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [scopeKey]);
+
+  if (scopeKey === "global") {
+    return (
+      <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] px-2.5 py-1.5">
+        <Sparkles className="h-3 w-3 text-[var(--brand)]" />
+        <span className="text-[10px] font-semibold text-[var(--shell-foreground)]">Mode Umum</span>
+        <span className="text-[9px] text-[var(--shell-muted)]">— percakapan untuk seluruh aplikasi</span>
+      </div>
+    );
+  }
+
+  const [kind] = scopeKey.split(":");
+  const kindLabel = kind === "exam" ? "Exam" : kind === "blueprint" ? "Blueprint" : kind;
+  const labelText = label ?? "—";
+
+  return (
+    <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-[var(--brand)]/10 border border-[var(--brand)]/30 px-2.5 py-1.5">
+      <GraduationCap className="h-3 w-3 text-[var(--brand)] shrink-0" />
+      <span className="text-[10px] font-bold text-[var(--brand)] uppercase tracking-wider shrink-0">{kindLabel}:</span>
+      <span className="text-[10px] font-medium text-[var(--shell-foreground)] truncate">{labelText}</span>
+    </div>
+  );
+}
+
 // MessageBubble is memoized so typing in the textarea (which only
 // changes the parent's `input` state) doesn't re-render every message
 // + re-parse markdown for each. With 20+ messages and complex
@@ -299,9 +364,18 @@ interface AiChatPanelProps {
 export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Scope key derived from current page. When user navigates between
+  // resources (exam A → exam B), this changes and triggers a session
+  // swap so the chat panel always shows the conversation for the
+  // resource currently in view.
+  const activeEntities = parseActiveEntities(pathname);
+  const scopeKey = deriveScopeKey(activeEntities);
+  const sessionStorageKey = `morfoschools-ai-session-${scopeKey}`;
+
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [sessionId, setSessionId] = useState<string | null>(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("morfoschools-ai-session");
+    if (typeof window !== "undefined") return localStorage.getItem(sessionStorageKey);
     return null;
   });
   const [input, setInput] = useState("");
@@ -309,21 +383,42 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const restoredRef = useRef(false);
+  const lastScopeRef = useRef<string>(scopeKey);
 
-  // Restore messages from session on mount
+  // Scope changed (user navigated to a different resource): reset
+  // the panel to that scope's conversation. Old messages stay in DB,
+  // we just stop showing them. Pulling the new scope's session id
+  // from localStorage so we can restore its history.
   useEffect(() => {
-    if (restoredRef.current || !sessionId) return;
-    restoredRef.current = true;
+    if (lastScopeRef.current === scopeKey) return;
+    lastScopeRef.current = scopeKey;
+    const stored = typeof window !== "undefined" ? localStorage.getItem(sessionStorageKey) : null;
+    setSessionId(stored);
+    setMessages(initialMessages);
+    setError(null);
+  }, [scopeKey, sessionStorageKey]);
+
+  // Restore messages from session whenever sessionId changes (mount
+  // OR scope swap above). Refetches even if same id was set, so a
+  // scope change with previous history shows that history.
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
     async function restore() {
       try {
         const res = await fetch(`${API_BASE}/api/v1/ai/sessions/${sessionId}/messages`, { credentials: "include" });
-        if (!res.ok) { setSessionId(null); localStorage.removeItem("morfoschools-ai-session"); return; }
+        if (!res.ok) {
+          if (!cancelled) {
+            setSessionId(null);
+            localStorage.removeItem(sessionStorageKey);
+          }
+          return;
+        }
         const data = await res.json();
+        if (cancelled) return;
         if (data?.data?.length > 0) {
           setMessages(data.data.map((m: any) => {
             let content = m.content;
-            // Parse JSON results into readable messages
             if (content.startsWith("{")) {
               try {
                 const parsed = JSON.parse(content);
@@ -336,11 +431,14 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
             }
             return { role: m.role, content };
           }));
+        } else {
+          setMessages(initialMessages);
         }
       } catch { /* ignore */ }
     }
     restore();
-  }, [sessionId]);
+    return () => { cancelled = true; };
+  }, [sessionId, sessionStorageKey]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -393,7 +491,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
 
       if (data.sessionId) {
         setSessionId(data.sessionId);
-        localStorage.setItem("morfoschools-ai-session", data.sessionId);
+        localStorage.setItem(sessionStorageKey, data.sessionId);
       }
 
       // Check if response contains a proposal (confirmation required)
@@ -506,6 +604,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
             <X size={14} />
           </button>
         </div>
+        <ScopeBadge scopeKey={scopeKey} />
       </div>
 
       {/* Messages */}
@@ -659,4 +758,16 @@ function parseActiveEntities(pathname: string): Record<string, string> {
     entities.view = after.join(":");
   }
   return entities;
+}
+
+// deriveScopeKey produces a stable session-scoping identifier from
+// active page entities. Mirrors the backend's deriveScopeKey: the
+// chat session is keyed per resource so navigating between exams
+// (or blueprints) loads the conversation specific to that resource
+// instead of leaking residue across resources. The 'global' bucket
+// catches the dashboard, list pages, and unrecognised routes.
+function deriveScopeKey(active: Record<string, string>): string {
+  if (active.examId) return `exam:${active.examId}`;
+  if (active.templateId) return `blueprint:${active.templateId}`;
+  return "global";
 }

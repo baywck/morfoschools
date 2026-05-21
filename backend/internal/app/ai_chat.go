@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -362,6 +363,84 @@ func (a *App) dispatchToolCall(ctx context.Context, tenantID, userID, name, args
 	return te.JSON()
 }
 
+// deriveScopeKey returns a stable scope identifier for the active
+// page, used to key AI chat sessions per resource. The backend
+// derives this from request shadow on every call — clients never
+// set it. Format:
+//   - 'exam:<uuid>'      when /app/exams/{id}
+//   - 'blueprint:<uuid>' when /app/blueprints/{id}
+//   - 'global'           everywhere else (dashboard, lists, etc.)
+//
+// The 'global' scope acts as the catch-all where general help and
+// cross-resource queries live.
+func deriveScopeKey(active map[string]string) string {
+	if id := active["examId"]; id != "" {
+		return "exam:" + id
+	}
+	if id := active["templateId"]; id != "" {
+		return "blueprint:" + id
+	}
+	return "global"
+}
+
+// resolveOrCreateSession finds the right ai_sessions row for this
+// (user, scope) tuple. Robustness rules:
+//  1. If client supplied a sessionId AND it matches this user + scope,
+//     reuse it. Trusts the client when scope agrees.
+//  2. If client supplied a sessionId but scope doesn't match, IGNORE it
+//     — the user navigated to a different resource since their last
+//     turn. Fall through to scope-based lookup.
+//  3. Look up the most recent session for this (user, scope). If found,
+//     reuse it (auto-resume).
+//  4. Otherwise create a new session with scope_key set.
+//
+// This is the single point where session identity is decided so the
+// rest of the handler doesn't need to think about scope.
+func (a *App) resolveOrCreateSession(ctx context.Context, suppliedID, tenantID, userID, scopeKey string) (string, error) {
+	if suppliedID != "" {
+		var existingScope sql.NullString
+		var ownerID string
+		err := a.db.QueryRowContext(ctx,
+			`SELECT user_id, scope_key FROM ai_sessions WHERE id = $1`,
+			suppliedID,
+		).Scan(&ownerID, &existingScope)
+		if err == nil && ownerID == userID {
+			if !existingScope.Valid {
+				_, _ = a.db.ExecContext(ctx,
+					`UPDATE ai_sessions SET scope_key = $1 WHERE id = $2`,
+					scopeKey, suppliedID)
+				return suppliedID, nil
+			}
+			if existingScope.String == scopeKey {
+				return suppliedID, nil
+			}
+			// Scope mismatch — fall through to scope-based lookup.
+		}
+	}
+
+	var foundID string
+	err := a.db.QueryRowContext(ctx,
+		`SELECT id FROM ai_sessions
+		  WHERE user_id = $1 AND scope_key = $2
+		  ORDER BY last_active_at DESC LIMIT 1`,
+		userID, scopeKey,
+	).Scan(&foundID)
+	if err == nil && foundID != "" {
+		return foundID, nil
+	}
+
+	var newID string
+	err = a.db.QueryRowContext(ctx,
+		`INSERT INTO ai_sessions (tenant_id, user_id, scope_key)
+		 VALUES (NULLIF($1,'')::uuid, $2, $3) RETURNING id`,
+		tenantID, userID, scopeKey,
+	).Scan(&newID)
+	if err != nil {
+		return "", err
+	}
+	return newID, nil
+}
+
 func compactToolResult(raw string) string {
 	var parsed map[string]any
 	if json.Unmarshal([]byte(raw), &parsed) != nil {
@@ -412,18 +491,18 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		tenantID = *auth.EffectiveTenantID
 	}
 
-	// Get or create session
-	sessionID := req.SessionID
-	if sessionID == "" {
-		err := a.db.QueryRowContext(r.Context(),
-			`INSERT INTO ai_sessions (tenant_id, user_id) VALUES (NULLIF($1,'')::uuid, $2) RETURNING id`,
-			tenantID, auth.UserID,
-		).Scan(&sessionID)
-		if err != nil {
-			a.logger.Error("create ai session failed", "error", err)
-			writeErrorJSON(w, http.StatusInternalServerError, "ai_error", "Could not create session", r)
-			return
-		}
+	// Derive scope key from active page (Phase 9.12). The scope locks
+	// the session to a specific resource so switching from /exams/A
+	// to /exams/B doesn't carry forward A's conversation state. The
+	// backend is the source of truth here — we ignore client-supplied
+	// sessionId if it doesn't match this scope.
+	scopeKey := deriveScopeKey(req.Shadow.ActiveEntities)
+
+	sessionID, err := a.resolveOrCreateSession(r.Context(), req.SessionID, tenantID, auth.UserID, scopeKey)
+	if err != nil {
+		a.logger.Error("resolve ai session failed", "error", err, "scope", scopeKey)
+		writeErrorJSON(w, http.StatusInternalServerError, "ai_error", "Could not create session", r)
+		return
 	}
 
 	// Store user message
@@ -1136,10 +1215,30 @@ func (a *App) handleListAISessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := a.db.QueryContext(r.Context(),
-		`SELECT id, COALESCE(title, ''), COALESCE(summary, ''), message_count, last_active_at FROM ai_sessions WHERE user_id = $1 ORDER BY last_active_at DESC LIMIT 20`,
-		auth.UserID,
+	// Optional ?scope=exam:<uuid>|blueprint:<uuid>|global filter so the
+	// chat panel can list only sessions relevant to the page the user
+	// is on. Empty scope = all of this user's sessions.
+	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
+
+	var (
+		rows *sql.Rows
+		err  error
 	)
+	if scope != "" {
+		rows, err = a.db.QueryContext(r.Context(),
+			`SELECT id, COALESCE(title, ''), COALESCE(summary, ''), message_count, last_active_at, COALESCE(scope_key,'')
+			   FROM ai_sessions
+			  WHERE user_id = $1 AND scope_key = $2
+			  ORDER BY last_active_at DESC LIMIT 20`,
+			auth.UserID, scope,
+		)
+	} else {
+		rows, err = a.db.QueryContext(r.Context(),
+			`SELECT id, COALESCE(title, ''), COALESCE(summary, ''), message_count, last_active_at, COALESCE(scope_key,'')
+			   FROM ai_sessions WHERE user_id = $1 ORDER BY last_active_at DESC LIMIT 20`,
+			auth.UserID,
+		)
+	}
 	if err != nil {
 		writeErrorJSON(w, http.StatusInternalServerError, "lookup_failed", "Could not load sessions", r)
 		return
@@ -1152,11 +1251,12 @@ func (a *App) handleListAISessions(w http.ResponseWriter, r *http.Request) {
 		Summary      string `json:"summary"`
 		MessageCount int    `json:"messageCount"`
 		LastActiveAt string `json:"lastActiveAt"`
+		ScopeKey     string `json:"scopeKey"`
 	}
 	var sessions []SessionRow
 	for rows.Next() {
 		var s SessionRow
-		if err := rows.Scan(&s.ID, &s.Title, &s.Summary, &s.MessageCount, &s.LastActiveAt); err == nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.Summary, &s.MessageCount, &s.LastActiveAt, &s.ScopeKey); err == nil {
 			sessions = append(sessions, s)
 		}
 	}
