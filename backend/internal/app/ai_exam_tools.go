@@ -343,10 +343,30 @@ func (a *App) capCreateQuestion(ctx context.Context, tenantID, userID string, ar
 	}
 
 	preview := p.Content
-	if len(preview) > 60 {
-		preview = preview[:57] + "..."
+	if len(preview) > 140 {
+		preview = preview[:140] + "…"
 	}
-	confirm := fmt.Sprintf("Tambah soal (%s) ke exam: \"%s\"", p.QuestionType, preview)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**Tambah soal [%s]**\n\n", p.QuestionType))
+	sb.WriteString("**❓ Pertanyaan:** ")
+	sb.WriteString(preview)
+	sb.WriteString("\n")
+	if p.QuestionType == "multiple_choice" && len(p.Options) > 0 {
+		sb.WriteString("**Pilihan:**\n")
+		for j, opt := range p.Options {
+			letter := string(rune('A' + j))
+			mark := ""
+			if opt.IsCorrect {
+				mark = " ✅"
+			}
+			oc := opt.Content
+			if len(oc) > 90 {
+				oc = oc[:90] + "…"
+			}
+			sb.WriteString(fmt.Sprintf("%s. %s%s\n", letter, oc, mark))
+		}
+	}
+	confirm := sb.String()
 
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
 	return a.createProposal(ctx, sessionID, tenantID, userID, "create_question", args, confirm)
@@ -440,7 +460,34 @@ func (a *App) capBatchCreateQuestions(ctx context.Context, tenantID, userID stri
 
 	// Create one proposal that wraps the entire batch. The executor splits
 	// it into N rows in one transaction.
-	preview := fmt.Sprintf("Tambah %d soal ke exam (semua tipe valid, tidak ada duplikat)", len(p.Questions))
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**Tambah %d soal ke exam**\n\n", len(p.Questions)))
+	for i, q := range p.Questions {
+		pts := 1.0
+		if q.Points != nil {
+			pts = *q.Points
+		}
+		content := q.Content
+		if len(content) > 140 {
+			content = content[:140] + "…"
+		}
+		sb.WriteString(fmt.Sprintf("%d. **[%s, %.0fpt]** %s\n", i+1, q.QuestionType, pts, content))
+		if q.QuestionType == "multiple_choice" && len(q.Options) > 0 {
+			for j, opt := range q.Options {
+				letter := string(rune('A' + j))
+				mark := ""
+				if opt.IsCorrect {
+					mark = " ✅"
+				}
+				oc := opt.Content
+				if len(oc) > 90 {
+					oc = oc[:90] + "…"
+				}
+				sb.WriteString(fmt.Sprintf("   %s. %s%s\n", letter, oc, mark))
+			}
+		}
+	}
+	preview := sb.String()
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
 	return a.createProposal(ctx, sessionID, tenantID, userID, "batch_create_questions", args, preview)
 }

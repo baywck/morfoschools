@@ -156,9 +156,27 @@ function renderMessageContent(content: string) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const listMatch = line.match(/^\s*(?:[-*•]|\d+[.)]) (.+)/);
+    const quoteMatch = line.match(/^>\s?(.*)$/);
 
     if (listMatch) {
       listItems.push(listMatch[1]);
+    } else if (quoteMatch) {
+      flushList();
+      // Group consecutive quote lines into a single blockquote.
+      const quoteLines: string[] = [quoteMatch[1]];
+      while (i + 1 < lines.length) {
+        const next = lines[i + 1].match(/^>\s?(.*)$/);
+        if (!next) break;
+        quoteLines.push(next[1]);
+        i++;
+      }
+      elements.push(
+        <blockquote key={`q-${i}`} className="my-1.5">
+          {quoteLines.map((q, qi) => (
+            <div key={qi}>{q.trim() === "" ? "\u00A0" : renderInline(q)}</div>
+          ))}
+        </blockquote>
+      );
     } else {
       flushList();
       if (line.trim() === "") {
@@ -299,7 +317,9 @@ const MessageBubble = memo(function MessageBubble({
         </div>
         {msg.proposal && msg.proposalStatus === "pending" && (
           <div className="mt-2.5 pt-2.5 border-t border-[var(--shell-input-border)]">
-            <p className="text-[11px] font-medium text-[var(--shell-muted)] mb-2">{msg.proposal.confirmationText}</p>
+            <div className="text-[11px] leading-relaxed text-[var(--shell-foreground)] mb-2.5 [&_strong]:font-semibold [&_em]:italic [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--brand)]/40 [&_blockquote]:pl-2 [&_blockquote]:my-1 [&_blockquote]:text-[var(--shell-muted)] space-y-1">
+              {renderMessageContent(msg.proposal.confirmationText)}
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={() => onConfirm(msg.proposal!.proposalId, index)}

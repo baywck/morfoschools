@@ -55,15 +55,77 @@ func (a *App) RegisterCompoundCapabilities(reg *CapabilityRegistry) {
 
 func (a *App) capCreateStimulusBlock(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	// Build a confirmation summary that previews the whole block.
 	var p struct {
-		ExamID    string                   `json:"examId"`
-		Stimulus  map[string]any           `json:"stimulus"`
-		Questions []map[string]interface{} `json:"questions"`
+		ExamID    string         `json:"examId"`
+		Stimulus  map[string]any `json:"stimulus"`
+		Questions []struct {
+			QuestionType string `json:"questionType"`
+			Content      string `json:"content"`
+			Points       *float64 `json:"points"`
+			Options      []struct {
+				Content   string `json:"content"`
+				IsCorrect bool   `json:"isCorrect"`
+			} `json:"options"`
+		} `json:"questions"`
 	}
 	_ = json.Unmarshal(args, &p)
+
+	// Build a rich confirmation that lets the user review the entire
+	// payload before committing. User-trust > brevity here — they're
+	// about to write 5+ database rows in a single 'ya'.
+	var sb strings.Builder
 	stimTitle, _ := p.Stimulus["title"].(string)
-	confirm := fmt.Sprintf("Buat stimulus %q + group + %d soal dalam satu transaksi.", stimTitle, len(p.Questions))
+	stimContent, _ := p.Stimulus["content"].(string)
+	if stimTitle == "" {
+		// Mirror executor auto-derive so the preview matches what will
+		// actually be inserted.
+		stimTitle = strings.SplitN(strings.TrimSpace(stimContent), "\n", 2)[0]
+		if len(stimTitle) > 80 {
+			stimTitle = stimTitle[:80] + "…"
+		}
+	}
+	sb.WriteString("**Stimulus + group + ")
+	sb.WriteString(fmt.Sprintf("%d soal dalam satu transaksi**\n\n", len(p.Questions)))
+	sb.WriteString("**📄 Stimulus:** ")
+	sb.WriteString(stimTitle)
+	sb.WriteString("\n")
+	if stimContent != "" {
+		preview := stimContent
+		if len(preview) > 280 {
+			preview = preview[:280] + "…"
+		}
+		sb.WriteString("> ")
+		sb.WriteString(strings.ReplaceAll(strings.TrimSpace(preview), "\n", "\n> "))
+		sb.WriteString("\n\n")
+	}
+	sb.WriteString("**❓ Soal:**\n")
+	for i, q := range p.Questions {
+		pts := 1.0
+		if q.Points != nil {
+			pts = *q.Points
+		}
+		content := q.Content
+		if len(content) > 140 {
+			content = content[:140] + "…"
+		}
+		sb.WriteString(fmt.Sprintf("%d. **[%s, %.0fpt]** %s\n", i+1, q.QuestionType, pts, content))
+		// For multiple_choice show options + mark correct
+		if q.QuestionType == "multiple_choice" && len(q.Options) > 0 {
+			for j, opt := range q.Options {
+				letter := string(rune('A' + j))
+				mark := ""
+				if opt.IsCorrect {
+					mark = " ✅"
+				}
+				oc := opt.Content
+				if len(oc) > 90 {
+					oc = oc[:90] + "…"
+				}
+				sb.WriteString(fmt.Sprintf("   %s. %s%s\n", letter, oc, mark))
+			}
+		}
+	}
+	confirm := sb.String()
 	return a.createProposal(ctx, sessionID, tenantID, userID, "create_stimulus_block", args, confirm)
 }
 
