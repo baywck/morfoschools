@@ -246,10 +246,11 @@ function ScopeBadge({ scopeKey }: { scopeKey: string }) {
 
   if (scopeKey === "global") {
     return (
-      <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] px-2.5 py-1.5">
-        <Sparkles className="h-3 w-3 text-[var(--brand)]" />
-        <span className="text-[10px] font-semibold text-[var(--shell-foreground)]">Mode Umum</span>
-        <span className="text-[9px] text-[var(--shell-muted)]">— percakapan untuk seluruh aplikasi</span>
+      <div className="mb-1.5 flex items-center gap-1.5 px-1">
+        <span className="inline-flex items-center gap-1 rounded-md bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--shell-muted)]">
+          <Sparkles className="h-2.5 w-2.5" />
+          Mode Umum
+        </span>
       </div>
     );
   }
@@ -259,10 +260,12 @@ function ScopeBadge({ scopeKey }: { scopeKey: string }) {
   const labelText = label ?? "—";
 
   return (
-    <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-[var(--brand)]/10 border border-[var(--brand)]/30 px-2.5 py-1.5">
-      <GraduationCap className="h-3 w-3 text-[var(--brand)] shrink-0" />
-      <span className="text-[10px] font-bold text-[var(--brand)] uppercase tracking-wider shrink-0">{kindLabel}:</span>
-      <span className="text-[10px] font-medium text-[var(--shell-foreground)] truncate">{labelText}</span>
+    <div className="mb-1.5 flex items-center gap-1.5 px-1">
+      <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-[var(--brand)]/10 border border-[var(--brand)]/30 px-1.5 py-0.5 text-[9px] font-medium text-[var(--brand)]">
+        <Paperclip className="h-2.5 w-2.5 shrink-0" />
+        <span className="font-bold uppercase tracking-wider shrink-0">{kindLabel}</span>
+        <span className="truncate max-w-[200px] text-[var(--shell-foreground)] font-medium">{labelText}</span>
+      </span>
     </div>
   );
 }
@@ -604,7 +607,6 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
             <X size={14} />
           </button>
         </div>
-        <ScopeBadge scopeKey={scopeKey} />
       </div>
 
       {/* Messages */}
@@ -662,6 +664,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
 
       {/* Input area */}
       <form onSubmit={handleSubmit} className="shrink-0 p-3 pt-0">
+        <ScopeBadge scopeKey={scopeKey} />
         <div className="rounded-xl bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] ring-0">
           <textarea
             ref={textareaRef}
