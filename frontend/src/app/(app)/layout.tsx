@@ -20,7 +20,6 @@ import {
   FileText,
   ClipboardCheck,
   ClipboardList,
-  Library,
 } from "lucide-react";
 import type { NavItem } from "@/components/layout/sidebar";
 
@@ -70,7 +69,11 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           { label: "Courses", href: "/app/courses", icon: FileText },
           { label: "Exams", href: "/app/exams", icon: ClipboardCheck },
           { label: "Blueprints", href: "/app/blueprints", icon: ClipboardList },
-          { label: "Stimuli", href: "/app/stimuli", icon: Library },
+          // Stimuli library hidden from sidebar (Opsi B). Stimuli
+          // are inline by default — each one bound to its group via
+          // exam_question_groups snapshots. Power users can still
+          // hit /app/stimuli directly to manage shared library, but
+          // 90% of authoring happens inline so we don't promote it.
         ]
       : []),
   ];

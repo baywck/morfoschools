@@ -45,7 +45,11 @@ export function StimulusPicker({
   title,
 }: StimulusPickerProps) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"library" | "new">("library");
+  // Default to inline 'Tulis baru' tab. Stimulus library is now an
+  // opt-in power-user feature (Opsi B): most teachers want a fresh
+  // stimulus per group rather than reusing one from a shared pool.
+  // Library tab still works for the cases that genuinely need it.
+  const [tab, setTab] = useState<"library" | "new">("new");
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<Stimulus[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,7 +121,7 @@ export function StimulusPicker({
     }
     setNewTitle("");
     setNewBody("");
-    setTab("library");
+    setTab("new");
     toast({ tone: "success", title: "Stimulus disimpan" });
   }
 
@@ -131,16 +135,16 @@ export function StimulusPicker({
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-[var(--border)] bg-[var(--accent)]/30 px-2 py-1.5">
         <TabButton
-          active={tab === "library"}
-          onClick={() => setTab("library")}
-          icon={<Search size={11} />}
-          label="Library"
-        />
-        <TabButton
           active={tab === "new"}
           onClick={() => setTab("new")}
           icon={<Sparkles size={11} />}
           label="Tulis baru"
+        />
+        <TabButton
+          active={tab === "library"}
+          onClick={() => setTab("library")}
+          icon={<Search size={11} />}
+          label="Dari library"
         />
         {value && onClear && (
           <button
