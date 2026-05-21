@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 )
 
 // AI Capabilities — auto-generated from API surface, grouped by domain
@@ -83,7 +85,25 @@ func (r *CapabilityRegistry) GetToolsForIntent(domains []string, permissions []s
 func (r *CapabilityRegistry) Execute(ctx context.Context, tenantID, userID, name, args string) (string, error) {
 	handler, ok := r.handlers[name]
 	if !ok {
-		return `{"error":"Unknown capability: ` + name + `"}`, nil
+		// Return a structured ToolError with a fuzzy-matched suggestion
+		// so the model can self-correct instead of giving up. Models
+		// occasionally hallucinate tool names (e.g. add_questions_to_exam
+		// when batch_create_questions is the real name).
+		suggestion := r.findSimilarToolName(name)
+		te := &ToolError{
+			Code:        "UNKNOWN_TOOL",
+			Message:     fmt.Sprintf("Tool '%s' tidak ada. Gunakan nama yang ada di tools list yang sudah disediakan.", name),
+			Field:       "tool_name",
+			Recoverable: true,
+		}
+		if suggestion != "" {
+			te.Suggestions = []string{suggestion}
+			te.Recovery = &RecoveryHint{
+				Tool: suggestion,
+				Hint: fmt.Sprintf("Maksud kamu '%s'? Retry pakai nama itu.", suggestion),
+			}
+		}
+		return te.JSON(), nil
 	}
 	result, err := handler(ctx, tenantID, userID, json.RawMessage(args))
 	if err != nil {
@@ -156,4 +176,41 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// findSimilarToolName returns the registered tool name that best
+// matches the given (likely hallucinated) name. Heuristic: shared
+// keyword tokens. Helps the model self-correct when it invents tool
+// names like 'add_questions_to_exam' when 'batch_create_questions'
+// is the real one.
+func (r *CapabilityRegistry) findSimilarToolName(name string) string {
+	if name == "" {
+		return ""
+	}
+	nameTokens := strings.Split(strings.ToLower(name), "_")
+	var best string
+	bestScore := 0
+	for toolName := range r.handlers {
+		ttokens := strings.Split(strings.ToLower(toolName), "_")
+		score := 0
+		for _, nt := range nameTokens {
+			for _, tt := range ttokens {
+				if nt == tt {
+					score += 2
+				} else if len(nt) > 3 && strings.HasPrefix(tt, nt) {
+					score++
+				} else if len(tt) > 3 && strings.HasPrefix(nt, tt) {
+					score++
+				}
+			}
+		}
+		if score > bestScore {
+			bestScore = score
+			best = toolName
+		}
+	}
+	if bestScore < 2 {
+		return ""
+	}
+	return best
 }

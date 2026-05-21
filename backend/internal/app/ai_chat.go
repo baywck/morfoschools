@@ -315,6 +315,39 @@ func isChitchat(msg string) bool {
 	return false
 }
 
+// dispatchToolCall is the single source of truth for executing a
+// tool call from the LLM. Tries capRegistry first, falls back to
+// toolRegistry. Crucially, when neither has the tool registered, it
+// returns a structured UNKNOWN_TOOL error with a fuzzy-matched
+// suggestion so the model can self-correct on the next iteration
+// instead of giving up. This catches reasoning-model hallucinations
+// like 'add_questions_to_exam' (real name: batch_create_questions).
+func (a *App) dispatchToolCall(ctx context.Context, tenantID, userID, name, argsJSON string) string {
+	if handler, ok := a.capRegistry.handlers[name]; ok {
+		result, _ := handler(ctx, tenantID, userID, json.RawMessage(argsJSON))
+		return result
+	}
+	if _, ok := a.toolRegistry.handlers[name]; ok {
+		oldResult, _ := a.toolRegistry.Execute(ctx, tenantID, userID, name, argsJSON)
+		return oldResult.Content
+	}
+	suggestion := a.capRegistry.findSimilarToolName(name)
+	te := &ToolError{
+		Code:        "UNKNOWN_TOOL",
+		Message:     "Tool '" + name + "' tidak terdaftar. Pakai nama tool yang ada di tools list yang sudah disediakan.",
+		Field:       "tool_name",
+		Recoverable: true,
+	}
+	if suggestion != "" {
+		te.Suggestions = []string{suggestion}
+		te.Recovery = &RecoveryHint{
+			Tool: suggestion,
+			Hint: "Maksud kamu '" + suggestion + "'? Retry dengan nama itu.",
+		}
+	}
+	return te.JSON()
+}
+
 func compactToolResult(raw string) string {
 	var parsed map[string]any
 	if json.Unmarshal([]byte(raw), &parsed) != nil {
@@ -444,7 +477,19 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		// instructs this) rather than chaining iterations.
 		iterTools := tools
 		if i >= 1 {
+			// Default: drop tools to save tokens. EXCEPTION: when the
+			// most recent tool result was an error, keep them so the
+			// model can self-correct (retry with a different tool name
+			// or fixed args). Without this, hallucinated tool names
+			// like 'add_questions_to_exam' get a single-shot recovery
+			// hint but no way to actually retry.
 			iterTools = nil
+			if len(messages) > 0 {
+				last := messages[len(messages)-1]
+				if last.Role == "tool" && (strings.Contains(last.Content, `"error"`) || strings.Contains(last.Content, `UNKNOWN_TOOL`) || strings.Contains(last.Content, `VALIDATION_FAILED`)) {
+					iterTools = tools
+				}
+			}
 		}
 		llmResp, err := a.callLLM(ctxWithSession, messages, iterTools)
 		if err != nil {
@@ -506,13 +551,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 				})
 				hasProposal := false
 				for _, tc := range synth {
-					var resultContent string
-					if handler, ok := a.capRegistry.handlers[tc.Function.Name]; ok {
-						resultContent, _ = handler(ctxWithSession, tenantID, auth.UserID, json.RawMessage(tc.Function.Arguments))
-					} else {
-						oldResult, _ := a.toolRegistry.Execute(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
-						resultContent = oldResult.Content
-					}
+					resultContent := a.dispatchToolCall(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
 					messages = append(messages, llmMessage{
 						Role:       "tool",
 						Content:    resultContent,
@@ -561,13 +600,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		// Execute each tool and add results
 		var hasProposal bool
 		for _, tc := range toolCalls {
-			var resultContent string
-			if handler, ok := a.capRegistry.handlers[tc.Function.Name]; ok {
-				resultContent, _ = handler(ctxWithSession, tenantID, auth.UserID, json.RawMessage(tc.Function.Arguments))
-			} else {
-				oldResult, _ := a.toolRegistry.Execute(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
-				resultContent = oldResult.Content
-			}
+			resultContent := a.dispatchToolCall(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
 			messages = append(messages, llmMessage{
 				Role:       "tool",
 				Content:    resultContent,
@@ -1418,13 +1451,7 @@ func (a *App) runContinuationRound(
 				synthJSON, _ := json.Marshal(synth)
 				messages = append(messages, llmMessage{Role: "assistant", Content: " ", ToolCalls: synthJSON, ReasoningContent: choice.Message.ReasoningContent})
 				for _, tc := range synth {
-					var resultContent string
-					if handler, ok := a.capRegistry.handlers[tc.Function.Name]; ok {
-						resultContent, _ = handler(ctxWithSession, tenantID, auth.UserID, json.RawMessage(tc.Function.Arguments))
-					} else {
-						oldResult, _ := a.toolRegistry.Execute(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
-						resultContent = oldResult.Content
-					}
+					resultContent := a.dispatchToolCall(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
 					messages = append(messages, llmMessage{Role: "tool", Content: resultContent, ToolCallID: tc.ID})
 					if strings.Contains(resultContent, "confirmation_required") {
 						hadProposal = true
@@ -1449,13 +1476,7 @@ func (a *App) runContinuationRound(
 		}
 		messages = append(messages, llmMessage{Role: "assistant", Content: assistantContent, ToolCalls: choice.Message.ToolCalls, ReasoningContent: choice.Message.ReasoningContent})
 		for _, tc := range toolCalls {
-			var resultContent string
-			if handler, ok := a.capRegistry.handlers[tc.Function.Name]; ok {
-				resultContent, _ = handler(ctxWithSession, tenantID, auth.UserID, json.RawMessage(tc.Function.Arguments))
-			} else {
-				oldResult, _ := a.toolRegistry.Execute(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
-				resultContent = oldResult.Content
-			}
+			resultContent := a.dispatchToolCall(ctxWithSession, tenantID, auth.UserID, tc.Function.Name, tc.Function.Arguments)
 			messages = append(messages, llmMessage{Role: "tool", Content: resultContent, ToolCallID: tc.ID})
 			if strings.Contains(resultContent, "confirmation_required") {
 				hadProposal = true
