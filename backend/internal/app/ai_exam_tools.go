@@ -77,6 +77,9 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 		Parameters: json.RawMessage(`{"type":"object","properties":{
 			"examId":{"type":"string"},
 			"sectionId":{"type":"string"},
+			"groupId":{"type":"string","description":"opsional, masukkan soal ke group existing"},
+			"stimulusId":{"type":"string","description":"opsional, link soal ke stimulus library"},
+			"blueprintSlotId":{"type":"string","description":"opsional, link soal ke blueprint slot"},
 			"questionType":{"type":"string","enum":["multiple_choice","true_false","short_answer","essay"]},
 			"content":{"type":"string","description":"Pertanyaan / soal"},
 			"explanation":{"type":"string"},
@@ -96,7 +99,9 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 		Domain:      "exams",
 		Parameters: json.RawMessage(`{"type":"object","properties":{
 			"examId":{"type":"string"},
-			"sectionId":{"type":"string"},
+			"sectionId":{"type":"string","description":"default sectionId untuk semua soal kalau tidak di-set per-item"},
+			"groupId":{"type":"string","description":"default groupId untuk semua soal kalau tidak di-set per-item"},
+			"stimulusId":{"type":"string","description":"default stimulusId untuk semua soal"},
 			"questions":{"type":"array","items":{"type":"object","properties":{
 				"questionType":{"type":"string","enum":["multiple_choice","true_false","short_answer","essay"]},
 				"content":{"type":"string"},
@@ -104,6 +109,10 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 				"correctAnswer":{"type":"string"},
 				"points":{"type":"number"},
 				"scoringMode":{"type":"string"},
+				"sectionId":{"type":"string","description":"override per-item"},
+				"groupId":{"type":"string","description":"override per-item"},
+				"stimulusId":{"type":"string","description":"override per-item"},
+				"blueprintSlotId":{"type":"string"},
 				"options":{"type":"array","items":{"type":"object"}}
 			},"required":["questionType","content"]}}
 		},"required":["examId","questions"]}`),
@@ -522,13 +531,14 @@ func (a *App) execCreateQuestion(ctx context.Context, tenantID, userID string, a
 
 func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	var p struct {
-		ExamID    string            `json:"examId"`
-		SectionID string            `json:"sectionId"`
-		Questions []json.RawMessage `json:"questions"`
+		ExamID     string            `json:"examId"`
+		SectionID  string            `json:"sectionId"`
+		GroupID    string            `json:"groupId"`
+		StimulusID string            `json:"stimulusId"`
+		Questions  []json.RawMessage `json:"questions"`
 	}
 	_ = json.Unmarshal(args, &p)
 
-	// Execute-layer access check.
 	if denied := a.checkExamWriteAccess(ctx, tenantID, userID, p.ExamID); denied != "" {
 		return denied, nil
 	}
@@ -542,14 +552,18 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 	created := 0
 	createdIDs := make([]string, 0, len(p.Questions))
 	for _, qRaw := range p.Questions {
-		// Inject examId + sectionId into each question payload before
-		// reusing the single-question insertion helper. The bot supplies
-		// only the question fields; exam scoping comes from the batch.
 		var qm map[string]any
 		_ = json.Unmarshal(qRaw, &qm)
 		qm["examId"] = p.ExamID
-		if p.SectionID != "" {
+		// Per-item override wins; batch-level value is the default.
+		if _, ok := qm["sectionId"]; !ok && p.SectionID != "" {
 			qm["sectionId"] = p.SectionID
+		}
+		if _, ok := qm["groupId"]; !ok && p.GroupID != "" {
+			qm["groupId"] = p.GroupID
+		}
+		if _, ok := qm["stimulusId"]; !ok && p.StimulusID != "" {
+			qm["stimulusId"] = p.StimulusID
 		}
 		merged, _ := json.Marshal(qm)
 
@@ -638,6 +652,9 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 	var p struct {
 		ExamID          string           `json:"examId"`
 		SectionID       string           `json:"sectionId"`
+		GroupID         string           `json:"groupId"`
+		StimulusID      string           `json:"stimulusId"`
+		BlueprintSlotID string           `json:"blueprintSlotId"`
 		QuestionType    string           `json:"questionType"`
 		Content         string           `json:"content"`
 		Explanation     string           `json:"explanation"`
@@ -681,18 +698,52 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 	}
 	contentHash := hashContent(p.Content)
 
+	// If groupId provided but sectionId/examId are missing, resolve
+	// them from the group itself. NOTE: deliberately do NOT inherit
+	// stimulus_id from the group — DB constraint exam_questions_stimulus
+	// _xor_group_chk requires (stimulus_id IS NULL) OR (group_id IS NULL).
+	// When the soal lives in a group, the stimulus link is implicit
+	// via the group; the question's own stimulus_id must stay NULL.
+	if p.GroupID != "" {
+		var (
+			gExamID, gSectionID string
+		)
+		err := tx.QueryRowContext(ctx,
+			`SELECT exam_id::text, COALESCE(section_id::text, '')
+			   FROM exam_question_groups WHERE id = $1 AND tenant_id = $2`,
+			p.GroupID, tenantID,
+		).Scan(&gExamID, &gSectionID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return "", fmt.Errorf("group %s not found", p.GroupID)
+			}
+			return "", err
+		}
+		if p.ExamID == "" {
+			p.ExamID = gExamID
+		}
+		if p.SectionID == "" {
+			p.SectionID = gSectionID
+		}
+		// Force-clear stimulusId on the question when it's in a group.
+		p.StimulusID = ""
+	}
+
 	var id string
 	err := tx.QueryRowContext(ctx, `
 		INSERT INTO exam_questions (
-		    tenant_id, exam_id, section_id, question_type, content, explanation,
+		    tenant_id, exam_id, section_id, group_id, stimulus_id, blueprint_slot_id,
+		    question_type, content, explanation,
 		    correct_answer, rubric, points, sort_order, scoring_mode,
 		    wrong_penalty_pct, shuffle_options_override, content_hash, created_by
 		) VALUES (
-		    $1, $2, NULLIF($3,'')::uuid, $4, $5, NULLIF($6,''),
-		    NULLIF($7,''), NULLIF($8,'')::jsonb, $9, $10, $11,
-		    $12, $13, NULLIF($14,''), $15
+		    $1, $2, NULLIF($3,'')::uuid, NULLIF($4,'')::uuid, NULLIF($5,'')::uuid, NULLIF($6,'')::uuid,
+		    $7, $8, NULLIF($9,''),
+		    NULLIF($10,''), NULLIF($11,'')::jsonb, $12, $13, $14,
+		    $15, $16, NULLIF($17,''), $18
 		) RETURNING id`,
-		tenantID, p.ExamID, p.SectionID, p.QuestionType, p.Content, p.Explanation,
+		tenantID, p.ExamID, p.SectionID, p.GroupID, p.StimulusID, p.BlueprintSlotID,
+		p.QuestionType, p.Content, p.Explanation,
 		p.CorrectAnswer, string(p.Rubric), points, sortOrder, p.ScoringMode,
 		p.WrongPenaltyPct, p.ShuffleOpts, contentHash, userID,
 	).Scan(&id)

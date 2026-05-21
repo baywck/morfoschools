@@ -275,7 +275,21 @@ func (a *App) handleShortReplyForProposals(
 
 // summarizeToolResult extracts a short success message from a tool's JSON
 // result. Falls back to the raw result if the structure is unexpected.
+// summarizeToolResult extracts a short success message from a tool's JSON
+// result. Falls back to the raw result if the structure is unexpected.
+// IMPORTANT: detects error envelopes (ToolError shape) and returns the
+// error message instead of pretending success.
 func summarizeToolResult(toolName, result string) string {
+	// Error envelope check first — ToolError.JSON() shape: {"error": {...}}
+	var errEnv struct {
+		Error *struct {
+			Message string `json:"message"`
+			Code    string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result), &errEnv); err == nil && errEnv.Error != nil {
+		return "❌ " + errEnv.Error.Message
+	}
 	var parsed struct {
 		Message string `json:"message"`
 		Success bool   `json:"success"`

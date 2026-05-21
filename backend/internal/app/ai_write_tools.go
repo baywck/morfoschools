@@ -465,6 +465,8 @@ func (a *App) executeConfirmedAction(ctx context.Context, tenantID, userID, tool
 		return a.execAssignQuestionToSlot(ctx, tenantID, userID, args)
 	case "export_exam_to_template":
 		return a.execExportExamToTemplate(ctx, tenantID, userID, args)
+	case "create_stimulus_block":
+		return a.execCreateStimulusBlock(ctx, tenantID, userID, args)
 	default:
 		return "", fmt.Errorf("unknown action: %s", toolName)
 	}
