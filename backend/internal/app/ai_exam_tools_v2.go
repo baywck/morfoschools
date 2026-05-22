@@ -619,7 +619,76 @@ func (a *App) capDeleteExamSection(ctx context.Context, tenantID, userID string,
 
 func (a *App) capUpdateQuestionGroup(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "update_question_group", args, "Edit group soal.")
+
+	// Validate + build content-aware confirmation. Mirrors the
+	// capUpdateQuestion fix — 'Edit group soal.' alone is too vague
+	// when the user just generated stimulus content; they should see
+	// the title + body excerpt before clicking 'ya'.
+	var p struct {
+		GroupID       string  `json:"groupId"`
+		SectionID     *string `json:"sectionId"`
+		StimulusID    *string `json:"stimulusId"`
+		TitleSnapshot *string `json:"titleSnapshot"`
+		BodySnapshot  *string `json:"bodySnapshot"`
+		DisplayOrder  *int    `json:"displayOrder"`
+	}
+	_ = json.Unmarshal(args, &p)
+	if !isUUID(p.GroupID) {
+		return errInvalidUUID("groupId", p.GroupID, "group"), nil
+	}
+	hasField := p.SectionID != nil || p.StimulusID != nil ||
+		p.TitleSnapshot != nil || p.BodySnapshot != nil ||
+		p.DisplayOrder != nil
+	if !hasField {
+		b, _ := json.Marshal(map[string]any{
+			"error": map[string]any{
+				"code":        "INVALID_UPDATE",
+				"message":     "update_question_group butuh minimal satu field yang akan diubah (sectionId/stimulusId/titleSnapshot/bodySnapshot/displayOrder).",
+				"recoverable": true,
+				"recovery": map[string]any{
+					"hint": "Untuk set/refresh stimulus group, kirim titleSnapshot + bodySnapshot. Untuk pindah section, kirim sectionId.",
+				},
+			},
+		})
+		return string(b), nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("**Update group soal**\n")
+	if p.TitleSnapshot != nil {
+		title := *p.TitleSnapshot
+		if len(title) > 100 {
+			title = title[:100] + "…"
+		}
+		fmt.Fprintf(&sb, "\n**\U0001F4C4 Judul stimulus baru:** %s\n", title)
+	}
+	if p.BodySnapshot != nil {
+		body := *p.BodySnapshot
+		if len(body) > 400 {
+			body = body[:400] + "…"
+		}
+		sb.WriteString("\n**\U0001F4D6 Isi stimulus baru:**\n> ")
+		sb.WriteString(strings.ReplaceAll(strings.TrimSpace(body), "\n", "\n> "))
+		sb.WriteString("\n")
+	}
+	if p.StimulusID != nil {
+		if *p.StimulusID == "" {
+			sb.WriteString("\n**\u26A0 Stimulus dihapus** (link ke master stimulus dilepas; snapshot tetap kalau ada)\n")
+		} else {
+			fmt.Fprintf(&sb, "\n**\U0001F517 Link ke stimulus library:** %s\n", *p.StimulusID)
+		}
+	}
+	if p.SectionID != nil {
+		if *p.SectionID == "" {
+			sb.WriteString("\n**Pindah:** lepas dari section (jadi section-less)\n")
+		} else {
+			fmt.Fprintf(&sb, "\n**Pindah ke section:** %s\n", *p.SectionID)
+		}
+	}
+	if p.DisplayOrder != nil {
+		fmt.Fprintf(&sb, "\n**Urutan baru:** %d\n", *p.DisplayOrder+1)
+	}
+	return a.createProposal(ctx, sessionID, tenantID, userID, "update_question_group", args, sb.String())
 }
 
 func (a *App) capDeleteQuestionGroup(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
