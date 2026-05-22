@@ -207,7 +207,7 @@ const EXAM_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi dari semua soal",
     hint: "Extract KD/Materi/Indikator untuk seluruh soal",
-    prompt: "Untuk SETIAP soal di exam ini (lihat list di FOKUS / konteks aktif), rumuskan kisi-kisi:\n- competencyCode (KD code, mis: KD-3.5)\n- competencyDescription (1 kalimat)\n- materi (topik utama)\n- indikator (kata kerja operasional + objek + konteks)\n- cognitiveLevel (C1-C6 sesuai Bloom)\n- difficulty (mudah/sedang/sulit)\n\nLalu PAKAI apply_blueprint_analysis SEKALI dengan:\n- examId dari FOKUS\n- title: 'Kisi-Kisi (auto-extract)'\n- curriculumCode: 'merdeka' (atau 'k13' kalau lebih cocok)\n- replace: false (kalau exam belum punya blueprint) atau true (kalau sudah — replace existing)\n- acceptedSlots: array berisi entry untuk SETIAP questionId di exam, masing-masing dengan KD/competencyDescription/materi/indikator/cognitiveLevel/difficulty/questionType/points yang sesuai\n\nKalau exam punya >50 soal, batch list_questions dulu untuk lihat semua, lalu compose acceptedSlots. JANGAN pakai convert_questions_to_kisi_kisi (heuristic, tidak isi KD/Materi/Indikator).",
+    prompt: "Untuk setiap soal di exam ini, rumuskan kisi-kisi: competencyCode (mis: KD-3.5), competencyDescription (1 kalimat), materi, indikator, cognitiveLevel (C1-C6), difficulty (mudah/sedang/sulit). Lalu PAKAI apply_blueprint_analysis SEKALI dengan: examId dari konteks, title='Kisi-Kisi (auto)', curriculumCode='merdeka', replace=true, acceptedSlots=[entry tiap questionId dengan field di atas + questionType + points]. JANGAN pakai convert_questions_to_kisi_kisi.",
   },
   {
     label: "Tambah N soal random",

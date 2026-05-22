@@ -618,8 +618,8 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 			a.logger.Warn("llm returned empty content + no tools",
 				"loop", i, "finishReason", choice.FinishReason,
 				"tools_offered", len(tools), "messages", len(messages))
-			if choice.FinishReason == "length" {
-				finalContent = "Maaf, jawaban terpotong (token habis untuk reasoning). Coba pertanyaan yang lebih spesifik atau ringkas."
+			if choice.FinishReason == "length" || choice.FinishReason == "max_tokens" {
+				finalContent = "Maaf, model kehabisan budget reasoning sebelum sempat respons. Coba: (1) pertanyaan lebih spesifik / ringkas, (2) batasi scope (per-section atau per-group dulu, jangan exam-wide), atau (3) buka chat panel dan minta langsung secara bertahap."
 				break
 			}
 			writeErrorJSON(w, http.StatusBadGateway, "ai_error", "Empty AI response", r)
@@ -902,14 +902,16 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 		"model":       model,
 		"messages":    messages,
 		"temperature": 0.3,
-		// Reasoning models (mimo / qwen-cot / etc) consume a chunk of
-		// the budget on hidden reasoning tokens before emitting visible
-		// content. With our enriched system prompt + tool list a 1200
-		// cap was running out mid-reasoning and yielding empty replies
-		// (finish_reason='length' with content=""). 4096 leaves room
-		// for reasoning + a useful answer; bump again if we add larger
-		// per-page context blocks.
-		"max_tokens":  4096,
+		// Reasoning models (gemini-3 / mimo / qwen-cot / deepseek-r1)
+		// consume a chunk of the budget on hidden reasoning tokens before
+		// emitting visible content. Phase 9.16 exam-level prompts (e.g.
+		// 'Generate kisi-kisi dari semua soal') trigger long reasoning
+		// passes that burned all 4096 max_tokens on reasoning alone,
+		// leaving no budget for the actual tool_call payload (3933
+		// reasoning_tokens, 0 content). 8192 gives reasoning + tool
+		// arguments room to breathe; bump again only if we hit this on
+		// even larger compound prompts.
+		"max_tokens":  8192,
 	}
 	if len(tools) > 0 {
 		body["tools"] = tools
