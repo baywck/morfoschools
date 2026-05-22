@@ -518,6 +518,20 @@ export function QuestionAccordion({
             <Trash2 size={12} />
           </button>
         )}
+        {isDraft && canEdit && (
+          <InlineMagicPopover
+            entityKind="draft"
+            entityId={
+              defaultGroupId
+                ? `group:${defaultGroupId}`
+                : defaultSectionId
+                ? `section:${defaultSectionId}`
+                : ""
+            }
+            examId={examId}
+            className="shrink-0"
+          />
+        )}
         {isDraft && onCancelDraft && (
           <button
             type="button"

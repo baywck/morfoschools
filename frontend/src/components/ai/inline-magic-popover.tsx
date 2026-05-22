@@ -28,7 +28,7 @@ import { cn } from "@/lib/cn";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
-type EntityKind = "question" | "group" | "slot";
+type EntityKind = "question" | "group" | "slot" | "draft";
 
 interface Command {
   /** Display label in the command menu */
@@ -70,6 +70,16 @@ const QUESTION_COMMANDS: Command[] = [
     prompt: "Tambahkan opsi distractor (pengecoh) yang masuk akal untuk soal ini. Pakai update_question dengan options yang lebih banyak dan plausible. Hanya untuk multiple_choice.",
   },
   {
+    label: "Extract kisi-kisi",
+    hint: "Generate KD/Materi/Indikator dari soal ini",
+    prompt: "Analisis soal ini dan extract kisi-kisi yang sesuai: kompetensi dasar (KD), materi, indikator, level kognitif (C1-C6 / Bloom), dan tingkat kesulitan. Buat slot kisi-kisi baru di blueprint exam ini dengan metadata tersebut, lalu link soal ini ke slot tersebut. Pakai create_blueprint_slot + update_question (set blueprintSlotId).",
+  },
+  {
+    label: "Generate dari kisi-kisi slot",
+    hint: "Buat soal baru sesuai slot yang sudah terikat",
+    prompt: "Soal ini sudah terikat ke blueprint slot. Generate 1 soal varian baru yang sesuai dengan kisi-kisi slot tersebut (KD/Materi/Indikator/cognitive level/difficulty sama), tapi dengan konteks/angka/skenario berbeda. Pakai create_question dengan blueprintSlotId yang sama.",
+  },
+  {
     label: "Convert tipe",
     hint: "MCQ ↔ essay ↔ true/false",
     prompt: "",
@@ -104,6 +114,11 @@ const GROUP_COMMANDS: Command[] = [
     prompt: "Untuk setiap soal multiple_choice di group ini yang masih punya <4 opsi, tambahkan opsi distractor plausible. Pakai update_question per soal.",
   },
   {
+    label: "Generate kisi-kisi grup",
+    hint: "Extract kisi-kisi dari semua soal di group",
+    prompt: "Analisis semua soal di group ini, extract kisi-kisi (KD/Materi/Indikator/cognitive level/difficulty) yang merepresentasikan group ini, dan buat blueprint slot untuk tiap soal. Link tiap soal ke slot yang sesuai. Pakai create_blueprint_slot + update_question per soal.",
+  },
+  {
     label: "Custom…",
     hint: "Tulis instruksi bebas",
     prompt: "",
@@ -119,6 +134,18 @@ const SLOT_COMMANDS: Command[] = [
     prompt: "Buat 1 soal yang sesuai dengan kisi-kisi slot ini (KD, materi, indikator, cognitive level, difficulty). Pakai create_question dengan blueprintSlotId pointing ke slot ini.",
   },
   {
+    label: "Generate N varian",
+    hint: "Multiple soal serupa dengan kisi-kisi yang sama",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Berapa varian soal? (mis: 3)",
+  },
+  {
+    label: "Refine kisi-kisi",
+    hint: "Perbaiki redaksi indikator tanpa ubah cognitive level",
+    prompt: "Perbaiki redaksi indikator slot kisi-kisi ini agar lebih jelas dan operasional (kata kerja konkret sesuai cognitive level). Pertahankan KD, materi, dan cognitive level. Pakai update_blueprint_slot.",
+  },
+  {
     label: "Custom…",
     hint: "Tulis instruksi bebas",
     prompt: "",
@@ -127,10 +154,38 @@ const SLOT_COMMANDS: Command[] = [
   },
 ];
 
+const DRAFT_COMMANDS: Command[] = [
+  {
+    label: "Generate soal dari topik",
+    hint: "Tulis topik, AI buat soal lengkap",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Topik soal? (mis: konversi suhu Celcius ke Fahrenheit)",
+  },
+  {
+    label: "Soal acak sesuai exam",
+    hint: "AI pilih topik berdasarkan konteks exam",
+    prompt: "Buat 1 soal baru yang relevan dengan exam ini. Pilih topik yang BELUM pernah ditanyakan di soal existing (cek dulu pakai list_questions atau lihat konteks). Tipe + level kognitif menyesuaikan tema exam. Pakai create_question.",
+  },
+  {
+    label: "Buat dari kisi-kisi",
+    hint: "Pilih slot blueprint kosong + isi otomatis",
+    prompt: "Lihat slot blueprint yang masih kosong di exam ini. Pilih satu, lalu generate 1 soal sesuai kisi-kisi slot tersebut (KD/materi/indikator/cognitive level/difficulty). Pakai create_question dengan blueprintSlotId.",
+  },
+  {
+    label: "Custom…",
+    hint: "Tulis instruksi bebas",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Mau buat soal seperti apa?",
+  },
+];
+
 const COMMANDS_BY_KIND: Record<EntityKind, Command[]> = {
   question: QUESTION_COMMANDS,
   group: GROUP_COMMANDS,
   slot: SLOT_COMMANDS,
+  draft: DRAFT_COMMANDS,
 };
 
 export interface InlineMagicPopoverProps {
@@ -199,6 +254,16 @@ export function InlineMagicPopover({
       if (entityKind === "question") activeEntities.questionId = entityId;
       else if (entityKind === "group") activeEntities.groupId = entityId;
       else if (entityKind === "slot") activeEntities.slotId = entityId;
+      else if (entityKind === "draft") {
+        // Draft cards have no entity yet — entityId carries the
+        // sectionId or groupId scope hint instead. Format:
+        // "section:<uuid>" or "group:<uuid>".
+        if (entityId.startsWith("section:")) {
+          activeEntities.sectionId = entityId.slice("section:".length);
+        } else if (entityId.startsWith("group:")) {
+          activeEntities.groupId = entityId.slice("group:".length);
+        }
+      }
 
       const res = await fetch(`${API_BASE}/api/v1/ai/chat`, {
         method: "POST",
@@ -275,7 +340,7 @@ export function InlineMagicPopover({
           <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--accent)]/30 px-3 py-2">
             <Wand2 className="h-3.5 w-3.5 text-[var(--brand)]" />
             <h4 className="flex-1 text-[11.5px] font-semibold text-[var(--foreground)]">
-              AI assist {entityKind === "question" ? "soal" : entityKind === "group" ? "group" : "kisi-kisi"}
+              AI assist {entityKind === "question" ? "soal" : entityKind === "group" ? "group" : entityKind === "slot" ? "kisi-kisi" : "soal baru"}
             </h4>
             <button
               type="button"
