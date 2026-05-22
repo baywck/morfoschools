@@ -214,10 +214,11 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 		groupTitle = p.Stimulus.Title
 	}
 	var displayOrder int
-	_ = tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(display_order), -1) + 1 FROM exam_question_groups WHERE section_id = $1`,
-		p.SectionID,
-	).Scan(&displayOrder)
+	// Section-unified: account for both existing groups and standalone
+	// questions in this section so the new group appends after the
+	// last visible block on the canvas, not at a position that may
+	// collide with a standalone q's sort_order.
+	displayOrder = nextSectionPosition(ctx, tx, p.SectionID)
 	var groupID string
 	if err := tx.QueryRowContext(ctx, `
 		INSERT INTO exam_question_groups (

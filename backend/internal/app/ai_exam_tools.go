@@ -739,9 +739,10 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 	if p.SortOrder != nil {
 		sortOrder = *p.SortOrder
 	} else {
-		_ = tx.QueryRowContext(ctx,
-			`SELECT COALESCE(MAX(sort_order), -1) + 1 FROM exam_questions WHERE exam_id = $1`, p.ExamID,
-		).Scan(&sortOrder)
+		// Use the section-unified helper so new questions don't collide
+		// with existing groups' display_order in the same section, and
+		// in-group questions scope to their group instead of the exam.
+		sortOrder = resolveQuestionPosition(ctx, tx, p.ExamID, p.SectionID, p.GroupID)
 	}
 	contentHash := hashContent(p.Content)
 
@@ -774,6 +775,13 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 		}
 		// Force-clear stimulusId on the question when it's in a group.
 		p.StimulusID = ""
+		// Re-resolve position now that we know the group definitively
+		// (the earlier resolution may have used GroupID="" because the
+		// caller passed groupId AFTER computing position). Only override
+		// when caller didn't pin a sortOrder.
+		if p.SortOrder == nil {
+			sortOrder = nextGroupPosition(ctx, tx, p.GroupID)
+		}
 	}
 
 	var id string

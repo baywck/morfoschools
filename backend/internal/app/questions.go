@@ -566,9 +566,12 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 	if req.SortOrder != nil {
 		sortOrder = *req.SortOrder
 	} else {
-		_ = a.db.QueryRowContext(r.Context(),
-			`SELECT COALESCE(MAX(sort_order), -1) + 1 FROM exam_questions WHERE exam_id = $1`, examID,
-		).Scan(&sortOrder)
+		sortOrder = resolveQuestionPosition(
+			r.Context(), a.db,
+			examID,
+			ptrToString(req.SectionID),
+			ptrToString(req.GroupID),
+		)
 	}
 	contentHash := hashContent(req.Content)
 
@@ -1113,6 +1116,14 @@ func (a *App) handleCreateQuestionFromSlot(w http.ResponseWriter, r *http.Reques
 	_ = a.db.QueryRowContext(r.Context(),
 		`SELECT COALESCE(MAX(sort_order), -1) + 1 FROM exam_questions WHERE exam_id = $1`, examID,
 	).Scan(&sortOrder)
+
+	// Override with section-unified position so the new slot-bound
+	// question appends after the last existing block in its section
+	// (groups + standalones interleaved), not after the last question
+	// across the entire exam.
+	if req.SectionID != nil && *req.SectionID != "" {
+		sortOrder = nextSectionPosition(r.Context(), a.db, *req.SectionID)
+	}
 
 	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {

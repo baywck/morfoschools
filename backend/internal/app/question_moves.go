@@ -318,6 +318,12 @@ func (a *App) handleCreateQuestionGroup(w http.ResponseWriter, r *http.Request) 
 	displayOrder := 0
 	if req.SortOrder != nil {
 		displayOrder = *req.SortOrder
+	} else if req.SectionID != nil && *req.SectionID != "" {
+		// Section-unified: avoid colliding with standalone questions in
+		// the same section. Frontend canvas interleaves groups +
+		// standalones by their order field, so positions must be unique
+		// across both kinds.
+		displayOrder = nextSectionPosition(r.Context(), a.db, *req.SectionID)
 	} else {
 		_ = a.db.QueryRowContext(r.Context(),
 			`SELECT COALESCE(MAX(display_order), -1) + 1 FROM exam_question_groups WHERE exam_id = $1 AND tenant_id = $2`,
