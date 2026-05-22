@@ -271,56 +271,89 @@ export function GroupCard({
       </div>
 
       {/* Stimulus inline editor (collapsible). When the group body
-          is collapsed this is also hidden via the bodyOpen effect. */}
+          is collapsed this is also hidden via the bodyOpen effect.
+          Layout: header strip with title + library shortcut, body
+          stack with title + content + library opt-in, footer with
+          destructive-left / neutral-right action grouping. */}
       {stimulusOpen && canEdit && bodyOpen && (
-        <div className="space-y-3 border-b border-[var(--border)] bg-[var(--background)] p-3">
-          <InputField
-            label="Judul stimulus"
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-          />
-          <div>
-            <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              Isi stimulus
-            </label>
-            <RichEditor value={editBody} onChange={setEditBody} />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={saveToLibrary}
-              onChange={(e) => setSaveToLibrary(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]/40"
-            />
-            <span className="text-[11px] font-medium text-[var(--foreground)]">
-              Simpan juga ke library bersama
-            </span>
-            <span className="text-[10px] text-[var(--muted-foreground)]">
-              — bisa dipakai exam lain
-            </span>
-          </label>
-          <div className="flex items-center justify-between gap-2">
+        <div className="border-b border-[var(--border)] bg-[var(--background)]">
+          {/* Editor header */}
+          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--accent)]/30 px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <Layers size={12} className="text-[var(--brand)]" />
+              <h4 className="text-[12px] font-semibold text-[var(--foreground)]">
+                {group.stimulusId ? "Edit stimulus" : "Stimulus baru"}
+              </h4>
+            </div>
             <button
               type="button"
               onClick={() => setShowLibrary(true)}
-              className="text-[10.5px] font-medium text-[var(--muted-foreground)] hover:text-[var(--brand)] transition-colors"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-[10.5px] font-medium text-[var(--muted-foreground)] hover:border-[var(--brand)]/40 hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] transition-colors"
             >
-              Pilih dari library…
+              📚 Pilih dari library
             </button>
-            <div className="flex items-center gap-2">
+          </div>
+
+          {/* Editor body */}
+          <div className="space-y-4 px-4 py-4">
+            <InputField
+              label="Judul stimulus"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+            />
+            <div>
+              <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                Isi stimulus
+              </label>
+              <RichEditor value={editBody} onChange={setEditBody} />
+            </div>
+
+            {/* Library opt-in card */}
+            <label
+              className={cn(
+                "flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors select-none",
+                saveToLibrary
+                  ? "border-[var(--brand)]/40 bg-[var(--brand-soft)]/40"
+                  : "border-[var(--border)] bg-[var(--accent)]/20 hover:bg-[var(--accent)]/40",
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={saveToLibrary}
+                onChange={(e) => setSaveToLibrary(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] text-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/40"
+              />
+              <div className="flex-1">
+                <p className="text-[12px] font-semibold text-[var(--foreground)]">
+                  Simpan ke library bersama
+                </p>
+                <p className="mt-0.5 text-[10.5px] leading-relaxed text-[var(--muted-foreground)]">
+                  Stimulus ini bisa dipakai ulang di exam lain. Tanpa centang ini, stimulus tetap eksklusif untuk group ini.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Editor footer */}
+          <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--accent)]/20 px-4 py-2.5">
+            <div>
               {group.stimulusId && (
                 <button
                   type="button"
                   onClick={handleClearStimulus}
-                  className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--destructive-soft)] hover:text-[var(--destructive)] transition-colors"
+                  disabled={savingStim}
+                  className="inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--destructive-soft)] hover:text-[var(--destructive)] disabled:opacity-50 transition-colors"
                 >
+                  <Trash2 size={11} />
                   Hapus stimulus
                 </button>
               )}
+            </div>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setStimulusOpen(false)}
-                className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+                className="h-8 rounded-md px-3 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
               >
                 Batal
               </button>
@@ -328,13 +361,14 @@ export function GroupCard({
                 type="button"
                 onClick={handleSaveSnapshot}
                 disabled={savingStim}
-                className="flex h-8 items-center gap-1 rounded-md bg-[var(--brand)] px-3 text-[11px] font-semibold text-white hover:opacity-90 disabled:opacity-50 transition-all"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--brand)] px-3.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
                 {savingStim && <Loader2 size={11} className="animate-spin" />}
                 Simpan
               </button>
             </div>
           </div>
+
           {showLibrary && (
             <StimulusLibraryModal
               open={showLibrary}
