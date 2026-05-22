@@ -50,6 +50,15 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 	}, a.capListQuestions)
 
 	reg.Register(Capability{
+		Name:        "find_similar_questions",
+		Description: "Cari soal yang mirip dengan content kandidat di exam tertentu via trigram similarity. WAJIB dipanggil sebelum create_question/batch_create_questions kalau exam punya banyak soal existing, untuk menghindari paraphrase duplicate. threshold default 0.6 (paraphrase), 0.85 (probable dup), 0.95 (near-exact).",
+		Permission:  "exams:read",
+		Risk:        "read",
+		Domain:      "exams",
+		Parameters:  json.RawMessage(`{"type":"object","properties":{"examId":{"type":"string"},"content":{"type":"string"},"threshold":{"type":"number"}},"required":["examId","content"]}`),
+	}, a.capFindSimilarQuestions)
+
+	reg.Register(Capability{
 		Name:        "create_exam",
 		Description: "Create new exam. title required.",
 		Permission:  "exams:write",
@@ -269,6 +278,66 @@ func (a *App) capListQuestions(ctx context.Context, tenantID, userID string, arg
 	return string(b), nil
 }
 
+// capFindSimilarQuestions runs a trigram similarity scan over the
+// exam's existing questions and returns the top-K most similar ones
+// above the threshold. AI agents call this BEFORE proposing new
+// questions on exams that already have many soal, so paraphrase
+// duplicates are surfaced before the user even sees the proposal.
+//
+// threshold default 0.6 surfaces 'paraphrase' candidates; the model
+// can then decide to skip, regenerate, or proceed if the topic
+// genuinely warrants similar phrasing (e.g., variant problems on the
+// same operation).
+func (a *App) capFindSimilarQuestions(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
+	var p struct {
+		ExamID    string  `json:"examId"`
+		Content   string  `json:"content"`
+		Threshold float64 `json:"threshold"`
+	}
+	_ = json.Unmarshal(args, &p)
+	if p.ExamID == "" || !isUUID(p.ExamID) {
+		return errValidationFailed("examId", "Valid examId is required"), nil
+	}
+	if strings.TrimSpace(p.Content) == "" {
+		return errValidationFailed("content", "content is required"), nil
+	}
+	if p.Threshold <= 0 || p.Threshold > 1 {
+		p.Threshold = 0.6
+	}
+
+	// Tenant-scoped read access check.
+	auth := AuthContext{UserID: userID}
+	access, err := a.resolveExamAccess(ctx, tenantID, &auth, p.ExamID)
+	if err != nil || !access.CanRead {
+		return `{"error":"forbidden"}`, nil
+	}
+
+	normalized := normalizeQuestionContent(p.Content)
+	hits, err := findSimilarQuestionsTopK(ctx, a.db, p.ExamID, normalized, p.Threshold, 5)
+	if err != nil {
+		return `{"error":"similarity_failed"}`, nil
+	}
+
+	if hits == nil {
+		hits = []SimilarQuestionHit{}
+	}
+
+	// Truncate content per hit to keep token cost low; AI only needs
+	// stems to detect overlap, not full body.
+	for i := range hits {
+		if len(hits[i].Content) > 160 {
+			hits[i].Content = hits[i].Content[:160] + "…"
+		}
+	}
+
+	b, _ := json.Marshal(map[string]any{
+		"matches":      hits,
+		"threshold":    p.Threshold,
+		"interpretation": "sim>=0.95 near-exact, 0.85-0.95 probable dup, 0.6-0.85 paraphrase candidate",
+	})
+	return string(b), nil
+}
+
 // --- Write handlers (propose to ai_pending_actions) ---
 
 func (a *App) capCreateExam(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
@@ -340,6 +409,27 @@ func (a *App) capCreateQuestion(ctx context.Context, tenantID, userID string, ar
 
 	if dup := a.checkQuestionDuplicate(ctx, tenantID, p.ExamID, p.Content); dup != "" {
 		return dup, nil
+	}
+	// Fuzzy duplicate detection (Phase 9.13). Catches paraphrases that
+	// exact md5 hash misses. 0.85 threshold = probable dup.
+	if normalized := normalizeQuestionContent(p.Content); normalized != "" {
+		if _, existing, sim, ok := findSimilarQuestion(ctx, a.db, p.ExamID, normalized, 0.85); ok {
+			excerpt := existing
+			if len(excerpt) > 100 {
+				excerpt = excerpt[:100] + "…"
+			}
+			b, _ := json.Marshal(map[string]any{
+				"error": map[string]any{
+					"code":    "DUPLICATE_FUZZY",
+					"message": fmt.Sprintf("Soal mirip dengan yang sudah ada (similarity=%.2f). Existing: %q", sim, excerpt),
+					"recoverable": true,
+					"recovery": map[string]any{
+						"hint": "Ganti pendekatan: topik berbeda, level kognitif berbeda, stimulus berbeda, atau konfirmasi ke user kalau memang mau soal serupa (variant problem). Pakai find_similar_questions untuk lihat top match.",
+					},
+				},
+			})
+			return string(b), nil
+		}
 	}
 
 	preview := p.Content
@@ -438,6 +528,23 @@ func (a *App) capBatchCreateQuestions(ctx context.Context, tenantID, userID stri
 				Message: "Question with same text already exists in this exam",
 				Content: q.Content,
 			})
+			continue
+		}
+		// Fuzzy similarity check (Phase 9.13). pg_trgm catches paraphrase
+		// duplicates that exact md5 hash misses (e.g. "Apa ibu kota X" vs
+		// "Sebutkan ibu kota X"). Threshold 0.85 = probable duplicate.
+		if normalized := normalizeQuestionContent(q.Content); normalized != "" {
+			if _, existingContent, sim, ok := findSimilarQuestion(ctx, a.db, p.ExamID, normalized, 0.85); ok {
+				excerpt := existingContent
+				if len(excerpt) > 100 {
+					excerpt = excerpt[:100] + "…"
+				}
+				failures = append(failures, FailedItem{
+					Index: i, Code: "DUPLICATE_FUZZY",
+					Message: fmt.Sprintf("Mirip dengan soal existing (similarity=%.2f): %q. Ganti pendekatan/topik atau gunakan stimulus yang berbeda.", sim, excerpt),
+					Content: q.Content,
+				})
+			}
 		}
 	}
 
@@ -450,7 +557,7 @@ func (a *App) capBatchCreateQuestions(ctx context.Context, tenantID, userID stri
 				"message":     fmt.Sprintf("%d of %d questions invalid", len(failures), len(p.Questions)),
 				"recoverable": true,
 				"recovery": map[string]any{
-					"hint": "Untuk setiap entry di 'failures', perbaiki content/options sesuai message. Untuk DUPLICATE_ENTRY, panggil list_questions untuk lihat soal existing dan ganti content menjadi unik. Lalu retry batch_create_questions HANYA untuk soal yang lolos validasi (yang gagal harus diganti).",
+					"hint": "Untuk setiap entry di 'failures', perbaiki content/options sesuai message. Untuk DUPLICATE_ENTRY/DUPLICATE_FUZZY, panggil find_similar_questions atau list_questions untuk lihat soal existing dan ganti pendekatan (topik berbeda, level kognitif berbeda, stimulus berbeda). Lalu retry batch_create_questions HANYA untuk soal yang lolos validasi.",
 				},
 				"failures": failures,
 			},
@@ -790,17 +897,17 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 		    tenant_id, exam_id, section_id, group_id, stimulus_id, blueprint_slot_id,
 		    question_type, content, explanation,
 		    correct_answer, rubric, points, sort_order, scoring_mode,
-		    wrong_penalty_pct, shuffle_options_override, content_hash, created_by
+		    wrong_penalty_pct, shuffle_options_override, content_hash, content_normalized, created_by
 		) VALUES (
 		    $1, $2, NULLIF($3,'')::uuid, NULLIF($4,'')::uuid, NULLIF($5,'')::uuid, NULLIF($6,'')::uuid,
 		    $7, $8, NULLIF($9,''),
 		    NULLIF($10,''), NULLIF($11,'')::jsonb, $12, $13, $14,
-		    $15, $16, NULLIF($17,''), $18
+		    $15, $16, NULLIF($17,''), NULLIF($18,''), $19
 		) RETURNING id`,
 		tenantID, p.ExamID, p.SectionID, p.GroupID, p.StimulusID, p.BlueprintSlotID,
 		p.QuestionType, p.Content, p.Explanation,
 		p.CorrectAnswer, string(p.Rubric), points, sortOrder, p.ScoringMode,
-		p.WrongPenaltyPct, p.ShuffleOpts, contentHash, userID,
+		p.WrongPenaltyPct, p.ShuffleOpts, contentHash, normalizeQuestionContent(p.Content), userID,
 	).Scan(&id)
 	if err != nil {
 		return "", err

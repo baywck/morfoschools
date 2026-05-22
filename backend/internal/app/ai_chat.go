@@ -849,6 +849,7 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 	sb.WriteString("Multi-step: emit semua tool_calls dalam satu turn (native function-calling support multiple). User konfirmasi semua dengan satu 'ya'.\n")
 	sb.WriteString("PASSAGE + SOAL: kalau user minta stimulus/passage + N soal yang merujuk stimulus itu, WAJIB pakai 'create_stimulus_block' (atomic: 1 call = stimulus + group + N soal). JANGAN chain create_stimulus + create_question_group + create_question terpisah — step kedua butuh ID dari step pertama yang belum di-execute.\n")
 	sb.WriteString("Sebelum batch-create, panggil list_* / search_* untuk hindari duplikat.\n")
+	sb.WriteString("DUPLICATE GUARD: di exam dengan >=5 soal existing, WAJIB panggil find_similar_questions(examId, content) SEBELUM tiap create_question/batch_create_questions. Kalau ada hasil sim>=0.85, ganti pendekatan (topik/level kognitif/stimulus berbeda) dan retry. Skip pre-check hanya kalau user eksplisit minta soal serupa (variant problem).\n")
 	sb.WriteString("Tool error: ikuti error.recovery, retry diam-diam max 2x, lalu tanya user.\n")
 
 	sb.WriteString(fmt.Sprintf("User: %s | %s", auth.DisplayName, strings.Join(auth.Roles, ",")))

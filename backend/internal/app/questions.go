@@ -119,12 +119,18 @@ type questionSlotRef struct {
 	FromTemplate bool `json:"fromTemplate"`
 }
 
-// hashContent normalizes question text before hashing: lowercase, trim, and
-// collapse internal whitespace. This makes the dedup robust against the most
-// common LLM variations ("  hello world  " vs "hello  world\n").
+// HashContent is the exported alias for tools that need it (e.g. the
+// one-shot normalize-questions cmd). Mirrors hashContent.
+func HashContent(s string) string { return hashContent(s) }
+
+// hashContent normalizes question text before hashing using
+// normalizeQuestionContent() (Phase 9.13). The normalize step strips
+// HTML, LaTeX wrappers, punctuation, polite prefixes, and collapses
+// whitespace so paraphrase duplicates collide on hash. The hash is
+// stored in content_hash; the same normalized form is also stored
+// in content_normalized for trigram similarity.
 func hashContent(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.Join(strings.Fields(s), " ")
+	s = normalizeQuestionContent(s)
 	if s == "" {
 		return ""
 	}
@@ -639,17 +645,17 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO exam_questions (
 		    tenant_id, exam_id, section_id, question_type, content, explanation,
 		    correct_answer, rubric, points, sort_order, scoring_mode,
-		    wrong_penalty_pct, shuffle_options_override, content_hash, created_by,
+		    wrong_penalty_pct, shuffle_options_override, content_hash, content_normalized, created_by,
 		    blueprint_slot_id, stimulus_id, group_id
 		) VALUES (
 		    $1, $2, NULLIF($3,'')::uuid, $4, $5, NULLIF($6,''),
 		    NULLIF($7,''), NULLIF($8,'')::jsonb, $9, $10, $11,
-		    $12, $13, NULLIF($14,''), $15,
-		    NULLIF($16,'')::uuid, NULLIF($17,'')::uuid, NULLIF($18,'')::uuid
+		    $12, $13, NULLIF($14,''), NULLIF($15,''), $16,
+		    NULLIF($17,'')::uuid, NULLIF($18,'')::uuid, NULLIF($19,'')::uuid
 		) RETURNING id`,
 		tenantID, examID, ptrToString(req.SectionID), req.QuestionType, req.Content, req.Explanation,
 		req.CorrectAnswer, string(req.Rubric), points, sortOrder, scoringMode,
-		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, auth.UserID,
+		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, normalizeQuestionContent(req.Content), auth.UserID,
 		slotIDForInsert,
 		ptrToString(req.StimulusID), ptrToString(req.GroupID),
 	).Scan(&id)
@@ -1147,16 +1153,16 @@ func (a *App) handleCreateQuestionFromSlot(w http.ResponseWriter, r *http.Reques
 		INSERT INTO exam_questions (
 		    tenant_id, exam_id, section_id, question_type, content, explanation,
 		    correct_answer, rubric, points, sort_order, scoring_mode,
-		    wrong_penalty_pct, shuffle_options_override, content_hash, created_by,
+		    wrong_penalty_pct, shuffle_options_override, content_hash, content_normalized, created_by,
 		    blueprint_slot_id
 		) VALUES (
 		    $1, $2, NULLIF($3,'')::uuid, $4, $5, NULLIF($6,''),
 		    NULLIF($7,''), NULLIF($8,'')::jsonb, $9, $10, $11,
-		    $12, $13, NULLIF($14,''), $15, $16
+		    $12, $13, NULLIF($14,''), NULLIF($15,''), $16, $17
 		) RETURNING id`,
 		tenantID, examID, ptrToString(req.SectionID), qType, req.Content, req.Explanation,
 		req.CorrectAnswer, string(req.Rubric), points, sortOrder, scoringMode,
-		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, auth.UserID,
+		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, normalizeQuestionContent(req.Content), auth.UserID,
 		req.SlotID,
 	).Scan(&id)
 	if err != nil {
@@ -1465,6 +1471,7 @@ func (a *App) handleUpdateQuestion(w http.ResponseWriter, r *http.Request) {
 	if req.Content != nil {
 		add("content", *req.Content)
 		add("content_hash", hashContent(*req.Content))
+		add("content_normalized", normalizeQuestionContent(*req.Content))
 	}
 	if req.Explanation != nil {
 		if *req.Explanation == "" {

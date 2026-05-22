@@ -150,14 +150,17 @@ func (a *App) appendExamContext(
 
 	// Existing question stems (truncated, with type + points). Lets
 	// the model see what's already written so it doesn't propose
-	// duplicates. Cap at 30 to keep budget sane on big exams.
+	// duplicates. Cap at 50 to support exams with many soal; preview
+	// trimmed to 60 chars to keep token budget tight (50 × 60 ≈ 3000
+	// chars system-prompt addition vs the prior 20 × 80 = 1600 —
+	// roughly 2x but model has full visibility).
 	qrows, err := a.db.QueryContext(ctx, `
 		SELECT q.id::text, q.sort_order, q.question_type, q.points,
-		       LEFT(COALESCE(q.content,''), 80)
+		       LEFT(COALESCE(q.content,''), 60)
 		  FROM exam_questions q
 		 WHERE q.exam_id = $1 AND q.tenant_id = $2
 		 ORDER BY q.sort_order
-		 LIMIT 20`,
+		 LIMIT 50`,
 		examID, tenantID,
 	)
 	if err == nil {
@@ -179,7 +182,11 @@ func (a *App) appendExamContext(
 			}
 		}
 		if len(lines) > 0 {
-			sb.WriteString("Soal yang sudah ada (jangan duplikasi):\n")
+			if len(lines) >= 50 {
+				sb.WriteString("Soal yang sudah ada (50 pertama — panggil find_similar_questions sebelum tambah soal baru):\n")
+			} else {
+				sb.WriteString("Soal yang sudah ada (jangan duplikasi; pakai find_similar_questions kalau ragu):\n")
+			}
 			for _, l := range lines {
 				sb.WriteString(l + "\n")
 			}
