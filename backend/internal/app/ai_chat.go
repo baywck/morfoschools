@@ -31,6 +31,9 @@ var affirmativeWords = map[string]bool{
 	"lanjut": true, "lanjutkan": true, "jalankan": true, "eksekusi": true,
 	"setuju": true, "konfirmasi": true, "benar": true, "betul": true,
 	"sip": true, "siap": true, "go": true, "do it": true, "proceed": true, "confirm": true,
+	"masukkan": true, "masukan": true, "simpan": true, "buat": true,
+	"tambahkan": true, "tambah": true, "submit": true, "create": true, "save": true,
+	"sikat": true, "gas": true, "ayo": true, "yoi": true, "yoy": true,
 }
 
 var negativeWords = map[string]bool{
@@ -851,6 +854,7 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 	sb.WriteString("Sebelum batch-create, panggil list_* / search_* untuk hindari duplikat.\n")
 	sb.WriteString("DUPLICATE GUARD: di exam dengan >=5 soal existing, WAJIB panggil find_similar_questions(examId, content) SEBELUM tiap create_question/batch_create_questions. Kalau ada hasil sim>=0.85, ganti pendekatan (topik/level kognitif/stimulus berbeda) dan retry. Skip pre-check hanya kalau user eksplisit minta soal serupa (variant problem).\n")
 	sb.WriteString("Tool error: ikuti error.recovery, retry diam-diam max 2x, lalu tanya user.\n")
+	sb.WriteString("JANGAN PERNAH bilang 'berhasil', 'sudah dibuat', 'sudah ditambahkan', atau bahasa konfirmasi serupa kalau kamu TIDAK memanggil tool yang menulis ke DB di turn ini. Kalau user bilang 'masukkan'/'simpan'/'ya'/'lanjut' dan kamu lihat ada proposal pending, JANGAN narasi sukses—harness sudah handle eksekusi otomatis.\n")
 
 	sb.WriteString(fmt.Sprintf("User: %s | %s", auth.DisplayName, strings.Join(auth.Roles, ",")))
 	if req.Shadow.Route != "" {
