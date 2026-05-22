@@ -124,9 +124,15 @@ export function RenderedContent({ html, className }: RenderedContentProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sanitized = useMemo(() => {
     if (!html) return "";
+    // Plain text path: escape HTML first, THEN run LaTeX preprocess so
+    // dollar delimiters survive escaping (\$ stays \$ in the escaped
+    // string). Wrapping in <p style=pre-wrap> preserves user newlines
+    // for prose paragraphs.
     const prepared = isHtmlContent(html)
       ? preprocessLatexDelimiters(html)
-      : `<p style="white-space: pre-wrap;">${preprocessLatexDelimiters(escapeHtml(html))}</p>`;
+      : preprocessLatexDelimiters(
+          `<p style="white-space: pre-wrap;">${escapeHtml(html)}</p>`,
+        );
     return DOMPurify.sanitize(prepared, SANITIZER_CONFIG as DomPurifyConfig);
   }, [html]);
 

@@ -124,6 +124,43 @@ function preprocessLatexDelimiters(html: string): string {
   return out.join("");
 }
 
+/**
+ * Detect whether a string is HTML (vs plain text). Same heuristic
+ * RenderedContent uses — leading character is `<`.
+ */
+function looksLikeHtml(s: string): boolean {
+  if (!s) return false;
+  return s.trimStart().startsWith("<");
+}
+
+/**
+ * Composed preprocessor for any value flowing INTO TipTap. Handles:
+ *  1. Plain text from AI / legacy storage — escape HTML, split on
+ *     blank lines into <p> blocks, single \n becomes <br>
+ *  2. Raw `$...$` / `$$...$$` delimiters — expand into math node spans
+ *
+ * This is the single entry point for all RichEditor content so every
+ * consumer (question editor, stimulus editor, options) benefits.
+ * Exported so other surfaces (e.g. read-only viewers built on the
+ * same input shape) can reuse it.
+ */
+export function prepareEditorContent(raw: string): string {
+  if (!raw) return "";
+  let html = raw;
+  if (!looksLikeHtml(html)) {
+    const escapeText = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    html = html
+      .split(/\n{2,}/)
+      .map((para) => {
+        const escaped = escapeText(para);
+        return `<p>${escaped.replace(/\n/g, "<br>")}</p>`;
+      })
+      .join("");
+  }
+  return preprocessLatexDelimiters(html);
+}
+
 export function RichEditor({
   value,
   onChange,
@@ -159,7 +196,7 @@ export function RichEditor({
         renderTextMode: "raw-latex",
       }),
     ],
-    content: preprocessLatexDelimiters(value || ""),
+    content: prepareEditorContent(value || ""),
     editable: !disabled,
     immediatelyRender: false,
     editorProps: {
@@ -188,7 +225,7 @@ export function RichEditor({
     if (!editor) return;
     if (value === lastEmittedRef.current) return;
     if (value === editor.getHTML()) return;
-    editor.commands.setContent(preprocessLatexDelimiters(value || ""), false);
+    editor.commands.setContent(prepareEditorContent(value || ""), false);
     lastEmittedRef.current = value;
   }, [value, editor]);
 
