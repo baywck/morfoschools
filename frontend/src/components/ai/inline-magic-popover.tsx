@@ -29,7 +29,7 @@ import { cn } from "@/lib/cn";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
-type EntityKind = "question" | "group" | "slot" | "draft";
+type EntityKind = "question" | "group" | "slot" | "draft" | "exam";
 
 interface Command {
   /** Display label in the command menu */
@@ -203,11 +203,46 @@ const DRAFT_COMMANDS: Command[] = [
   },
 ];
 
+const EXAM_COMMANDS: Command[] = [
+  {
+    label: "Generate kisi-kisi dari semua soal",
+    hint: "Extract KD/Materi/Indikator untuk seluruh soal",
+    prompt: "Untuk SETIAP soal di exam ini (lihat list di FOKUS / konteks aktif), rumuskan kisi-kisi:\n- competencyCode (KD code, mis: KD-3.5)\n- competencyDescription (1 kalimat)\n- materi (topik utama)\n- indikator (kata kerja operasional + objek + konteks)\n- cognitiveLevel (C1-C6 sesuai Bloom)\n- difficulty (mudah/sedang/sulit)\n\nLalu PAKAI apply_blueprint_analysis SEKALI dengan:\n- examId dari FOKUS\n- title: 'Kisi-Kisi (auto-extract)'\n- curriculumCode: 'merdeka' (atau 'k13' kalau lebih cocok)\n- replace: false (kalau exam belum punya blueprint) atau true (kalau sudah — replace existing)\n- acceptedSlots: array berisi entry untuk SETIAP questionId di exam, masing-masing dengan KD/competencyDescription/materi/indikator/cognitiveLevel/difficulty/questionType/points yang sesuai\n\nKalau exam punya >50 soal, batch list_questions dulu untuk lihat semua, lalu compose acceptedSlots. JANGAN pakai convert_questions_to_kisi_kisi (heuristic, tidak isi KD/Materi/Indikator).",
+  },
+  {
+    label: "Tambah N soal random",
+    hint: "Generate beberapa soal sesuai tema exam",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Berapa soal dan tipe? (mis: 5 soal multiple_choice level HOTS)",
+  },
+  {
+    label: "Buat section baru",
+    hint: "Tambah section dengan judul + deskripsi",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Judul section? (mis: Bagian B - Aljabar)",
+  },
+  {
+    label: "Audit duplikat",
+    hint: "Scan soal yang mirip + saran rephrase",
+    prompt: "Audit semua soal di exam ini untuk cari paraphrase duplikat. Untuk tiap pair yang similarity >= 0.7 (pakai find_similar_questions per soal jika perlu), sebutkan ID dua soal + similarity score + saran apakah merge / rephrase salah satu / keep both. JANGAN langsung mutate — ini read-only audit.",
+  },
+  {
+    label: "Custom…",
+    hint: "Tulis instruksi bebas scope exam",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Apa yang ingin dilakukan terhadap exam ini?",
+  },
+];
+
 const COMMANDS_BY_KIND: Record<EntityKind, Command[]> = {
   question: QUESTION_COMMANDS,
   group: GROUP_COMMANDS,
   slot: SLOT_COMMANDS,
   draft: DRAFT_COMMANDS,
+  exam: EXAM_COMMANDS,
 };
 
 export interface InlineMagicPopoverProps {
@@ -321,6 +356,9 @@ export function InlineMagicPopover({
       if (entityKind === "question") activeEntities.questionId = entityId;
       else if (entityKind === "group") activeEntities.groupId = entityId;
       else if (entityKind === "slot") activeEntities.slotId = entityId;
+      else if (entityKind === "exam") {
+        // exam-level: examId already set above; nothing entity-specific to add
+      }
       else if (entityKind === "draft") {
         // Draft cards have no entity yet — entityId carries the
         // sectionId or groupId scope hint instead. Format:
@@ -459,7 +497,7 @@ Konstrain:
           <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--accent)]/30 px-3 py-2">
             <Wand2 className="h-3.5 w-3.5 text-[var(--brand)]" />
             <h4 className="flex-1 text-[11.5px] font-semibold text-[var(--foreground)]">
-              AI assist {entityKind === "question" ? "soal" : entityKind === "group" ? "group" : entityKind === "slot" ? "kisi-kisi" : "soal baru"}
+              AI assist {entityKind === "question" ? "soal" : entityKind === "group" ? "group" : entityKind === "slot" ? "kisi-kisi" : entityKind === "exam" ? "exam" : "soal baru"}
             </h4>
             <button
               type="button"

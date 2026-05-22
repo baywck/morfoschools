@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { ShareDialog } from "@/components/share-dialog";
 import { ExamCanvas } from "@/components/exams/exam-canvas";
+import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
 import { KisiKisiToggle } from "@/components/exams/kisi-kisi-toggle";
 import { LoadKisiKisiButton } from "@/components/exams/load-kisi-kisi-button";
 import { LoadKisiKisiSheet } from "@/components/exams/load-kisi-kisi-sheet";
@@ -227,6 +228,11 @@ export default function ExamDetailPage({ params }: PageProps) {
         back={{ href: "/app/exams", label: "Back to exams" }}
         actions={
           <>
+            <InlineMagicPopover
+              entityKind="exam"
+              entityId={exam.id}
+              examId={exam.id}
+            />
             <KisiKisiToggle exam={exam} onToggle={handleKisiKisiToggle} />
             <LoadKisiKisiButton
               visible={exam.usesKisiKisi}
