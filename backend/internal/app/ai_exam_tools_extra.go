@@ -140,8 +140,110 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 
 func (a *App) capUpdateQuestion(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	confirm := "Update soal: aku akan mengubah field yang kamu sebutkan."
-	return a.createProposal(ctx, sessionID, tenantID, userID, "update_question", args, confirm)
+
+	// Validate: at least one editable field must be present. Without
+	// this the model can fire an empty update_question with only
+	// questionId and we surface a no-op proposal that does nothing
+	// when confirmed (and creates user confusion / loop).
+	var p struct {
+		QuestionID     string           `json:"questionId"`
+		Content        *string          `json:"content"`
+		Explanation    *string          `json:"explanation"`
+		CorrectAnswer  *string          `json:"correctAnswer"`
+		Points         *float64         `json:"points"`
+		QuestionType   *string          `json:"questionType"`
+		CompetencyCode *string          `json:"competencyCode"`
+		Materi         *string          `json:"materi"`
+		Indikator      *string          `json:"indikator"`
+		CognitiveLevel *string          `json:"cognitiveLevel"`
+		Difficulty     *string          `json:"difficulty"`
+		Options        []questionOption `json:"options"`
+	}
+	_ = json.Unmarshal(args, &p)
+	if !isUUID(p.QuestionID) {
+		return errInvalidUUID("questionId", p.QuestionID, "question"), nil
+	}
+	hasField := p.Content != nil || p.Explanation != nil || p.CorrectAnswer != nil ||
+		p.Points != nil || p.QuestionType != nil || p.CompetencyCode != nil ||
+		p.Materi != nil || p.Indikator != nil || p.CognitiveLevel != nil ||
+		p.Difficulty != nil || p.Options != nil
+	if !hasField {
+		b, _ := json.Marshal(map[string]any{
+			"error": map[string]any{
+				"code":        "INVALID_UPDATE",
+				"message":     "update_question butuh minimal satu field yang akan diubah (content/explanation/correctAnswer/points/questionType/options/kisi-kisi).",
+				"recoverable": true,
+				"recovery": map[string]any{
+					"hint": "Isi field yang ingin diubah dengan nilai baru. Untuk soal HOTS, kirim 'content' baru. Untuk ganti tipe, kirim 'questionType' + 'options' jika perlu.",
+				},
+			},
+		})
+		return string(b), nil
+	}
+
+	// Build a content-aware confirmation so the user sees what's about
+	// to change BEFORE clicking 'ya'. Mirrors the rich preview pattern
+	// from create_question / create_stimulus_block.
+	var sb strings.Builder
+	sb.WriteString("**Update soal**\n")
+	if p.Content != nil {
+		excerpt := *p.Content
+		if len(excerpt) > 200 {
+			excerpt = excerpt[:200] + "…"
+		}
+		sb.WriteString("\n**Konten baru:**\n> " + excerpt + "\n")
+	}
+	if p.QuestionType != nil {
+		fmt.Fprintf(&sb, "\n**Tipe baru:** %s\n", *p.QuestionType)
+	}
+	if p.Points != nil {
+		fmt.Fprintf(&sb, "\n**Poin baru:** %.0f\n", *p.Points)
+	}
+	if p.CorrectAnswer != nil {
+		fmt.Fprintf(&sb, "\n**Jawaban baru:** %s\n", *p.CorrectAnswer)
+	}
+	if p.Explanation != nil {
+		ex := *p.Explanation
+		if len(ex) > 160 {
+			ex = ex[:160] + "…"
+		}
+		sb.WriteString("\n**Penjelasan baru:** " + ex + "\n")
+	}
+	if p.Options != nil {
+		fmt.Fprintf(&sb, "\n**Opsi baru (%d):**\n", len(p.Options))
+		for i, o := range p.Options {
+			letter := string(rune('A' + i))
+			mark := ""
+			if o.IsCorrect {
+				mark = " ✅"
+			}
+			oc := o.Content
+			if len(oc) > 80 {
+				oc = oc[:80] + "…"
+			}
+			fmt.Fprintf(&sb, "  %s) %s%s\n", letter, oc, mark)
+		}
+	}
+	if p.CompetencyCode != nil || p.Materi != nil || p.Indikator != nil ||
+		p.CognitiveLevel != nil || p.Difficulty != nil {
+		sb.WriteString("\n**Update kisi-kisi:**\n")
+		if p.CompetencyCode != nil {
+			fmt.Fprintf(&sb, "  KD: %s\n", *p.CompetencyCode)
+		}
+		if p.Materi != nil {
+			fmt.Fprintf(&sb, "  Materi: %s\n", *p.Materi)
+		}
+		if p.Indikator != nil {
+			fmt.Fprintf(&sb, "  Indikator: %s\n", *p.Indikator)
+		}
+		if p.CognitiveLevel != nil {
+			fmt.Fprintf(&sb, "  Cognitive: %s\n", *p.CognitiveLevel)
+		}
+		if p.Difficulty != nil {
+			fmt.Fprintf(&sb, "  Difficulty: %s\n", *p.Difficulty)
+		}
+	}
+	return a.createProposal(ctx, sessionID, tenantID, userID, "update_question", args, sb.String())
 }
 
 func (a *App) capDeleteQuestion(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
@@ -233,6 +335,7 @@ func (a *App) execUpdateQuestion(ctx context.Context, tenantID, userID string, a
 	if p.Content != nil {
 		add("content", *p.Content)
 		add("content_hash", hashContent(*p.Content))
+		add("content_normalized", normalizeQuestionContent(*p.Content))
 	}
 	if p.Explanation != nil {
 		add("explanation", *p.Explanation)
@@ -271,9 +374,9 @@ func (a *App) execUpdateQuestion(ctx context.Context, tenantID, userID string, a
 			}
 			if _, err := tx.ExecContext(ctx, `
 				INSERT INTO exam_question_options
-				    (question_id, content, is_correct, sort_order, points_weight)
-				VALUES ($1, $2, $3, $4, $5)`,
-				p.QuestionID, o.Content, o.IsCorrect, i, weight,
+				    (tenant_id, question_id, content, is_correct, sort_order, points_weight)
+				VALUES ($1, $2, $3, $4, $5, $6)`,
+				tenantID, p.QuestionID, o.Content, o.IsCorrect, i, weight,
 			); err != nil {
 				return "", err
 			}

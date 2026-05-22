@@ -23,6 +23,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Sparkles, Loader2, X, Wand2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -209,14 +210,46 @@ export function InlineMagicPopover({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  // Close on outside click
+  // Portal target only available after mount (SSR guard).
+  useEffect(() => { setMounted(true); }, []);
+
+  // Anchor the popover to the button's bounding rect each time we
+  // open. Recomputed on resize + scroll so it stays attached even if
+  // the parent card scrolls under it.
+  useEffect(() => {
+    if (!open) { setAnchor(null); return; }
+    function compute() {
+      const btn = buttonRef.current;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      // Right-align the 18rem (288px) popover to the button's right edge
+      const POPOVER_WIDTH = 288;
+      const left = Math.max(8, r.right - POPOVER_WIDTH);
+      const top = r.bottom + 6;
+      setAnchor({ top, left });
+    }
+    compute();
+    window.addEventListener("resize", compute);
+    window.addEventListener("scroll", compute, true);
+    return () => {
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("scroll", compute, true);
+    };
+  }, [open]);
+
+  // Close on outside click. Uses pointerdown so it fires before the
+  // click handler on the trigger button (otherwise re-opening immediately).
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        closeAll();
-      }
+      const target = e.target as Node;
+      if (popoverRef.current && popoverRef.current.contains(target)) return;
+      if (buttonRef.current && buttonRef.current.contains(target)) return;
+      closeAll();
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") closeAll();
@@ -314,8 +347,9 @@ export function InlineMagicPopover({
   const commands = COMMANDS_BY_KIND[entityKind];
 
   return (
-    <div className={cn("relative inline-block", className)} ref={popoverRef}>
+    <div className={cn("relative inline-block", className)}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={(e) => {
           e.stopPropagation();
@@ -332,9 +366,11 @@ export function InlineMagicPopover({
         <Sparkles size={13} />
       </button>
 
-      {open && (
+      {mounted && open && anchor && createPortal(
         <div
-          className="absolute right-0 z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg"
+          ref={popoverRef}
+          style={{ position: "fixed", top: anchor.top, left: anchor.left, width: 288 }}
+          className="z-[100] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--accent)]/30 px-3 py-2">
@@ -413,7 +449,8 @@ export function InlineMagicPopover({
           <div className="border-t border-[var(--border)] bg-[var(--accent)]/20 px-3 py-1.5 text-[9.5px] text-[var(--muted-foreground)]">
             Hasil akan muncul sebagai proposal di panel AI. Konfirmasi dengan &ldquo;ya&rdquo; di chat.
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
