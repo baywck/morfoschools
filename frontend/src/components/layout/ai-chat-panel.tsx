@@ -471,8 +471,23 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
   // the proposal that just landed is visible immediately without
   // requiring the user to click anything.
   useEffect(() => {
+    function onStart(e: Event) {
+      const detail = (e as CustomEvent).detail as { displayMessage?: string } | undefined;
+      // Optimistically show the user bubble + start the spinner so the
+      // panel doesn't look frozen for 30s while the LLM round-trips.
+      if (detail?.displayMessage) {
+        setMessages((curr) => [
+          ...curr,
+          { role: "user" as const, content: detail.displayMessage as string },
+        ]);
+      }
+      setIsSending(true);
+      setError(null);
+    }
     function onTurn(e: Event) {
       const detail = (e as CustomEvent).detail as { sessionId?: string } | undefined;
+      // Always stop the spinner once a turn lands.
+      setIsSending(false);
       if (!detail?.sessionId) return;
       if (detail.sessionId !== sessionId) {
         setSessionId(detail.sessionId);
@@ -495,8 +510,19 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
         })();
       }
     }
+    function onError(e: Event) {
+      const detail = (e as CustomEvent).detail as { message?: string } | undefined;
+      setIsSending(false);
+      if (detail?.message) setError(detail.message);
+    }
+    window.addEventListener("morfoschools:ai-turn-started", onStart);
     window.addEventListener("morfoschools:ai-turn-completed", onTurn);
-    return () => window.removeEventListener("morfoschools:ai-turn-completed", onTurn);
+    window.addEventListener("morfoschools:ai-turn-error", onError);
+    return () => {
+      window.removeEventListener("morfoschools:ai-turn-started", onStart);
+      window.removeEventListener("morfoschools:ai-turn-completed", onTurn);
+      window.removeEventListener("morfoschools:ai-turn-error", onError);
+    };
   }, [sessionId, sessionStorageKey]);
 
   useEffect(() => {

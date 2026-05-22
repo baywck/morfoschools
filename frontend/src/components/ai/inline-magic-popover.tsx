@@ -281,6 +281,19 @@ export function InlineMagicPopover({
       // session this turn appends to is the same one the panel shows.
       window.dispatchEvent(new CustomEvent("morfoschools:open-ai-panel"));
 
+      // Tell the panel a turn just started so it can render the user
+      // bubble + thinking spinner immediately, instead of looking
+      // frozen for ~30s while the LLM round-trips. Display label
+      // prefers the command name over the verbose system prompt.
+      const displayMsg = selectedCmd?.label && !selectedCmd.needsInput
+        ? `✨ ${selectedCmd.label}`
+        : selectedCmd?.label
+        ? `✨ ${selectedCmd.label}: ${inputValue.trim()}`
+        : prompt.slice(0, 120);
+      window.dispatchEvent(new CustomEvent("morfoschools:ai-turn-started", {
+        detail: { displayMessage: displayMsg },
+      }));
+
       const activeEntities: Record<string, string> = {};
       if (examId) activeEntities.examId = examId;
       if (templateId) activeEntities.templateId = templateId;
@@ -318,7 +331,11 @@ export function InlineMagicPopover({
 
       closeAll();
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      setError(msg);
+      window.dispatchEvent(new CustomEvent("morfoschools:ai-turn-error", {
+        detail: { message: msg },
+      }));
     } finally {
       setSending(false);
     }
