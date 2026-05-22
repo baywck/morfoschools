@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { Bot, Loader2, SendHorizontal, Sparkles, X, GraduationCap, Plus, Paperclip, Image, FileCode, ChevronDown, Check, Zap, Brain } from "lucide-react";
+import { Bot, Loader2, SendHorizontal, Sparkles, X, GraduationCap, Plus, Paperclip, Image, FileCode, ChevronDown, Check, Zap, Brain, Trash2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 
@@ -597,6 +597,39 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
     }
   }, []);
 
+  // Clear chat history. Hard-deletes the current session so the next
+  // message starts fresh — no prior context bleeding into the model
+  // prompt. Backend cascades to ai_messages, ai_pending_actions,
+  // ai_task_states. Local state and per-scope localStorage entry are
+  // wiped here. The user gets back the suggestion welcome state.
+  const handleClearHistory = useCallback(async () => {
+    if (!sessionId) {
+      // No session yet — just reset local state.
+      setMessages(initialMessages);
+      setError(null);
+      return;
+    }
+    if (!confirm("Hapus seluruh riwayat chat AI di scope ini? Konteks dimulai dari awal.")) return;
+    try {
+      const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
+      const csrfToken = csrfMatch ? csrfMatch[1] : "";
+      const res = await fetch(`${API_BASE}/api/v1/ai/sessions/${sessionId}`, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": csrfToken },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("delete failed");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(sessionStorageKey);
+      }
+      setSessionId(null);
+      setMessages(initialMessages);
+      setError(null);
+    } catch {
+      setError("Gagal menghapus riwayat chat.");
+    }
+  }, [sessionId, sessionStorageKey]);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     void sendMessage(input);
@@ -623,9 +656,21 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
               <p className="text-[10px] text-[var(--shell-muted)]">School operations assistant</p>
             </div>
           </div>
-          <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] hover:bg-[var(--shell-hover)] transition-colors">
-            <X size={14} />
-          </button>
+          <div className="flex items-center gap-1">
+            {messages.length > 1 && (
+              <button
+                onClick={handleClearHistory}
+                title="Hapus riwayat chat"
+                aria-label="Hapus riwayat chat"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--destructive)] hover:bg-[var(--shell-hover)] transition-colors"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+            <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] hover:bg-[var(--shell-hover)] transition-colors">
+              <X size={14} />
+            </button>
+          </div>
         </div>
       </div>
 

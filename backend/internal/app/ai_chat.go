@@ -116,6 +116,7 @@ func (a *App) registerAIChatRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/ai/cancel", a.handleAICancel)
 	mux.HandleFunc("GET /api/v1/ai/sessions", a.handleListAISessions)
 	mux.HandleFunc("GET /api/v1/ai/sessions/{id}/messages", a.handleGetAISessionMessages)
+	mux.HandleFunc("DELETE /api/v1/ai/sessions/{id}", a.handleDeleteAISession)
 }
 
 type aiChatRequest struct {
@@ -1414,6 +1415,53 @@ func (a *App) handleGetAISessionMessages(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"data": messages, "sessionId": sessionID})
+}
+
+// handleDeleteAISession hard-deletes a chat session owned by the
+// caller. ON DELETE CASCADE on ai_messages, ai_pending_actions, and
+// ai_task_states cleans up the conversation tree atomically. Used by
+// the 'clear chat history' affordance in the AI panel: the user
+// wants to start a fresh conversation without prior context bleeding
+// into model prompts.
+//
+// Authorization: caller must own the session (user_id match). Other
+// users' sessions — including admins — are 404'd silently to avoid
+// leaking session existence.
+func (a *App) handleDeleteAISession(w http.ResponseWriter, r *http.Request) {
+	auth := AuthFromContext(r.Context())
+	if auth == nil || auth.UserID == "" {
+		writeErrorJSON(w, http.StatusUnauthorized, "unauthorized", "Not authenticated", r)
+		return
+	}
+	if !a.RequireCSRF(w, r) {
+		return
+	}
+
+	sessionID := r.PathValue("id")
+	if sessionID == "" {
+		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Session ID is required", r)
+		return
+	}
+
+	res, err := a.db.ExecContext(r.Context(),
+		`DELETE FROM ai_sessions WHERE id = $1 AND user_id = $2`,
+		sessionID, auth.UserID,
+	)
+	if err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, "delete_failed", "Could not delete session", r)
+		return
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Session not found", r)
+		return
+	}
+
+	tenantID := a.RequireEffectiveTenant(w, r)
+	if tenantID != "" {
+		a.audit(r.Context(), &tenantID, auth.UserID, "ai.session.delete", "ai_session", sessionID, r)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": sessionID})
 }
 
 // parseXMLToolCalls handles the XML-style tool-call format some
