@@ -33,6 +33,28 @@ import { RenderedContent, stripHtmlPreview } from "@/components/ui/rendered-cont
 import { StimulusPicker } from "@/components/exams/stimulus-picker";
 import { RichEditor } from "@/components/ui/rich-editor";
 import { InputField } from "@/components/ui/input-field";
+import { isHtmlContent } from "@/components/ui/rendered-content";
+
+// Convert plain-text stimulus content (legacy or AI-generated
+// without HTML tags) into TipTap-friendly paragraph HTML so the
+// editor preserves newlines and the rendered output matches.
+// RenderedContent already handles plain text via white-space:
+// pre-wrap, but TipTap collapses whitespace inside its DOM —
+// the editor view would show one giant blob without this.
+function normalizeStimulusForEditor(raw: string): string {
+  if (!raw) return "";
+  if (isHtmlContent(raw)) return raw;
+  const escaped = raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // Treat double-newline as paragraph break, single newline as <br>
+  // so the editor mirrors what RenderedContent shows.
+  return escaped
+    .split(/\n{2,}/)
+    .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
 import { cn } from "@/lib/cn";
 
 export interface GroupCardProps {
@@ -73,7 +95,9 @@ export function GroupCard({
   // stimuli row. Library import via StimulusPicker is still available
   // as an explicit action for power users.
   const [editTitle, setEditTitle] = useState(group.stimulusTitleSnapshot ?? "");
-  const [editBody, setEditBody] = useState(group.stimulusBodySnapshot ?? "");
+  const [editBody, setEditBody] = useState(
+    normalizeStimulusForEditor(group.stimulusBodySnapshot ?? "")
+  );
   const [showLibrary, setShowLibrary] = useState(false);
 
   // Sync editor state when the group prop changes (after parent
@@ -81,7 +105,7 @@ export function GroupCard({
   // stale values when the canonical group data is refreshed.
   useEffect(() => {
     setEditTitle(group.stimulusTitleSnapshot ?? "");
-    setEditBody(group.stimulusBodySnapshot ?? "");
+    setEditBody(normalizeStimulusForEditor(group.stimulusBodySnapshot ?? ""));
   }, [group.stimulusTitleSnapshot, group.stimulusBodySnapshot, group.id]);
 
   // When the group body is collapsed, also hide the stimulus editor
@@ -296,7 +320,7 @@ export function GroupCard({
                 value={group.stimulusId ?? null}
                 onSelect={(s) => {
                   setEditTitle(s.title);
-                  setEditBody(s.content);
+                  setEditBody(normalizeStimulusForEditor(s.content));
                   setShowLibrary(false);
                   void handleSelectStimulus(s);
                 }}
