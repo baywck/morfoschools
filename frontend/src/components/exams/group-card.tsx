@@ -30,7 +30,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RenderedContent, stripHtmlPreview } from "@/components/ui/rendered-content";
-import { StimulusPicker } from "@/components/exams/stimulus-picker";
+import { StimulusLibraryModal } from "@/components/exams/stimulus-library-modal";
 import { RichEditor } from "@/components/ui/rich-editor";
 import { InputField } from "@/components/ui/input-field";
 import { isHtmlContent } from "@/components/ui/rendered-content";
@@ -277,10 +277,10 @@ export function GroupCard({
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
-              onClick={() => setShowLibrary((v) => !v)}
+              onClick={() => setShowLibrary(true)}
               className="text-[10.5px] font-medium text-[var(--muted-foreground)] hover:text-[var(--brand)] transition-colors"
             >
-              {showLibrary ? "Sembunyikan library" : "Pilih dari library…"}
+              Pilih dari library…
             </button>
             <div className="flex items-center gap-2">
               {group.stimulusId && (
@@ -311,21 +311,14 @@ export function GroupCard({
             </div>
           </div>
           {showLibrary && (
-            <div className="rounded-md border border-dashed border-[var(--border)] p-2">
-              <p className="mb-1.5 text-[10px] text-[var(--muted-foreground)]">
-                Power user: import passage dari library bersama (akan menimpa
-                judul + isi di atas).
-              </p>
-              <StimulusPicker
-                value={group.stimulusId ?? null}
-                onSelect={(s) => {
-                  setEditTitle(s.title);
-                  setEditBody(normalizeStimulusForEditor(s.content));
-                  setShowLibrary(false);
-                  void handleSelectStimulus(s);
-                }}
-              />
-            </div>
+            <StimulusLibraryModal
+              open={showLibrary}
+              onClose={() => setShowLibrary(false)}
+              onSelect={(s) => {
+                setEditTitle(s.title);
+                setEditBody(normalizeStimulusForEditor(s.content));
+              }}
+            />
           )}
         </div>
       )}
