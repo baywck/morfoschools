@@ -98,8 +98,22 @@ const QUESTION_COMMANDS: Command[] = [
 
 const GROUP_COMMANDS: Command[] = [
   {
-    label: "Tambah soal ke group",
-    hint: "Generate N soal lagi yang merujuk stimulus",
+    label: "Buat / ganti stimulus",
+    hint: "Generate teks stimulus untuk group ini",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Topik stimulus? (mis: dampak perubahan iklim di Indonesia)",
+  },
+  {
+    label: "Tambah 1 soal sesuai stimulus",
+    hint: "1 soal baru yang merujuk stimulus group",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Tipe + fokus soal? (mis: multiple_choice, level analisis HOTS)",
+  },
+  {
+    label: "Tambah N soal ke group",
+    hint: "Batch generate yang merujuk stimulus",
     prompt: "",
     needsInput: true,
     inputHint: "Berapa soal dan tipe apa? (mis: 3 soal multiple_choice)",
@@ -375,6 +389,36 @@ Format output:
 - N soal multiple_choice yang merujuk ke stimulus tersebut (kalau user tidak menyebut N, default 3 soal)
 - Lifecycle stimulus: exam_scoped (default Opsi B)
 - JANGAN chain create_stimulus + create_question_group + create_question terpisah — itu akan gagal karena step ke-2 butuh ID dari step ke-1.`;
+    } else if (selectedCmd.label === "Buat / ganti stimulus") {
+      // Group-scoped: write stimulus snapshot to the EXISTING group
+      // (don't create a new group). Pakai update_question_group
+      // dengan titleSnapshot + bodySnapshot baru.
+      finalPrompt = `Generate teks stimulus untuk group yang sedang difokus, dengan topik: ${trimmed}.
+
+Format output:
+- Stimulus title yang ringkas + descriptive
+- Stimulus body: passage/teks/kasus yang factually correct dan relevan untuk dijadikan dasar soal
+- Pakai update_question_group dengan titleSnapshot + bodySnapshot baru
+- JANGAN buat group baru, JANGAN buat soal di turn ini—cuma stimulus dulu. Soal akan ditambahkan iteratif setelahnya.`;
+    } else if (selectedCmd.label === "Tambah 1 soal sesuai stimulus") {
+      finalPrompt = `Tambahkan 1 soal baru ke group yang sedang difokus, yang merujuk ke stimulus group tersebut.
+
+Detail dari user: ${trimmed}
+
+Konstrain:
+- Pakai create_question dengan groupId pointing ke group ini (groupId akan ada di FOKUS GROUP block)
+- Soal harus genuinely require pembaca untuk paham stimulus untuk menjawab (jangan soal yang bisa dijawab tanpa baca stimulus)
+- Cek soal existing di group dulu via FOKUS GROUP — jangan duplikasi sudut pandang/fokus yang sama`;
+    } else if (selectedCmd.label === "Tambah N soal ke group") {
+      finalPrompt = `Tambahkan beberapa soal baru ke group yang sedang difokus, yang merujuk ke stimulus group tersebut.
+
+Detail dari user: ${trimmed}
+
+Konstrain:
+- Pakai batch_create_questions dengan groupId pointing ke group ini (groupId ada di FOKUS GROUP block)
+- Setiap soal harus genuinely require pembaca untuk paham stimulus
+- Variasikan sudut pandang antar soal (jangan semua tanya hal yang sama dari sudut yang sama)
+- Cek soal existing di group dulu — jangan duplikasi`;
     } else if (selectedCmd.prompt) {
       finalPrompt = `${selectedCmd.prompt}\n\nDetail dari user: ${trimmed}`;
     } else {

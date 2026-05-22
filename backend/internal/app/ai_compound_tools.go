@@ -70,12 +70,77 @@ func (a *App) capCreateStimulusBlock(ctx context.Context, tenantID, userID strin
 	}
 	_ = json.Unmarshal(args, &p)
 
+	// Defensive validation: reject empty soal entries before they
+	// reach the executor (where empty question_type violates the DB
+	// CHECK constraint exam_questions_question_type_check). The model
+	// occasionally emits skeleton {questionType:'', content:''} entries
+	// when the user only asked for a stimulus — we should not turn
+	// those into a no-op DB write that fails halfway.
+	stimTitleRaw, _ := p.Stimulus["title"].(string)
+	stimContentRaw, _ := p.Stimulus["content"].(string)
+	if strings.TrimSpace(stimContentRaw) == "" {
+		b, _ := json.Marshal(map[string]any{
+			"error": map[string]any{
+				"code":        "INVALID_STIMULUS",
+				"message":     "create_stimulus_block butuh stimulus.content yang non-kosong.",
+				"recoverable": true,
+				"recovery": map[string]any{
+					"hint": "Generate stimulus body sebagai passage/teks/kasus yang lengkap (3+ paragraf), bukan placeholder kosong.",
+				},
+			},
+		})
+		return string(b), nil
+	}
+	// Filter out skeleton/empty soal entries. If user wants stimulus
+	// only (questions=[] or all empty), route to update_question_group
+	// path instead by suggesting it.
+	validQs := p.Questions[:0]
+	for _, q := range p.Questions {
+		if strings.TrimSpace(q.Content) == "" || strings.TrimSpace(q.QuestionType) == "" {
+			continue
+		}
+		validQs = append(validQs, q)
+	}
+	p.Questions = validQs
+	if len(p.Questions) == 0 {
+		b, _ := json.Marshal(map[string]any{
+			"error": map[string]any{
+				"code":        "NO_VALID_QUESTIONS",
+				"message":     "create_stimulus_block butuh minimal 1 soal dengan questionType + content non-kosong.",
+				"recoverable": true,
+				"recovery": map[string]any{
+					"hint": "Kalau user hanya minta stimulus tanpa soal, JANGAN pakai create_stimulus_block. Gunakan create_question_group + update_question_group dengan titleSnapshot/bodySnapshot, atau create_stimulus stand-alone. create_stimulus_block khusus untuk paket stimulus + N soal sekaligus.",
+				},
+			},
+		})
+		return string(b), nil
+	}
+
+	// Re-marshal args with the filtered Questions so the executor
+	// receives the cleaned payload (otherwise raw args still has the
+	// skeleton entries and explodes downstream).
+	cleaned := map[string]any{
+		"examId":    p.ExamID,
+		"stimulus":  p.Stimulus,
+		"questions": p.Questions,
+	}
+	// Preserve any extra top-level keys (sectionId, groupTitle, etc.)
+	// that the original payload carried.
+	var raw map[string]any
+	_ = json.Unmarshal(args, &raw)
+	for k, v := range raw {
+		if _, ok := cleaned[k]; !ok {
+			cleaned[k] = v
+		}
+	}
+	cleanedArgs, _ := json.Marshal(cleaned)
+
 	// Build a rich confirmation that lets the user review the entire
 	// payload before committing. User-trust > brevity here — they're
 	// about to write 5+ database rows in a single 'ya'.
 	var sb strings.Builder
-	stimTitle, _ := p.Stimulus["title"].(string)
-	stimContent, _ := p.Stimulus["content"].(string)
+	stimTitle := stimTitleRaw
+	stimContent := stimContentRaw
 	if stimTitle == "" {
 		// Mirror executor auto-derive so the preview matches what will
 		// actually be inserted.
@@ -126,7 +191,7 @@ func (a *App) capCreateStimulusBlock(ctx context.Context, tenantID, userID strin
 		}
 	}
 	confirm := sb.String()
-	return a.createProposal(ctx, sessionID, tenantID, userID, "create_stimulus_block", args, confirm)
+	return a.createProposal(ctx, sessionID, tenantID, userID, "create_stimulus_block", cleanedArgs, confirm)
 }
 
 func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
