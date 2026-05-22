@@ -169,6 +169,13 @@ const DRAFT_COMMANDS: Command[] = [
     prompt: "Buat 1 soal baru yang relevan dengan exam ini. Pilih topik yang BELUM pernah ditanyakan di soal existing (cek dulu pakai list_questions atau lihat konteks). Tipe + level kognitif menyesuaikan tema exam. Pakai create_question.",
   },
   {
+    label: "Soal dengan stimulus",
+    hint: "Bacaan/teks/kasus + N soal yang merujuk",
+    prompt: "",
+    needsInput: true,
+    inputHint: "Topik stimulus + berapa soal? (mis: ekosistem hutan, 3 soal)",
+  },
+  {
     label: "Buat dari kisi-kisi",
     hint: "Pilih slot blueprint kosong + isi otomatis",
     prompt: "Lihat slot blueprint yang masih kosong di exam ini. Pilih satu, lalu generate 1 soal sesuai kisi-kisi slot tersebut (KD/materi/indikator/cognitive level/difficulty). Pakai create_question dengan blueprintSlotId.",
@@ -355,9 +362,24 @@ export function InlineMagicPopover({
     if (!selectedCmd) return;
     const trimmed = inputValue.trim();
     if (!trimmed) return;
-    const finalPrompt = selectedCmd.prompt
-      ? `${selectedCmd.prompt}\n\nDetail dari user: ${trimmed}`
-      : trimmed;
+    let finalPrompt: string;
+    // Special-case stimulus block command: route to compound atomic
+    // tool so the model creates stimulus + group + N questions in
+    // ONE transaction (avoids reasoning-model multi-step plan failure).
+    if (selectedCmd.label === "Soal dengan stimulus") {
+      finalPrompt = `Pakai create_stimulus_block (compound atomic) untuk topik berikut: ${trimmed}.
+
+Format output:
+- 1 stimulus (passage/teks/kasus) yang relevan dengan topik
+- 1 group yang mengikat stimulus
+- N soal multiple_choice yang merujuk ke stimulus tersebut (kalau user tidak menyebut N, default 3 soal)
+- Lifecycle stimulus: exam_scoped (default Opsi B)
+- JANGAN chain create_stimulus + create_question_group + create_question terpisah — itu akan gagal karena step ke-2 butuh ID dari step ke-1.`;
+    } else if (selectedCmd.prompt) {
+      finalPrompt = `${selectedCmd.prompt}\n\nDetail dari user: ${trimmed}`;
+    } else {
+      finalPrompt = trimmed;
+    }
     void dispatch(finalPrompt);
   }
 
