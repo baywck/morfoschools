@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { Bot, Loader2, SendHorizontal, Sparkles, X, GraduationCap, Plus, Paperclip, Image, FileCode, ChevronDown, Check, Zap, Brain, Trash2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
@@ -597,6 +598,9 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
     }
   }, []);
 
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
+
   // Clear chat history. Hard-deletes the current session so the next
   // message starts fresh — no prior context bleeding into the model
   // prompt. Backend cascades to ai_messages, ai_pending_actions,
@@ -604,12 +608,12 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
   // wiped here. The user gets back the suggestion welcome state.
   const handleClearHistory = useCallback(async () => {
     if (!sessionId) {
-      // No session yet — just reset local state.
       setMessages(initialMessages);
       setError(null);
+      setConfirmClear(false);
       return;
     }
-    if (!confirm("Hapus seluruh riwayat chat AI di scope ini? Konteks dimulai dari awal.")) return;
+    setClearingHistory(true);
     try {
       const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
       const csrfToken = csrfMatch ? csrfMatch[1] : "";
@@ -625,8 +629,11 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
       setSessionId(null);
       setMessages(initialMessages);
       setError(null);
+      setConfirmClear(false);
     } catch {
       setError("Gagal menghapus riwayat chat.");
+    } finally {
+      setClearingHistory(false);
     }
   }, [sessionId, sessionStorageKey]);
 
@@ -659,7 +666,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
           <div className="flex items-center gap-1">
             {messages.length > 1 && (
               <button
-                onClick={handleClearHistory}
+                onClick={() => setConfirmClear(true)}
                 title="Hapus riwayat chat"
                 aria-label="Hapus riwayat chat"
                 className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--shell-muted)] hover:text-[var(--destructive)] hover:bg-[var(--shell-hover)] transition-colors"
@@ -763,6 +770,17 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
           </div>
         </div>
       </form>
+      <ConfirmDialog
+        open={confirmClear}
+        title="Hapus riwayat chat?"
+        description="Seluruh riwayat chat AI di scope ini akan dihapus permanen. Konteks akan dimulai dari awal."
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        destructive
+        loading={clearingHistory}
+        onConfirm={handleClearHistory}
+        onCancel={() => setConfirmClear(false)}
+      />
     </aside>
   );
 }
