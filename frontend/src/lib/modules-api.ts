@@ -846,6 +846,11 @@ export interface UpdateQuestionGroupPayload {
    *  other groups referencing the same stimulus are unaffected. */
   titleSnapshot?: string;
   bodySnapshot?: string;
+  /** Opt-in: after saving the snapshot, create (or update) a shared
+   *  stimulus row in the library and link this group to it. Lets the
+   *  user promote a passage to the cross-exam library without leaving
+   *  the group editor. */
+  saveToLibrary?: boolean;
 }
 
 export function updateQuestionGroup(

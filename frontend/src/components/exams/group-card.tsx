@@ -131,11 +131,18 @@ export function GroupCard({
     onChange();
   }
 
+  // saveToLibrary checkbox state. Initialized true when the group is
+  // already linked to a shared stimulus (so the toggle reflects current
+  // status); otherwise false (default exam_scoped per Opsi B).
+  const isCurrentlyShared = group.stimulusId != null && group.groupType === "stimulus" && (group as { stimulusLifecycle?: string }).stimulusLifecycle === "shared";
+  const [saveToLibrary, setSaveToLibrary] = useState(isCurrentlyShared);
+
   async function handleSaveSnapshot() {
     setSavingStim(true);
     const res = await updateQuestionGroup(group.id, {
       titleSnapshot: editTitle,
       bodySnapshot: editBody,
+      saveToLibrary,
     });
     setSavingStim(false);
     if (res.error) {
@@ -146,7 +153,11 @@ export function GroupCard({
       });
       return;
     }
-    toast({ tone: "success", title: "Stimulus disimpan" });
+    toast({
+      tone: "success",
+      title: "Stimulus disimpan",
+      description: saveToLibrary ? "Tersimpan juga ke library bersama." : undefined,
+    });
     setStimulusOpen(false);
     onChange();
   }
@@ -274,6 +285,20 @@ export function GroupCard({
             </label>
             <RichEditor value={editBody} onChange={setEditBody} />
           </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={saveToLibrary}
+              onChange={(e) => setSaveToLibrary(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]/40"
+            />
+            <span className="text-[11px] font-medium text-[var(--foreground)]">
+              Simpan juga ke library bersama
+            </span>
+            <span className="text-[10px] text-[var(--muted-foreground)]">
+              — bisa dipakai exam lain
+            </span>
+          </label>
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
