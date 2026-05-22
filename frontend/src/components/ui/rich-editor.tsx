@@ -59,6 +59,71 @@ const TOOLBAR_BTN_BASE =
 const TOOLBAR_BTN_ACTIVE =
   "bg-[var(--brand-soft)] text-[var(--brand)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand)]";
 
+/**
+ * Pre-render raw `$...$` / `$$...$$` LaTeX delimiters in saved HTML
+ * into the math-node span shape that @aarkue/tiptap-math-extension
+ * expects. Without this, content saved as plain text containing
+ * dollar-delimited LaTeX (typical for AI-generated questions or
+ * legacy data) is loaded into the editor verbatim and never
+ * upgraded into a math node — so KaTeX never renders.
+ *
+ * Strategy:
+ *  - Walk the HTML as text outside of existing math node spans
+ *    (avoid double-wrapping pre-converted nodes)
+ *  - Replace `$$ ... $$` with display=yes spans first (longer wins)
+ *  - Then replace `$ ... $` with inline (display=no) spans
+ *  - Skip code/pre regions (LaTeX inside code blocks is intentional)
+ *  - Escape attribute payload so quotes in latex don't break HTML
+ */
+function preprocessLatexDelimiters(html: string): string {
+  if (!html) return html;
+  if (!html.includes("$")) return html;
+
+  // Skip if already contains math nodes — saved-by-editor content
+  // already has the proper spans, no need to re-walk.
+  if (html.includes('data-type="inlineMath"')) return html;
+
+  // Tokenize on existing tags to avoid mutating attributes / inner HTML
+  // of code blocks. Cheap heuristic: split on `<code...>...</code>`,
+  // `<pre...>...</pre>`, and existing `<span data-type="inlineMath"...>...</span>`
+  // and only transform the gaps between.
+  const guardRe = /(<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>|<span\b[^>]*data-type="inlineMath"[^>]*>[\s\S]*?<\/span>)/gi;
+
+  const escapeAttr = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const transformChunk = (chunk: string): string => {
+    // Display math: $$ ... $$ (non-greedy, must not contain inner $$)
+    chunk = chunk.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
+      const trimmed = latex.trim();
+      if (!trimmed) return `$$${latex}$$`;
+      return `<span data-type="inlineMath" data-latex="${escapeAttr(trimmed)}" data-display="yes"></span>`;
+    });
+    // Inline math: $ ... $ (single-line, no nested $, no leading/trailing space)
+    chunk = chunk.replace(/(?<![\\$])\$(?!\s)([^\n$]+?)(?<!\s)\$(?!\$)/g, (_, latex: string) => {
+      const trimmed = latex.trim();
+      if (!trimmed) return `$${latex}$`;
+      return `<span data-type="inlineMath" data-latex="${escapeAttr(trimmed)}" data-display="no"></span>`;
+    });
+    return chunk;
+  };
+
+  const out: string[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = guardRe.exec(html)) !== null) {
+    if (m.index > last) {
+      out.push(transformChunk(html.slice(last, m.index)));
+    }
+    out.push(m[0]);
+    last = m.index + m[0].length;
+  }
+  if (last < html.length) {
+    out.push(transformChunk(html.slice(last)));
+  }
+  return out.join("");
+}
+
 export function RichEditor({
   value,
   onChange,
@@ -94,7 +159,7 @@ export function RichEditor({
         renderTextMode: "raw-latex",
       }),
     ],
-    content: value || "",
+    content: preprocessLatexDelimiters(value || ""),
     editable: !disabled,
     immediatelyRender: false,
     editorProps: {
@@ -123,7 +188,7 @@ export function RichEditor({
     if (!editor) return;
     if (value === lastEmittedRef.current) return;
     if (value === editor.getHTML()) return;
-    editor.commands.setContent(value || "", false);
+    editor.commands.setContent(preprocessLatexDelimiters(value || ""), false);
     lastEmittedRef.current = value;
   }, [value, editor]);
 
