@@ -599,22 +599,22 @@ func (a *App) capListSlotsWithQuestions(ctx context.Context, tenantID, userID st
 
 func (a *App) capUpdateExam(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "update_exam", args, "Edit metadata exam.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "update_exam", args, confirmUpdateExam(args))
 }
 
 func (a *App) capPublishExam(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "publish_exam", args, "Publish exam (draft → published).")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "publish_exam", args, confirmPublishExam(args))
 }
 
 func (a *App) capUpdateExamSection(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "update_exam_section", args, "Edit section.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "update_exam_section", args, confirmUpdateExamSection(args))
 }
 
 func (a *App) capDeleteExamSection(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_exam_section", args, "Hapus section (soal di dalamnya tetap, hanya jadi unsectioned).")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_exam_section", args, confirmDeleteExamSection(args))
 }
 
 func (a *App) capUpdateQuestionGroup(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
@@ -693,47 +693,47 @@ func (a *App) capUpdateQuestionGroup(ctx context.Context, tenantID, userID strin
 
 func (a *App) capDeleteQuestionGroup(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_question_group", args, "Hapus group (soal di dalamnya tetap, jadi ungrouped).")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_question_group", args, confirmDeleteQuestionGroup(args))
 }
 
 func (a *App) capUpdateStimulus(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "update_stimulus", args, "Edit stimulus.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "update_stimulus", args, confirmUpdateStimulus(args))
 }
 
 func (a *App) capArchiveStimulus(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "archive_stimulus", args, "Archive stimulus (lifecycle → archived).")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "archive_stimulus", args, confirmArchiveStimulus(args))
 }
 
 func (a *App) capPromoteStimulus(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "promote_stimulus", args, "Promote stimulus dari exam_scoped ke shared.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "promote_stimulus", args, confirmPromoteStimulus(args))
 }
 
 func (a *App) capCreateExamGate(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "create_exam_gate", args, "Buat gate window baru.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "create_exam_gate", args, confirmCreateExamGate(args))
 }
 
 func (a *App) capUpdateExamGate(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "update_exam_gate", args, "Edit gate window.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "update_exam_gate", args, confirmUpdateExamGate(args))
 }
 
 func (a *App) capDeleteExamGate(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_exam_gate", args, "Hapus gate window.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_exam_gate", args, confirmDeleteExamGate(args))
 }
 
 func (a *App) capAssignQuestionToSlot(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "assign_question_to_slot", args, "Assign soal ke blueprint slot.")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "assign_question_to_slot", args, confirmAssignQuestionToSlot(args))
 }
 
 func (a *App) capExportExamToTemplate(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	return a.createProposal(ctx, sessionID, tenantID, userID, "export_exam_to_template", args, "Export exam blueprint ke template baru (draft).")
+	return a.createProposal(ctx, sessionID, tenantID, userID, "export_exam_to_template", args, confirmExportExamToTemplate(args))
 }
 
 // =================================================================

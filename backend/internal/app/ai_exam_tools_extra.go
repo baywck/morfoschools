@@ -248,32 +248,27 @@ func (a *App) capUpdateQuestion(ctx context.Context, tenantID, userID string, ar
 
 func (a *App) capDeleteQuestion(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	confirm := "Hapus soal: aksi ini permanen."
-	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_question", args, confirm)
+	return a.createProposal(ctx, sessionID, tenantID, userID, "delete_question", args, confirmDeleteQuestion(args))
 }
 
 func (a *App) capCreateExamSection(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	confirm := "Tambah section baru ke exam ini."
-	return a.createProposal(ctx, sessionID, tenantID, userID, "create_exam_section", args, confirm)
+	return a.createProposal(ctx, sessionID, tenantID, userID, "create_exam_section", args, confirmCreateExamSection(args))
 }
 
 func (a *App) capCreateQuestionGroup(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	confirm := "Tambah group soal ke section."
-	return a.createProposal(ctx, sessionID, tenantID, userID, "create_question_group", args, confirm)
+	return a.createProposal(ctx, sessionID, tenantID, userID, "create_question_group", args, confirmCreateQuestionGroup(args))
 }
 
 func (a *App) capCreateStimulus(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	confirm := "Tambah stimulus baru ke library."
-	return a.createProposal(ctx, sessionID, tenantID, userID, "create_stimulus", args, confirm)
+	return a.createProposal(ctx, sessionID, tenantID, userID, "create_stimulus", args, confirmCreateStimulus(args))
 }
 
 func (a *App) capMoveQuestion(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
-	confirm := "Pindah / reorder soal."
-	return a.createProposal(ctx, sessionID, tenantID, userID, "move_question", args, confirm)
+	return a.createProposal(ctx, sessionID, tenantID, userID, "move_question", args, confirmMoveQuestion(args))
 }
 
 // ============================================================================
