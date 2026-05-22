@@ -31,6 +31,7 @@ import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RenderedContent, stripHtmlPreview } from "@/components/ui/rendered-content";
 import { StimulusLibraryModal } from "@/components/exams/stimulus-library-modal";
+import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
 import { RichEditor } from "@/components/ui/rich-editor";
 import { InputField } from "@/components/ui/input-field";
 import { isHtmlContent } from "@/components/ui/rendered-content";
@@ -64,6 +65,10 @@ export interface GroupCardProps {
   /** Children render slot — usually <SortableContext> + <QuestionAccordion>s. */
   children: React.ReactNode;
   canEdit: boolean;
+  /** Exam ID needed for the inline magic AI popover. Passed down
+   *  from ExamCanvas so the AI knows the parent exam without
+   *  another lookup. */
+  examId?: string;
   /** Add-question handler scoped to this group. */
   onAddQuestion: () => void;
   /** Called after stimulus update / delete to trigger parent reload. */
@@ -79,6 +84,7 @@ export function GroupCard({
   questionCount,
   children,
   canEdit,
+  examId,
   onAddQuestion,
   onChange,
   dragHandleProps,
@@ -258,6 +264,12 @@ export function GroupCard({
               {savingStim && <Loader2 size={10} className="animate-spin" />}
               {stimulusTitle ? "Edit stimulus" : "+ Tambah stimulus"}
             </button>
+            <InlineMagicPopover
+              entityKind="group"
+              entityId={group.id}
+              examId={examId}
+              className="shrink-0"
+            />
             <button
               type="button"
               onClick={() => setConfirmDelete(true)}

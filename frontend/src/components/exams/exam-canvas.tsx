@@ -923,6 +923,7 @@ function GroupBlock(props: {
           group={group}
           questionCount={questions.length}
           canEdit={canEdit}
+          examId={examId}
           onAddQuestion={onAddDraft}
           onChange={onChange}
           dragHandleProps={

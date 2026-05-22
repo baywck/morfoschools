@@ -18,6 +18,15 @@ export function AppShell({ children, navigation }: AppShellProps) {
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const router = useRouter();
 
+  // Listen for inline-magic 'open AI panel' requests from anywhere in
+  // the app. Inline-magic actions on cards dispatch this event so the
+  // sidebar opens (if closed) and the user sees the AI proposal land.
+  useEffect(() => {
+    function openPanel() { setAiChatOpen(true); }
+    window.addEventListener("morfoschools:open-ai-panel", openPanel);
+    return () => window.removeEventListener("morfoschools:open-ai-panel", openPanel);
+  }, []);
+
   // Global listener: when any mutation happens (AI or manual), refresh server data.
   // Pages that fetch data client-side also listen to this event independently.
   useEffect(() => {

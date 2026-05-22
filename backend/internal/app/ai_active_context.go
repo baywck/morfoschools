@@ -51,6 +51,20 @@ func (a *App) buildActiveContext(tenantID string, auth *AuthContext, active map[
 			a.appendBlueprintContext(ctx, &sb, tenantID, templateID)
 		}
 	}
+	// Focus blocks: when the user triggered an inline action on a
+	// specific question / group / slot, the frontend ships its UUID
+	// in activeEntities. Append a verbatim snapshot so the model
+	// reasons against the SPECIFIC entity rather than guessing from
+	// the exam-wide list.
+	if qid := active["questionId"]; qid != "" {
+		a.appendQuestionFocus(ctx, &sb, tenantID, qid)
+	}
+	if gid := active["groupId"]; gid != "" {
+		a.appendGroupFocus(ctx, &sb, tenantID, gid)
+	}
+	if sid := active["slotId"]; sid != "" {
+		a.appendSlotFocus(ctx, &sb, tenantID, sid)
+	}
 	return sb.String()
 }
 
@@ -294,6 +308,169 @@ func (a *App) appendBlueprintContext(
 			)
 		}
 	}
+}
+
+// appendQuestionFocus writes a verbatim snapshot of one question +
+// its options + slot binding. Used by inline magic actions where the
+// user triggered AI on a specific card; without this the model has
+// to guess from the truncated exam-wide list which row they meant.
+func (a *App) appendQuestionFocus(ctx context.Context, sb *strings.Builder, tenantID, questionID string) {
+	var (
+		qType, content, expl, correct string
+		points                         float64
+		sortOrder                      int
+		slotID                         *string
+		groupID                        *string
+	)
+	err := a.db.QueryRowContext(ctx, `
+		SELECT question_type, COALESCE(content,''), COALESCE(explanation,''),
+		       COALESCE(correct_answer,''), points, sort_order,
+		       blueprint_slot_id::text, group_id::text
+		  FROM exam_questions
+		 WHERE id = $1 AND tenant_id = $2`,
+		questionID, tenantID,
+	).Scan(&qType, &content, &expl, &correct, &points, &sortOrder, &slotID, &groupID)
+	if err != nil {
+		return
+	}
+	sb.WriteString("\n--- FOKUS SOAL (target inline action) ---\n")
+	fmt.Fprintf(sb, "id=%s | tipe=%s | poin=%.0f | urutan=%d\n", questionID, qType, points, sortOrder+1)
+	fmt.Fprintf(sb, "konten: %s\n", oneLine(content))
+	if expl != "" {
+		fmt.Fprintf(sb, "penjelasan: %s\n", oneLine(expl))
+	}
+	if correct != "" {
+		fmt.Fprintf(sb, "jawaban benar: %s\n", oneLine(correct))
+	}
+	if slotID != nil && *slotID != "" {
+		fmt.Fprintf(sb, "slot kisi-kisi: %s\n", *slotID)
+	}
+	if groupID != nil && *groupID != "" {
+		fmt.Fprintf(sb, "group: %s\n", *groupID)
+	}
+	// Options
+	oRows, err := a.db.QueryContext(ctx, `
+		SELECT COALESCE(content,''), is_correct, sort_order
+		  FROM exam_question_options
+		 WHERE question_id = $1 AND tenant_id = $2
+		 ORDER BY sort_order, id`,
+		questionID, tenantID,
+	)
+	if err == nil {
+		defer oRows.Close()
+		letters := []string{"A", "B", "C", "D", "E", "F", "G", "H"}
+		i := 0
+		for oRows.Next() {
+			var oc string
+			var isCorrect bool
+			var so int
+			if err := oRows.Scan(&oc, &isCorrect, &so); err == nil {
+				letter := "?"
+				if i < len(letters) {
+					letter = letters[i]
+				}
+				mark := ""
+				if isCorrect {
+					mark = " ✅"
+				}
+				fmt.Fprintf(sb, "  %s) %s%s\n", letter, oneLine(oc), mark)
+				i++
+			}
+		}
+	}
+	sb.WriteString("--- END FOKUS ---\n")
+}
+
+// appendGroupFocus writes a snapshot of one group + its stimulus
+// snapshot + child question stems. Lets the model reason about a
+// specific group when the user triggers magic AI on a group card.
+func (a *App) appendGroupFocus(ctx context.Context, sb *strings.Builder, tenantID, groupID string) {
+	var (
+		title, body, gType string
+		displayOrder       int
+	)
+	err := a.db.QueryRowContext(ctx, `
+		SELECT COALESCE(stimulus_title_snapshot,''), COALESCE(stimulus_body_snapshot,''),
+		       COALESCE(group_type,'standalone'), display_order
+		  FROM exam_question_groups
+		 WHERE id = $1 AND tenant_id = $2`,
+		groupID, tenantID,
+	).Scan(&title, &body, &gType, &displayOrder)
+	if err != nil {
+		return
+	}
+	sb.WriteString("\n--- FOKUS GROUP (target inline action) ---\n")
+	fmt.Fprintf(sb, "id=%s | tipe=%s | urutan=%d\n", groupID, gType, displayOrder+1)
+	if title != "" {
+		fmt.Fprintf(sb, "judul stimulus: %s\n", oneLine(title))
+	}
+	if body != "" {
+		// Truncate body to 400 chars to keep token budget tight
+		bodyOne := oneLine(body)
+		if len(bodyOne) > 400 {
+			bodyOne = bodyOne[:400] + "…"
+		}
+		fmt.Fprintf(sb, "isi stimulus: %s\n", bodyOne)
+	}
+	qRows, err := a.db.QueryContext(ctx, `
+		SELECT id::text, sort_order, question_type, points, LEFT(COALESCE(content,''), 80)
+		  FROM exam_questions
+		 WHERE group_id = $1 AND tenant_id = $2
+		 ORDER BY sort_order, id`,
+		groupID, tenantID,
+	)
+	if err == nil {
+		defer qRows.Close()
+		sb.WriteString("soal di group:\n")
+		for qRows.Next() {
+			var qid, qt, content string
+			var so int
+			var pts float64
+			if err := qRows.Scan(&qid, &so, &qt, &pts, &content); err == nil {
+				fmt.Fprintf(sb, "  #%d (id=%s) [%s, %.0fpt] %s\n",
+					so+1, qid, qt, pts, oneLine(content))
+			}
+		}
+	}
+	sb.WriteString("--- END FOKUS ---\n")
+}
+
+// appendSlotFocus writes a snapshot of one blueprint slot + the
+// question linked to it (if any). Lets inline 'generate from slot'
+// or 'extract kisi-kisi from question' actions hit the right target.
+func (a *App) appendSlotFocus(ctx context.Context, sb *strings.Builder, tenantID, slotID string) {
+	var (
+		position                              int
+		kd, materi, indikator, cog, diff, qtype string
+		points                                float64
+		linkedQID                             *string
+	)
+	err := a.db.QueryRowContext(ctx, `
+		SELECT s.position,
+		       COALESCE(s.competency_code,''), COALESCE(s.materi,''),
+		       COALESCE(s.indikator,''), COALESCE(s.cognitive_level,''),
+		       COALESCE(s.difficulty,''), COALESCE(s.question_type,''),
+		       s.points,
+		       (SELECT id::text FROM exam_questions q WHERE q.blueprint_slot_id = s.id LIMIT 1)
+		  FROM exam_blueprint_slots s
+		 WHERE s.id = $1`,
+		slotID,
+	).Scan(&position, &kd, &materi, &indikator, &cog, &diff, &qtype, &points, &linkedQID)
+	if err != nil {
+		return
+	}
+	sb.WriteString("\n--- FOKUS SLOT KISI-KISI (target inline action) ---\n")
+	fmt.Fprintf(sb, "id=%s | posisi=%d\n", slotID, position+1)
+	fmt.Fprintf(sb, "KD=%s | Materi=%s | Indikator=%s\n",
+		dash(kd), dash(materi), oneLine(dash(indikator)))
+	fmt.Fprintf(sb, "Cognitive=%s | Difficulty=%s | Tipe=%s | Poin=%.0f\n",
+		dash(cog), dash(diff), dash(qtype), points)
+	if linkedQID != nil && *linkedQID != "" {
+		fmt.Fprintf(sb, "sudah terisi soal: %s\n", *linkedQID)
+	} else {
+		sb.WriteString("slot masih kosong\n")
+	}
+	sb.WriteString("--- END FOKUS ---\n")
 }
 
 // dash replaces an empty string with "-" so the prompt stays readable.

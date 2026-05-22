@@ -55,6 +55,7 @@ import { KisiKisiFields } from "@/components/blueprint/kisi-kisi-fields";
 import { RichEditor } from "@/components/ui/rich-editor";
 import { stripHtmlPreview } from "@/components/ui/rendered-content";
 import { StimulusPicker } from "@/components/exams/stimulus-picker";
+import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
 import { cn } from "@/lib/cn";
 
 const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string }[] = [
@@ -499,6 +500,14 @@ export function QuestionAccordion({
             />
           )}
         </button>
+        {canEdit && question && !isDraft && (
+          <InlineMagicPopover
+            entityKind="question"
+            entityId={question.id}
+            examId={examId}
+            className="shrink-0"
+          />
+        )}
         {canEdit && question && onDelete && !isOpen && (
           <button
             type="button"

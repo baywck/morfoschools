@@ -464,6 +464,41 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
     return () => { cancelled = true; };
   }, [sessionId, sessionStorageKey]);
 
+  // Inline-magic actions on cards (question/group/slot ✨ button)
+  // dispatch 'morfoschools:ai-turn-completed' with the new sessionId
+  // + first assistant message. The panel auto-opens via the AppShell
+  // listener; here we adopt the new session id (if scope matches) so
+  // the proposal that just landed is visible immediately without
+  // requiring the user to click anything.
+  useEffect(() => {
+    function onTurn(e: Event) {
+      const detail = (e as CustomEvent).detail as { sessionId?: string } | undefined;
+      if (!detail?.sessionId) return;
+      if (detail.sessionId !== sessionId) {
+        setSessionId(detail.sessionId);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(sessionStorageKey, detail.sessionId);
+        }
+      } else {
+        // Same session, force refetch by toggling sessionId effect.
+        // Cheapest: re-run restore via a state nudge.
+        setSessionId((curr) => curr); // no-op state set still triggers fetch in dev; fall back to direct refetch
+        void (async () => {
+          try {
+            const res = await fetch(`${API_BASE}/api/v1/ai/sessions/${detail.sessionId}/messages`, { credentials: "include" });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data?.data?.length > 0) {
+              setMessages(data.data.map((m: { role: string; content: string }) => ({ role: m.role, content: m.content })));
+            }
+          } catch { /* ignore */ }
+        })();
+      }
+    }
+    window.addEventListener("morfoschools:ai-turn-completed", onTurn);
+    return () => window.removeEventListener("morfoschools:ai-turn-completed", onTurn);
+  }, [sessionId, sessionStorageKey]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, isSending, open]);
