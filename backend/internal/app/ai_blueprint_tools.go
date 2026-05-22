@@ -1071,7 +1071,15 @@ func (a *App) capApplyBlueprintAnalysis(ctx context.Context, tenantID, userID st
 		BlueprintType  string `json:"blueprintType"`
 		Replace        bool   `json:"replace"`
 		AcceptedSlots  []struct {
-			QuestionID string `json:"questionId"`
+			QuestionID            string  `json:"questionId"`
+			CompetencyCode        string  `json:"competencyCode"`
+			CompetencyDescription string  `json:"competencyDescription"`
+			Materi                string  `json:"materi"`
+			Indikator             string  `json:"indikator"`
+			CognitiveLevel        string  `json:"cognitiveLevel"`
+			Difficulty            string  `json:"difficulty"`
+			QuestionType          string  `json:"questionType"`
+			Points                float64 `json:"points"`
 		} `json:"acceptedSlots"`
 		AcceptedSlotIndices []int `json:"acceptedSlotIndices"`
 		AcceptedLinkIndices []int `json:"acceptedLinkIndices"`
@@ -1184,11 +1192,55 @@ func (a *App) capApplyBlueprintAnalysis(ctx context.Context, tenantID, userID st
 		return errInvalidState("Exam sudah punya blueprint. Pass replace=true."), nil
 	}
 
-	confirm := fmt.Sprintf("Apply blueprint dari analisis: \"%s\" — %d slot, terhubung ke %d soal existing",
-		p.Title, len(p.AcceptedSlots), len(p.AcceptedSlots))
-	if hasBP && p.Replace {
-		confirm += " (REPLACE blueprint existing)"
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "**Apply kisi-kisi dari analisis**\n\n")
+	fmt.Fprintf(&sb, "**Judul:** %s\n", p.Title)
+	if p.CurriculumCode != "" {
+		fmt.Fprintf(&sb, "**Kurikulum:** %s\n", p.CurriculumCode)
 	}
+	if p.BlueprintType != "" {
+		fmt.Fprintf(&sb, "**Tipe:** %s\n", p.BlueprintType)
+	}
+	fmt.Fprintf(&sb, "\n**%d slot kisi-kisi:**\n", len(p.AcceptedSlots))
+	for i, s := range p.AcceptedSlots {
+		if i >= 12 {
+			fmt.Fprintf(&sb, "  … dan %d slot lainnya\n", len(p.AcceptedSlots)-12)
+			break
+		}
+		parts := []string{}
+		if s.CompetencyCode != "" {
+			parts = append(parts, "KD="+s.CompetencyCode)
+		}
+		if s.Materi != "" {
+			m := s.Materi
+			if len(m) > 30 {
+				m = m[:30] + "…"
+			}
+			parts = append(parts, "Materi="+m)
+		}
+		if s.CognitiveLevel != "" {
+			parts = append(parts, s.CognitiveLevel)
+		}
+		if s.Difficulty != "" {
+			parts = append(parts, s.Difficulty)
+		}
+		if s.Indikator != "" {
+			indi := s.Indikator
+			if len(indi) > 60 {
+				indi = indi[:60] + "…"
+			}
+			parts = append(parts, indi)
+		}
+		line := strings.Join(parts, " | ")
+		if line == "" {
+			line = "(metadata kosong)"
+		}
+		fmt.Fprintf(&sb, "  %d. %s\n", i+1, line)
+	}
+	if hasBP && p.Replace {
+		sb.WriteString("\n⚠ **REPLACE** — blueprint existing akan dihapus dulu.\n")
+	}
+	confirm := sb.String()
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
 	return a.createProposal(ctx, sessionID, tenantID, userID, "apply_blueprint_analysis", args, confirm)
 }

@@ -73,7 +73,7 @@ const QUESTION_COMMANDS: Command[] = [
   {
     label: "Extract kisi-kisi",
     hint: "Generate KD/Materi/Indikator dari soal ini",
-    prompt: "Analisis soal ini dan extract kisi-kisi yang sesuai: kompetensi dasar (KD), materi, indikator, level kognitif (C1-C6 / Bloom), dan tingkat kesulitan. Buat slot kisi-kisi baru di blueprint exam ini dengan metadata tersebut, lalu link soal ini ke slot tersebut. Pakai create_blueprint_slot + update_question (set blueprintSlotId).",
+    prompt: "Analisis soal ini lalu rumuskan kisi-kisi yang sesuai berdasarkan konten + jawaban benar:\n- competencyCode (KD code, mis: KD-3.5)\n- competencyDescription (1 kalimat)\n- materi (topik utama)\n- indikator (kata kerja operasional + objek + konteks)\n- cognitiveLevel (C1-C6 sesuai Bloom)\n- difficulty (mudah/sedang/sulit)\n\nLalu PAKAI apply_blueprint_analysis dengan:\n- examId dari FOKUS\n- title: 'Kisi-Kisi (auto-extract)'\n- curriculumCode: 'merdeka' (atau 'k13' kalau lebih cocok)\n- replace: false\n- acceptedSlots: [{questionId: <id>, competencyCode, competencyDescription, materi, indikator, cognitiveLevel, difficulty, questionType, points}]\n\nJANGAN pakai convert_questions_to_kisi_kisi (heuristic, tidak isi KD/Materi/Indikator).",
   },
   {
     label: "Generate dari kisi-kisi slot",
@@ -131,7 +131,7 @@ const GROUP_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi grup",
     hint: "Extract kisi-kisi dari semua soal di group",
-    prompt: "Analisis semua soal di group ini, extract kisi-kisi (KD/Materi/Indikator/cognitive level/difficulty) yang merepresentasikan group ini, dan buat blueprint slot untuk tiap soal. Link tiap soal ke slot yang sesuai. Pakai create_blueprint_slot + update_question per soal.",
+    prompt: "Untuk setiap soal di group ini (lihat FOKUS GROUP), rumuskan kisi-kisi: competencyCode, competencyDescription, materi, indikator, cognitiveLevel (C1-C6), difficulty (mudah/sedang/sulit). Lalu PAKAI apply_blueprint_analysis SEKALI dengan acceptedSlots berisi entry untuk setiap questionId di group. JANGAN pakai convert_questions_to_kisi_kisi (heuristic). Set replace: false agar slot existing tidak ditimpa.",
   },
   {
     label: "Custom…",
@@ -396,7 +396,7 @@ Format output:
       finalPrompt = `Generate teks stimulus untuk group yang sedang difokus, dengan topik: ${trimmed}.
 
 Format output:
-- Stimulus title yang ringkas + descriptive
+- Stimulus title yang descriptive
 - Stimulus body: passage/teks/kasus yang factually correct dan relevan untuk dijadikan dasar soal
 - Pakai update_question_group dengan titleSnapshot + bodySnapshot baru
 - JANGAN buat group baru, JANGAN buat soal di turn ini—cuma stimulus dulu. Soal akan ditambahkan iteratif setelahnya.`;
