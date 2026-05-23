@@ -70,11 +70,11 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 
 	// --- Create exam section ---
 	reg.Register(Capability{
-		Name: "create_exam_section",
+		Name:        "create_exam_section",
 		Description: "Add new section to exam.",
-		Permission: "exams:write",
-		Risk:       "write",
-		Domain:     "exams",
+		Permission:  "exams:write",
+		Risk:        "write",
+		Domain:      "exams",
 		Parameters: json.RawMessage(`{"type":"object","properties":{
 			"examId":{"type":"string"},
 			"title":{"type":"string"},
@@ -85,11 +85,11 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 
 	// --- Create question group ---
 	reg.Register(Capability{
-		Name: "create_question_group",
+		Name:        "create_question_group",
 		Description: "Create question group in section. CRITICAL: kalau user mau passage + soal yang merujuk passage, JANGAN pakai tool ini sendiri — pakai 'create_stimulus_block' yang atomic (stimulus + group + soal sekaligus). Tool ini hanya untuk group kosong (akan diisi soal manual nanti).",
-		Permission: "exams:write",
-		Risk:       "write",
-		Domain:     "exams",
+		Permission:  "exams:write",
+		Risk:        "write",
+		Domain:      "exams",
 		Parameters: json.RawMessage(`{"type":"object","properties":{
 			"examId":{"type":"string"},
 			"sectionId":{"type":"string"},
@@ -119,11 +119,11 @@ func (a *App) RegisterExamExtraCapabilities(reg *CapabilityRegistry) {
 
 	// --- Move question ---
 	reg.Register(Capability{
-		Name: "move_question",
+		Name:        "move_question",
 		Description: "Move question to different section/group/order in same exam. Set hanya field yang ingin diubah.",
-		Permission: "exams:write",
-		Risk:       "write",
-		Domain:     "exams",
+		Permission:  "exams:write",
+		Risk:        "write",
+		Domain:      "exams",
 		Parameters: json.RawMessage(`{"type":"object","properties":{
 			"questionId":{"type":"string"},
 			"sectionId":{"type":"string"},
@@ -277,17 +277,17 @@ func (a *App) capMoveQuestion(ctx context.Context, tenantID, userID string, args
 
 func (a *App) execUpdateQuestion(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	var p struct {
-		QuestionID     string  `json:"questionId"`
-		Content        *string `json:"content"`
-		Explanation    *string `json:"explanation"`
-		CorrectAnswer  *string `json:"correctAnswer"`
-		Points         *float64 `json:"points"`
-		QuestionType   *string `json:"questionType"`
-		CompetencyCode *string `json:"competencyCode"`
-		Materi         *string `json:"materi"`
-		Indikator      *string `json:"indikator"`
-		CognitiveLevel *string `json:"cognitiveLevel"`
-		Difficulty     *string `json:"difficulty"`
+		QuestionID     string           `json:"questionId"`
+		Content        *string          `json:"content"`
+		Explanation    *string          `json:"explanation"`
+		CorrectAnswer  *string          `json:"correctAnswer"`
+		Points         *float64         `json:"points"`
+		QuestionType   *string          `json:"questionType"`
+		CompetencyCode *string          `json:"competencyCode"`
+		Materi         *string          `json:"materi"`
+		Indikator      *string          `json:"indikator"`
+		CognitiveLevel *string          `json:"cognitiveLevel"`
+		Difficulty     *string          `json:"difficulty"`
 		Options        []questionOption `json:"options"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
@@ -407,6 +407,7 @@ func (a *App) execUpdateQuestion(ctx context.Context, tenantID, userID string, a
 		}
 	}
 
+	markExamAIContextStale(ctx, tx, tenantID, examID)
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
@@ -443,6 +444,7 @@ func (a *App) execDeleteQuestion(ctx context.Context, tenantID, userID string, a
 	); err != nil {
 		return "", err
 	}
+	markExamAIContextStaleDB(ctx, a.db, tenantID, examID)
 	a.auditAI(ctx, tenantID, userID, "questions.delete", "exam_question", p.QuestionID)
 	return fmt.Sprintf(`{"success":true,"message":"Soal dihapus","questionId":%q}`, p.QuestionID), nil
 }
@@ -483,6 +485,7 @@ func (a *App) execCreateExamSection(ctx context.Context, tenantID, userID string
 	).Scan(&id); err != nil {
 		return "", err
 	}
+	markExamAIContextStaleDB(ctx, a.db, tenantID, p.ExamID)
 	a.auditAI(ctx, tenantID, userID, "exam_sections.create", "exam_section", id)
 	return fmt.Sprintf(`{"success":true,"id":%q,"sortOrder":%d}`, id, sortOrder), nil
 }
@@ -551,6 +554,7 @@ func (a *App) execCreateQuestionGroup(ctx context.Context, tenantID, userID stri
 	).Scan(&id); err != nil {
 		return "", err
 	}
+	markExamAIContextStaleDB(ctx, a.db, tenantID, p.ExamID)
 	a.auditAI(ctx, tenantID, userID, "groups.create", "exam_question_group", id)
 	return fmt.Sprintf(`{"success":true,"id":%q,"displayOrder":%d,"groupType":%q}`, id, displayOrder, p.GroupType), nil
 }
@@ -598,6 +602,9 @@ func (a *App) execCreateStimulus(ctx context.Context, tenantID, userID string, a
 		p.Lifecycle, p.ParentExamID,
 	).Scan(&id); err != nil {
 		return "", err
+	}
+	if p.ParentExamID != "" {
+		markExamAIContextStaleDB(ctx, a.db, tenantID, p.ParentExamID)
 	}
 	a.auditAI(ctx, tenantID, userID, "stimuli.create", "stimulus", id)
 	return fmt.Sprintf(`{"success":true,"id":%q,"lifecycle":%q}`, id, p.Lifecycle), nil
@@ -663,6 +670,7 @@ func (a *App) execMoveQuestion(ctx context.Context, tenantID, userID string, arg
 	if _, err := a.db.ExecContext(ctx, q, vals...); err != nil {
 		return "", err
 	}
+	markExamAIContextStaleDB(ctx, a.db, tenantID, examID)
 	a.auditAI(ctx, tenantID, userID, "questions.move", "exam_question", p.QuestionID)
 	return fmt.Sprintf(`{"success":true,"questionId":%q}`, p.QuestionID), nil
 }

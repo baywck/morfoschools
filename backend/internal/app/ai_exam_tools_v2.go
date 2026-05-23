@@ -448,12 +448,12 @@ func (a *App) capListStimuli(ctx context.Context, tenantID, userID string, args 
 	}
 	defer rows.Close()
 	type sti struct {
-		ID            string `json:"id"`
-		Title         string `json:"title"`
-		Lifecycle     string `json:"lifecycle"`
-		Type          string `json:"type"`
-		ParentExamID  string `json:"parentExamId,omitempty"`
-		UsageCount    int    `json:"usageCount"`
+		ID           string `json:"id"`
+		Title        string `json:"title"`
+		Lifecycle    string `json:"lifecycle"`
+		Type         string `json:"type"`
+		ParentExamID string `json:"parentExamId,omitempty"`
+		UsageCount   int    `json:"usageCount"`
 	}
 	var out []sti
 	for rows.Next() {
@@ -965,6 +965,7 @@ func (a *App) execUpdateQuestionGroup(ctx context.Context, tenantID, userID stri
 	if _, err := a.db.ExecContext(ctx, q, vals...); err != nil {
 		return "", err
 	}
+	markExamAIContextStaleDB(ctx, a.db, tenantID, examID)
 	a.auditAI(ctx, tenantID, userID, "groups.update", "exam_question_group", p.GroupID)
 	b, _ := json.Marshal(map[string]any{"success": true, "message": "Group diperbarui", "groupId": p.GroupID})
 	return string(b), nil
@@ -991,6 +992,7 @@ func (a *App) execDeleteQuestionGroup(ctx context.Context, tenantID, userID stri
 	if _, err := a.db.ExecContext(ctx, `DELETE FROM exam_question_groups WHERE id=$1 AND tenant_id=$2`, p.GroupID, tenantID); err != nil {
 		return "", err
 	}
+	markExamAIContextStaleDB(ctx, a.db, tenantID, examID)
 	a.auditAI(ctx, tenantID, userID, "groups.delete", "exam_question_group", p.GroupID)
 	b, _ := json.Marshal(map[string]any{"success": true, "message": "Group dihapus", "groupId": p.GroupID})
 	return string(b), nil
@@ -1039,6 +1041,7 @@ func (a *App) execUpdateStimulus(ctx context.Context, tenantID, userID string, a
 	if _, err := a.db.ExecContext(ctx, q, vals...); err != nil {
 		return "", err
 	}
+	markStimulusParentExamStale(ctx, a.db, tenantID, p.StimulusID)
 	a.auditAI(ctx, tenantID, userID, "stimuli.update", "stimulus", p.StimulusID)
 	b, _ := json.Marshal(map[string]any{"success": true, "message": "Stimulus diperbarui", "stimulusId": p.StimulusID})
 	return string(b), nil
@@ -1057,6 +1060,7 @@ func (a *App) execArchiveStimulus(ctx context.Context, tenantID, userID string, 
 		p.StimulusID, tenantID); err != nil {
 		return "", err
 	}
+	markStimulusParentExamStale(ctx, a.db, tenantID, p.StimulusID)
 	a.auditAI(ctx, tenantID, userID, "stimuli.archive", "stimulus", p.StimulusID)
 	b, _ := json.Marshal(map[string]any{"success": true, "message": "Stimulus diarsip", "stimulusId": p.StimulusID})
 	return string(b), nil
@@ -1080,6 +1084,7 @@ func (a *App) execPromoteStimulus(ctx context.Context, tenantID, userID string, 
 	if rows == 0 {
 		return errValidationFailed("lifecycle", "Stimulus tidak dalam exam_scoped atau tidak ditemukan"), nil
 	}
+	markStimulusParentExamStale(ctx, a.db, tenantID, p.StimulusID)
 	a.auditAI(ctx, tenantID, userID, "stimuli.promote", "stimulus", p.StimulusID)
 	b, _ := json.Marshal(map[string]any{"success": true, "message": "Stimulus dipromosikan ke shared", "stimulusId": p.StimulusID})
 	return string(b), nil
@@ -1249,6 +1254,7 @@ func (a *App) execAssignQuestionToSlot(ctx context.Context, tenantID, userID str
 	if rows == 0 {
 		return errEntityNotFound("question", "questionId", p.QuestionID), nil
 	}
+	markExamAIContextStaleDB(ctx, a.db, tenantID, examID)
 	a.auditAI(ctx, tenantID, userID, "slots.assign_question", "exam_blueprint_slot", p.SlotID)
 	b, _ := json.Marshal(map[string]any{"success": true, "message": "Soal di-assign ke slot", "slotId": p.SlotID, "questionId": p.QuestionID})
 	return string(b), nil

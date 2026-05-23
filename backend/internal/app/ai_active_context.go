@@ -115,9 +115,11 @@ func (a *App) appendExamContext(
 	fmt.Fprintf(sb, "Exam aktif: %q (id=%s)\n", title, examID)
 	fmt.Fprintf(sb, "Tipe: %s | Status: %s | Max: %.0f | Lulus: %.0f | Kisi-kisi: %t\n",
 		examType, status, maxScore, passing, usesKisi)
+	questionPreviewLimit := 50
 	if idx, err := loadOrRebuildExamAIContextIndex(ctx, a.db, tenantID, examID); err == nil && len(idx.Summary) > 0 {
 		if b, err := json.Marshal(idx.Summary); err == nil {
 			fmt.Fprintf(sb, "Exam AI Index (ringkas, bukan sumber kebenaran write): %s\n", string(b))
+			questionPreviewLimit = 20
 		}
 	}
 
@@ -180,8 +182,8 @@ func (a *App) appendExamContext(
 		  FROM exam_questions q
 		 WHERE q.exam_id = $1 AND q.tenant_id = $2
 		 ORDER BY q.sort_order
-		 LIMIT 50`,
-		examID, tenantID,
+		 LIMIT $3`,
+		examID, tenantID, questionPreviewLimit,
 	)
 	if err == nil {
 		defer qrows.Close()
@@ -202,8 +204,8 @@ func (a *App) appendExamContext(
 			}
 		}
 		if len(lines) > 0 {
-			if len(lines) >= 50 {
-				sb.WriteString("Soal yang sudah ada (50 pertama — panggil find_similar_questions sebelum tambah soal baru):\n")
+			if len(lines) >= questionPreviewLimit {
+				sb.WriteString(fmt.Sprintf("Soal yang sudah ada (%d pertama — index berisi ringkasan; panggil find_similar_questions sebelum tambah soal baru):\n", questionPreviewLimit))
 			} else {
 				sb.WriteString("Soal yang sudah ada (jangan duplikasi; pakai find_similar_questions kalau ragu):\n")
 			}

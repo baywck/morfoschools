@@ -18,6 +18,24 @@ type examAIContextIndex struct {
 	Stale       bool           `json:"stale"`
 }
 
+func markStimulusParentExamStale(ctx context.Context, db *sql.DB, tenantID, stimulusID string) {
+	var examID sql.NullString
+	_ = db.QueryRowContext(ctx, `SELECT parent_exam_id::text FROM stimuli WHERE id=$1 AND tenant_id=$2`, stimulusID, tenantID).Scan(&examID)
+	if examID.Valid && examID.String != "" {
+		markExamAIContextStaleDB(ctx, db, tenantID, examID.String)
+	}
+}
+
+func markExamAIContextStaleDB(ctx context.Context, db *sql.DB, tenantID, examID string) {
+	if strings.TrimSpace(examID) == "" {
+		return
+	}
+	_, _ = db.ExecContext(ctx, `
+		UPDATE exam_ai_context_indexes
+		   SET stale=true, updated_at=now()
+		 WHERE tenant_id=$1 AND exam_id=$2`, tenantID, examID)
+}
+
 func markExamAIContextStale(ctx context.Context, tx *sql.Tx, tenantID, examID string) {
 	if strings.TrimSpace(examID) == "" {
 		return

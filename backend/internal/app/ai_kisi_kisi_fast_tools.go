@@ -266,6 +266,7 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 	if _, err := tx.ExecContext(ctx, `UPDATE exams SET uses_kisi_kisi = true, updated_at = now() WHERE id=$1 AND tenant_id=$2`, examID, tenantID); err != nil {
 		return "", err
 	}
+	markExamAIContextStale(ctx, tx, tenantID, examID)
 
 	if err := tx.Commit(); err != nil {
 		return "", err
