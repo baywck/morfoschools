@@ -424,11 +424,12 @@ func (a *App) capCreateQuestion(ctx context.Context, tenantID, userID string, ar
 	for _, issue := range validateGeneratedQuestionDraft(defaultExamAuthoringPolicy(tenantID, p.ExamID), generatedQuestionDraft{
 		QuestionType: p.QuestionType,
 		Content:      p.Content,
+		Explanation:  p.Explanation,
 		Options:      p.Options,
 		Grouped:      p.GroupID != "",
 	}) {
-		if issue.Field == "content" && issue.Severity == "warning" && p.GroupID == "" {
-			return errValidationFailed(issue.Field, issue.Message+". Buat ulang dengan bacaan/stimulus 2-4 kalimat sebelum pertanyaan."), nil
+		if issue.Severity == "error" || issue.Field == "explanation" || (issue.Field == "content" && p.GroupID == "") {
+			return errValidationFailed(issue.Field, issue.Message+". Perbaiki payload sebelum mengajukan proposal."), nil
 		}
 	}
 
@@ -552,10 +553,14 @@ func (a *App) capBatchCreateQuestions(ctx context.Context, tenantID, userID stri
 			Options:      q.Options,
 			Grouped:      q.GroupID != "",
 		}) {
-			if issue.Field == "content" && issue.Severity == "warning" && q.GroupID == "" {
+			if issue.Severity == "error" || issue.Field == "explanation" || (issue.Field == "content" && q.GroupID == "") {
+				message := issue.Message + ". Perbaiki payload sebelum mengajukan proposal."
+				if issue.Field == "content" {
+					message = issue.Message + ". Buat ulang dengan bacaan/stimulus 2-4 kalimat sebelum pertanyaan."
+				}
 				failures = append(failures, FailedItem{
 					Index: i, Code: "QUALITY_CONTRACT_FAILED",
-					Message: issue.Message + ". Buat ulang dengan bacaan/stimulus 2-4 kalimat sebelum pertanyaan.",
+					Message: message,
 					Content: q.Content,
 				})
 				break
