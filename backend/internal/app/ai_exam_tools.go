@@ -771,40 +771,15 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 		createdIDs = append(createdIDs, id)
 		created++
 
-		if policy.UsesKisiKisi && bpID != "" {
-			if !questionHasBlueprintSlot(ctx, tx, id) {
-				item := kisiItemFromQuestionMap(id, qm, bpPos)
-				if strings.HasPrefix(item.CompetencyCode, "KOMP-") {
-					item.CompetencyCode = inferNextCompetencyCodeTx(ctx, tx, bpID, bpPos)
-				}
-				var slotID string
-				if err := tx.QueryRowContext(ctx, `
-					INSERT INTO exam_blueprint_slots (
-					    exam_blueprint_id, position,
-					    competency_code, competency_description, materi, indikator,
-					    cognitive_level, difficulty, question_type, points
-					) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
-					RETURNING id::text`,
-					bpID, bpPos, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
-					item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,
-				).Scan(&slotID); err != nil {
-					return "", err
-				}
-				if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil {
-					return "", err
-				}
-				bpPos++
-				linkedKisi++
-			}
+		if result, err := ensureQuestionKisiKisiLink(ctx, tx, tenantID, policy, bpID, id, qm, bpPos); err != nil {
+			return "", err
+		} else if result.Created {
+			bpPos++
+			linkedKisi++
 		}
 	}
 	if policy.UsesKisiKisi && bpID != "" && linkedKisi > 0 {
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE exam_blueprints SET
-			    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
-			    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
-			    updated_at = now()
-			WHERE id=$1`, bpID); err != nil {
+		if err := updateExamBlueprintTotals(ctx, tx, bpID); err != nil {
 			return "", err
 		}
 	}
@@ -966,39 +941,18 @@ func (a *App) insertQuestionWithOptions(ctx context.Context, tenantID, userID st
 		return "", err
 	}
 	if policy.UsesKisiKisi {
-		if !questionHasBlueprintSlot(ctx, tx, id) {
-			bpID, err := ensureExamBlueprintTx(ctx, tx, tenantID, examID, "merdeka")
-			if err != nil {
-				return "", err
-			}
-			bpPos := 0
-			_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
-			item := kisiItemFromQuestionMap(id, qm, bpPos)
-			if strings.HasPrefix(item.CompetencyCode, "KOMP-") {
-				item.CompetencyCode = inferNextCompetencyCodeTx(ctx, tx, bpID, bpPos)
-			}
-			var slotID string
-			if err := tx.QueryRowContext(ctx, `
-				INSERT INTO exam_blueprint_slots (
-				    exam_blueprint_id, position,
-				    competency_code, competency_description, materi, indikator,
-				    cognitive_level, difficulty, question_type, points
-				) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
-				RETURNING id::text`,
-				bpID, bpPos, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
-				item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,
-			).Scan(&slotID); err != nil {
-				return "", err
-			}
-			if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil {
-				return "", err
-			}
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE exam_blueprints SET
-				    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
-				    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
-				    updated_at = now()
-				WHERE id=$1`, bpID); err != nil {
+		bpID, err := ensureExamBlueprintTx(ctx, tx, tenantID, examID, "merdeka")
+		if err != nil {
+			return "", err
+		}
+		bpPos := 0
+		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
+		result, err := ensureQuestionKisiKisiLink(ctx, tx, tenantID, policy, bpID, id, qm, bpPos)
+		if err != nil {
+			return "", err
+		}
+		if result.Created {
+			if err := updateExamBlueprintTotals(ctx, tx, bpID); err != nil {
 				return "", err
 			}
 		}

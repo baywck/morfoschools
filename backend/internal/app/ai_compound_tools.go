@@ -299,11 +299,13 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 	}
 
 	// 3. Insert questions, all linked to group + stimulus.
-	var usesKisiKisi bool
-	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(uses_kisi_kisi,false) FROM exams WHERE id=$1 AND tenant_id=$2`, p.ExamID, tenantID).Scan(&usesKisiKisi)
+	policy, err := loadExamAuthoringPolicy(ctx, tx, tenantID, p.ExamID)
+	if err != nil {
+		return "", err
+	}
 	bpID := ""
 	bpPos := 0
-	if usesKisiKisi {
+	if policy.UsesKisiKisi {
 		bpID, _ = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
 		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
 	}
@@ -329,37 +331,15 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 			return "", err
 		}
 		createdQuestionIDs = append(createdQuestionIDs, id)
-		if usesKisiKisi && bpID != "" {
-			if !questionHasBlueprintSlot(ctx, tx, id) {
-				item := kisiItemFromQuestionMap(id, qm, bpPos)
-				var slotID string
-				if err := tx.QueryRowContext(ctx, `
-					INSERT INTO exam_blueprint_slots (
-					    exam_blueprint_id, position,
-					    competency_code, competency_description, materi, indikator,
-					    cognitive_level, difficulty, question_type, points
-					) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
-					RETURNING id::text`,
-					bpID, bpPos, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
-					item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,
-				).Scan(&slotID); err != nil {
-					return "", err
-				}
-				if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil {
-					return "", err
-				}
-				bpPos++
-				linkedKisi++
-			}
+		if result, err := ensureQuestionKisiKisiLink(ctx, tx, tenantID, policy, bpID, id, qm, bpPos); err != nil {
+			return "", err
+		} else if result.Created {
+			bpPos++
+			linkedKisi++
 		}
 	}
-	if usesKisiKisi && bpID != "" && linkedKisi > 0 {
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE exam_blueprints SET
-			    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
-			    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
-			    updated_at = now()
-			WHERE id=$1`, bpID); err != nil {
+	if policy.UsesKisiKisi && bpID != "" && linkedKisi > 0 {
+		if err := updateExamBlueprintTotals(ctx, tx, bpID); err != nil {
 			return "", err
 		}
 	}
