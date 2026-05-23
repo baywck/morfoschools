@@ -172,15 +172,23 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&pos)
 
 	linked := 0
+	skippedMissing := []string{}
 	for _, it := range items {
 		// Verify question belongs to exam + tenant and infer missing type/points.
+		// Bulk AI payloads can contain stale/hallucinated IDs when context shifts;
+		// do not rollback all valid items for one bad ID. Skip missing rows and
+		// report them in the result. Single-question calls still surface zero-linked
+		// as a validation failure below.
 		var qType string
 		var qPoints float64
 		if err := tx.QueryRowContext(ctx,
 			`SELECT question_type, points FROM exam_questions WHERE id = $1 AND exam_id = $2 AND tenant_id = $3`,
 			it.QuestionID, examID, tenantID,
 		).Scan(&qType, &qPoints); err != nil {
-			if err == sql.ErrNoRows { return errEntityNotFound("question", "questionId", it.QuestionID), nil }
+			if err == sql.ErrNoRows {
+				skippedMissing = append(skippedMissing, it.QuestionID)
+				continue
+			}
 			return "", err
 		}
 		if it.QuestionType == "" { it.QuestionType = qType }
@@ -208,6 +216,10 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 		linked++
 	}
 
+	if linked == 0 {
+		return errValidationFailed("items", "Tidak ada questionId valid untuk exam ini; refresh halaman lalu generate ulang"), nil
+	}
+
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE exam_blueprints SET
 		    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
@@ -219,7 +231,19 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 
 	if err := tx.Commit(); err != nil { return "", err }
 	a.auditAI(ctx, tenantID, userID, "exam_blueprints.fast_apply_kisi_kisi", "exam_blueprint", bpID)
-	return fmt.Sprintf(`{"success":true,"message":"Kisi-kisi diterapkan ke %d soal","blueprintId":"%s","linkedQuestions":%d}`, linked, bpID, linked), nil
+	msg := fmt.Sprintf("Kisi-kisi diterapkan ke %d soal", linked)
+	if len(skippedMissing) > 0 {
+		msg += fmt.Sprintf("; %d questionId dilewati karena tidak ditemukan di exam ini", len(skippedMissing))
+	}
+	payload := map[string]any{
+		"success": true,
+		"message": msg,
+		"blueprintId": bpID,
+		"linkedQuestions": linked,
+		"skippedMissing": skippedMissing,
+	}
+	b, _ := json.Marshal(payload)
+	return string(b), nil
 }
 
 func ensureExamBlueprintTx(ctx context.Context, tx *sql.Tx, tenantID, examID, curriculumCode string) (string, error) {
