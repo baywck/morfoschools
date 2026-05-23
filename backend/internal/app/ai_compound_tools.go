@@ -306,8 +306,13 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 	bpID := ""
 	bpPos := 0
 	if policy.UsesKisiKisi {
-		bpID, _ = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
-		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
+		bpID, err = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
+		if err != nil {
+			return "", err
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos); err != nil {
+			return "", err
+		}
 	}
 
 	createdQuestionIDs := make([]string, 0, len(p.Questions))

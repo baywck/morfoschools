@@ -421,6 +421,17 @@ func (a *App) capCreateQuestion(ctx context.Context, tenantID, userID string, ar
 		return errValidationFailed(firstField, firstMsg), nil
 	}
 
+	for _, issue := range validateGeneratedQuestionDraft(defaultExamAuthoringPolicy(tenantID, p.ExamID), generatedQuestionDraft{
+		QuestionType: p.QuestionType,
+		Content:      p.Content,
+		Options:      p.Options,
+		Grouped:      p.GroupID != "",
+	}) {
+		if issue.Field == "content" && issue.Severity == "warning" && p.GroupID == "" {
+			return errValidationFailed(issue.Field, issue.Message+". Buat ulang dengan bacaan/stimulus 2-4 kalimat sebelum pertanyaan."), nil
+		}
+	}
+
 	if dup := a.checkQuestionDuplicate(ctx, tenantID, p.ExamID, p.Content); dup != "" {
 		return dup, nil
 	}
@@ -534,6 +545,22 @@ func (a *App) capBatchCreateQuestions(ctx context.Context, tenantID, userID stri
 			continue
 		}
 		h := hashContent(q.Content)
+		for _, issue := range validateGeneratedQuestionDraft(defaultExamAuthoringPolicy(tenantID, p.ExamID), generatedQuestionDraft{
+			QuestionType: q.QuestionType,
+			Content:      q.Content,
+			Explanation:  q.Explanation,
+			Options:      q.Options,
+			Grouped:      q.GroupID != "",
+		}) {
+			if issue.Field == "content" && issue.Severity == "warning" && q.GroupID == "" {
+				failures = append(failures, FailedItem{
+					Index: i, Code: "QUALITY_CONTRACT_FAILED",
+					Message: issue.Message + ". Buat ulang dengan bacaan/stimulus 2-4 kalimat sebelum pertanyaan.",
+					Content: q.Content,
+				})
+				break
+			}
+		}
 		if h != "" {
 			if firstIdx, ok := seenHashes[h]; ok {
 				failures = append(failures, FailedItem{
@@ -741,8 +768,13 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 	bpID := ""
 	bpPos := 0
 	if policy.UsesKisiKisi {
-		bpID, _ = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
-		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
+		bpID, err = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
+		if err != nil {
+			return "", err
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos); err != nil {
+			return "", err
+		}
 	}
 
 	created := 0
