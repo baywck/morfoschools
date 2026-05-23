@@ -890,6 +890,7 @@ func kisiItemFromQuestionMap(questionID string, qm map[string]any, pos int) auto
 		code = fmt.Sprintf("KOMP-%03d", pos+1)
 	}
 	desc := get("competencyDescription")
+	code, desc, materi, indikator = normalizeKisiKisiFields(code, desc, materi, indikator)
 	if desc == "" {
 		desc = synthesizeCompetencyDescription(materi, indikator)
 	}

@@ -219,6 +219,7 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 		if strings.TrimSpace(it.CompetencyCode) == "" {
 			it.CompetencyCode = inferNextCompetencyCodeTx(ctx, tx, bpID, pos)
 		}
+		it.CompetencyCode, it.CompetencyDescription, it.Materi, it.Indikator = normalizeKisiKisiFields(it.CompetencyCode, it.CompetencyDescription, it.Materi, it.Indikator)
 		if strings.TrimSpace(it.CompetencyDescription) == "" {
 			it.CompetencyDescription = synthesizeCompetencyDescription(it.Materi, it.Indikator)
 		}
@@ -287,19 +288,67 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 	return string(b), nil
 }
 
+func normalizeKisiKisiFields(code, desc, materi, indikator string) (string, string, string, string) {
+	code = strings.TrimSpace(code)
+	desc = strings.TrimSpace(desc)
+	materi = strings.TrimSpace(materi)
+	indikator = strings.TrimSpace(indikator)
+
+	// Materi is the topic/content scope, not another KD label. Models often
+	// emit "KD 3.1 Sistem Demokrasi..." as materi; strip the KD label so the
+	// saved field reads like a curriculum topic.
+	materi = stripKDLabelFromMateri(materi)
+
+	// Deskripsi kompetensi should not be a verbatim clone of materi. If the
+	// model copies materi into description (or emits the generic fallback),
+	// synthesize a competency-oriented sentence from indikator/materi.
+	if desc == "" || normalizedKisiText(desc) == normalizedKisiText(materi) || looksLikeGenericCompetencyDescription(desc, materi) {
+		desc = synthesizeCompetencyDescription(materi, indikator)
+	}
+	if normalizedKisiText(desc) == normalizedKisiText(materi) {
+		desc = "Menganalisis konsep dan penerapan " + materi + " dalam konteks kewarganegaraan"
+	}
+	return code, desc, materi, indikator
+}
+
+func stripKDLabelFromMateri(s string) string {
+	s = strings.TrimSpace(s)
+	lower := strings.ToLower(s)
+	for _, prefix := range []string{"kd ", "kd.", "kompetensi dasar "} {
+		if strings.HasPrefix(lower, prefix) {
+			rest := strings.TrimSpace(s[len(prefix):])
+			parts := strings.Fields(rest)
+			if len(parts) > 1 && strings.ContainsAny(parts[0], ".0123456789") {
+				return strings.TrimSpace(strings.TrimPrefix(rest, parts[0]))
+			}
+		}
+	}
+	return s
+}
+
+func normalizedKisiText(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(s))), " ")
+}
+
+func looksLikeGenericCompetencyDescription(desc, materi string) bool {
+	d := normalizedKisiText(desc)
+	m := normalizedKisiText(materi)
+	if strings.Contains(d, "memahami dan menerapkan konsep") && strings.Contains(d, "sesuai kompetensi") {
+		return true
+	}
+	return m != "" && strings.Contains(d, "memahami dan menerapkan konsep "+m+" sesuai kompetensi")
+}
+
 func synthesizeCompetencyDescription(materi, indikator string) string {
 	materi = strings.TrimSpace(materi)
 	indikator = strings.TrimSpace(indikator)
-	if materi == "" && indikator == "" {
-		return "Kompetensi yang diukur dari butir soal"
+	if indikator != "" {
+		return strings.TrimSuffix(indikator, ".")
 	}
 	if materi == "" {
-		return indikator
+		return "Menganalisis kompetensi yang diukur dari butir soal"
 	}
-	if indikator == "" {
-		return "Memahami konsep dan penerapan " + materi
-	}
-	return "Memahami dan menerapkan konsep " + materi + " sesuai kompetensi yang diukur."
+	return "Menganalisis konsep dan penerapan " + materi + " dalam konteks kewarganegaraan"
 }
 
 func ensureExamBlueprintTx(ctx context.Context, tx *sql.Tx, tenantID, examID, curriculumCode string) (string, error) {

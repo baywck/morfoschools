@@ -75,7 +75,7 @@ const QUESTION_COMMANDS: Command[] = [
   {
     label: "Extract kisi-kisi",
     hint: "Generate KD/Materi/Indikator dari soal ini",
-    prompt: "Analisis soal fokus ini lalu rumuskan kisi-kisi lengkap. Indikator harus konseptual: lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI apply_question_kisi_kisi dengan competencyCode, competencyDescription, materi, indikator, cognitiveLevel C1-C6, difficulty. Jangan pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
+    prompt: "Analisis soal fokus ini lalu rumuskan kisi-kisi lengkap. Bedakan field: competencyCode = kode KD saja (mis. 3.6); materi = topik/ruang lingkup materi tanpa awalan KD/kode; competencyDescription = uraian kompetensi yang diukur, bukan salinan materi; indikator = perilaku terukur yang konseptual. Indikator harus lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI apply_question_kisi_kisi dengan competencyCode, competencyDescription, materi, indikator, cognitiveLevel C1-C6, difficulty. Jangan pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
   },
   {
     label: "Generate dari kisi-kisi slot",
