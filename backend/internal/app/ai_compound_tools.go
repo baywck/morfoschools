@@ -26,7 +26,7 @@ import (
 // capabilities are registered.
 func (a *App) RegisterCompoundCapabilities(reg *CapabilityRegistry) {
 	reg.Register(Capability{
-		Name: "create_stimulus_block",
+		Name:        "create_stimulus_block",
 		Description: "Atomic: create stimulus + group + N questions in ONE transaction. Use when user asks for a passage with multiple linked soal. All questions auto-link to the new group + stimulus. Tip: pakai ini daripada create_stimulus + create_question_group + create_question terpisah karena step-step itu butuh ID dari step sebelumnya.",
 		Permission:  "exams:write",
 		Risk:        "write",
@@ -59,8 +59,8 @@ func (a *App) capCreateStimulusBlock(ctx context.Context, tenantID, userID strin
 		ExamID    string         `json:"examId"`
 		Stimulus  map[string]any `json:"stimulus"`
 		Questions []struct {
-			QuestionType string `json:"questionType"`
-			Content      string `json:"content"`
+			QuestionType string   `json:"questionType"`
+			Content      string   `json:"content"`
 			Points       *float64 `json:"points"`
 			Options      []struct {
 				Content   string `json:"content"`
@@ -196,9 +196,9 @@ func (a *App) capCreateStimulusBlock(ctx context.Context, tenantID, userID strin
 
 func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	var p struct {
-		ExamID     string `json:"examId"`
-		SectionID  string `json:"sectionId"`
-		Stimulus   struct {
+		ExamID    string `json:"examId"`
+		SectionID string `json:"sectionId"`
+		Stimulus  struct {
 			Title     string `json:"title"`
 			Content   string `json:"content"`
 			Source    string `json:"source"`
@@ -299,7 +299,17 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 	}
 
 	// 3. Insert questions, all linked to group + stimulus.
+	var usesKisiKisi bool
+	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(uses_kisi_kisi,false) FROM exams WHERE id=$1 AND tenant_id=$2`, p.ExamID, tenantID).Scan(&usesKisiKisi)
+	bpID := ""
+	bpPos := 0
+	if usesKisiKisi {
+		bpID, _ = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
+		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
+	}
+
 	createdQuestionIDs := make([]string, 0, len(p.Questions))
+	linkedKisi := 0
 	for _, qRaw := range p.Questions {
 		var qm map[string]any
 		_ = json.Unmarshal(qRaw, &qm)
@@ -319,6 +329,39 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 			return "", err
 		}
 		createdQuestionIDs = append(createdQuestionIDs, id)
+		if usesKisiKisi && bpID != "" {
+			if _, hasSlot := qm["blueprintSlotId"]; !hasSlot {
+				item := kisiItemFromQuestionMap(id, qm, bpPos)
+				var slotID string
+				if err := tx.QueryRowContext(ctx, `
+					INSERT INTO exam_blueprint_slots (
+					    exam_blueprint_id, position,
+					    competency_code, competency_description, materi, indikator,
+					    cognitive_level, difficulty, question_type, points
+					) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
+					RETURNING id::text`,
+					bpID, bpPos, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
+					item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,
+				).Scan(&slotID); err != nil {
+					return "", err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil {
+					return "", err
+				}
+				bpPos++
+				linkedKisi++
+			}
+		}
+	}
+	if usesKisiKisi && bpID != "" && linkedKisi > 0 {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE exam_blueprints SET
+			    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
+			    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
+			    updated_at = now()
+			WHERE id=$1`, bpID); err != nil {
+			return "", err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -332,12 +375,18 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 	}
 
 	b, _ := json.Marshal(map[string]any{
-		"success":      true,
-		"message":      fmt.Sprintf("Stimulus + group + %d soal berhasil dibuat dalam satu transaksi", len(createdQuestionIDs)),
-		"stimulusId":   stimulusID,
-		"groupId":      groupID,
-		"questionIds":  createdQuestionIDs,
-		"questionCount": len(createdQuestionIDs),
+		"success": true,
+		"message": fmt.Sprintf("Stimulus + group + %d soal berhasil dibuat dalam satu transaksi%s", len(createdQuestionIDs), func() string {
+			if linkedKisi > 0 {
+				return fmt.Sprintf("; %d kisi-kisi otomatis dibuat", linkedKisi)
+			}
+			return ""
+		}()),
+		"stimulusId":     stimulusID,
+		"groupId":        groupID,
+		"questionIds":    createdQuestionIDs,
+		"questionCount":  len(createdQuestionIDs),
+		"linkedKisiKisi": linkedKisi,
 	})
 	return string(b), nil
 }

@@ -130,7 +130,7 @@ type aiChatRequest struct {
 	Message   string `json:"message"`
 	// Shadow state from frontend
 	Shadow struct {
-		Route          string `json:"route"`
+		Route          string            `json:"route"`
 		ActiveEntities map[string]string `json:"activeEntities"`
 	} `json:"shadow"`
 }
@@ -872,7 +872,7 @@ func (a *App) buildSystemPrompt(tenantID string, auth *AuthContext, req aiChatRe
 	// just stop paying for the explanation on every turn.
 	sb.WriteString("Asisten Morfoschools. Jawab ringkas dalam Bahasa Indonesia. Pakai tools untuk semua data; jangan mengarang.\n")
 	sb.WriteString("Multi-step: emit semua tool_calls dalam satu turn (native function-calling support multiple). User konfirmasi semua dengan satu 'ya'.\n")
-	sb.WriteString("PASSAGE + SOAL: kalau user minta stimulus/passage + N soal yang merujuk stimulus itu, WAJIB pakai 'create_stimulus_block' (atomic: 1 call = stimulus + group + N soal). JANGAN chain create_stimulus + create_question_group + create_question terpisah — step kedua butuh ID dari step pertama yang belum di-execute.\n")
+	sb.WriteString("PASSAGE + SOAL: default untuk permintaan umum 'buat N soal dengan bacaan/stimulus' adalah batch_create_questions dengan stimulus/konteks panjang tertanam di stem setiap soal (standalone, bukan group). Pakai create_stimulus_block HANYA jika user eksplisit minta satu bacaan bersama/group stimulus/soal berdasarkan teks yang sama. JANGAN chain create_stimulus + create_question_group + create_question terpisah.\n")
 	sb.WriteString("Sebelum batch-create, panggil list_* / search_* untuk hindari duplikat.\n")
 	sb.WriteString("DUPLICATE GUARD: di exam dengan >=5 soal existing, WAJIB panggil find_similar_questions(examId, content) SEBELUM tiap create_question/batch_create_questions. Kalau ada hasil sim>=0.85, ganti pendekatan (topik/level kognitif/stimulus berbeda) dan retry. Skip pre-check hanya kalau user eksplisit minta soal serupa (variant problem).\n")
 	sb.WriteString("Tool error: ikuti error.recovery, retry diam-diam max 2x, lalu tanya user.\n")
@@ -933,7 +933,7 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage, tools []map[st
 		// reasoning_tokens, 0 content). 8192 gives reasoning + tool
 		// arguments room to breathe; bump again only if we hit this on
 		// even larger compound prompts.
-		"max_tokens":  8192,
+		"max_tokens": 8192,
 	}
 	if len(tools) > 0 {
 		body["tools"] = tools
