@@ -79,7 +79,7 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "create_question",
-		Description: "Create one question. Types: multiple_choice, true_false, short_answer, essay.",
+		Description: "Create one high-quality contextual question. Prefer multiple_choice with inline stimulus/context, plausible homogeneous options, one key, and explanation. If exam uses kisi-kisi, include competencyCode/competencyDescription/materi/indikator/cognitiveLevel/difficulty so backend can auto-link kisi-kisi.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -89,6 +89,12 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 			"groupId":{"type":"string","description":"opsional, masukkan soal ke group existing"},
 			"stimulusId":{"type":"string","description":"opsional, link soal ke stimulus library"},
 			"blueprintSlotId":{"type":"string","description":"opsional, link soal ke blueprint slot"},
+			"competencyCode":{"type":"string"},
+			"competencyDescription":{"type":"string"},
+			"materi":{"type":"string"},
+			"indikator":{"type":"string"},
+			"cognitiveLevel":{"type":"string","enum":["C1","C2","C3","C4","C5","C6"]},
+			"difficulty":{"type":"string","enum":["mudah","sedang","sulit"]},
 			"questionType":{"type":"string","enum":["multiple_choice","true_false","short_answer","essay"]},
 			"content":{"type":"string","description":"Pertanyaan / soal"},
 			"explanation":{"type":"string"},
@@ -102,7 +108,7 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 
 	reg.Register(Capability{
 		Name:        "batch_create_questions",
-		Description: "Create multiple questions in one exam (batch).",
+		Description: "Create multiple high-quality contextual questions in one exam. Prefer multiple_choice with inline stimulus/context, plausible homogeneous options, key, explanation. If exam uses kisi-kisi, include competencyCode/competencyDescription/materi/indikator/cognitiveLevel/difficulty per question so backend can auto-link kisi-kisi.",
 		Permission:  "exams:write",
 		Risk:        "write",
 		Domain:      "exams",
@@ -122,6 +128,12 @@ func (a *App) registerExamCapabilities(reg *CapabilityRegistry) {
 				"groupId":{"type":"string","description":"override per-item"},
 				"stimulusId":{"type":"string","description":"override per-item"},
 				"blueprintSlotId":{"type":"string"},
+				"competencyCode":{"type":"string"},
+				"competencyDescription":{"type":"string"},
+				"materi":{"type":"string"},
+				"indikator":{"type":"string"},
+				"cognitiveLevel":{"type":"string","enum":["C1","C2","C3","C4","C5","C6"]},
+				"difficulty":{"type":"string","enum":["mudah","sedang","sulit"]},
 				"options":{"type":"array","items":{"type":"object"}}
 			},"required":["questionType","content"]}}
 		},"required":["examId","questions"]}`),
@@ -703,7 +715,17 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 	}
 	defer tx.Rollback()
 
+	var usesKisiKisi bool
+	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(uses_kisi_kisi,false) FROM exams WHERE id=$1 AND tenant_id=$2`, p.ExamID, tenantID).Scan(&usesKisiKisi)
+	bpID := ""
+	bpPos := 0
+	if usesKisiKisi {
+		bpID, _ = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
+		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
+	}
+
 	created := 0
+	linkedKisi := 0
 	createdIDs := make([]string, 0, len(p.Questions))
 	for _, qRaw := range p.Questions {
 		var qm map[string]any
@@ -727,6 +749,38 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 		}
 		createdIDs = append(createdIDs, id)
 		created++
+
+		if usesKisiKisi && bpID != "" {
+			if _, hasSlot := qm["blueprintSlotId"]; !hasSlot {
+				item := kisiItemFromQuestionMap(id, qm, bpPos)
+				var slotID string
+				if err := tx.QueryRowContext(ctx, `
+					INSERT INTO exam_blueprint_slots (
+					    exam_blueprint_id, position,
+					    competency_code, competency_description, materi, indikator,
+					    cognitive_level, difficulty, question_type, points
+					) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
+					RETURNING id::text`,
+					bpID, bpPos, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
+					item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,
+				).Scan(&slotID); err != nil {
+					return "", err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil {
+					return "", err
+				}
+				bpPos++
+				linkedKisi++
+			}
+		}
+	}
+	if usesKisiKisi && bpID != "" && linkedKisi > 0 {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE exam_blueprints SET
+			    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
+			    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
+			    updated_at = now()
+			WHERE id=$1`, bpID); err != nil { return "", err }
 	}
 	if err := tx.Commit(); err != nil {
 		return "", err
@@ -739,7 +793,59 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 	}
 	a.auditAI(ctx, tenantID, userID, "questions.batch_create", "exam", p.ExamID)
 
-	return fmt.Sprintf(`{"success":true,"message":"%d soal berhasil dibuat","count":%d}`, created, created), nil
+	return fmt.Sprintf(`{"success":true,"message":"%d soal berhasil dibuat%s","count":%d,"questionIds":%s,"linkedKisiKisi":%d}`,
+		created,
+		func() string { if linkedKisi > 0 { return fmt.Sprintf("; %d kisi-kisi otomatis dibuat", linkedKisi) }; return "" }(),
+		created,
+		mustJSONLocal(createdIDs),
+		linkedKisi,
+	), nil
+}
+
+type autoKisiItem struct {
+	CompetencyCode        string
+	CompetencyDescription string
+	Materi                string
+	Indikator             string
+	CognitiveLevel        string
+	Difficulty            string
+	QuestionType          string
+	points                float64
+}
+
+func kisiItemFromQuestionMap(questionID string, qm map[string]any, pos int) autoKisiItem {
+	get := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := qm[k]; ok {
+				if s := strings.TrimSpace(fmt.Sprint(v)); s != "" && s != "<nil>" { return s }
+			}
+		}
+		return ""
+	}
+	content := get("content")
+	materi := get("materi", "topic")
+	if materi == "" { materi = "Topik sesuai konteks soal" }
+	indikator := get("indikator", "indicator")
+	if indikator == "" { indikator = "Menganalisis informasi kontekstual pada soal untuk menentukan jawaban yang tepat" }
+	qtype := get("questionType")
+	if qtype == "" { qtype = "multiple_choice" }
+	points := 1.0
+	if v, ok := qm["points"].(float64); ok && v > 0 { points = v }
+	_ = content
+	code := get("competencyCode")
+	if code == "" { code = fmt.Sprintf("KOMP-%03d", pos+1) }
+	desc := get("competencyDescription")
+	if desc == "" { desc = synthesizeCompetencyDescription(materi, indikator) }
+	cog := get("cognitiveLevel")
+	if cog == "" { cog = "C3" }
+	diff := get("difficulty")
+	if diff == "" { diff = "sedang" }
+	return autoKisiItem{code, desc, materi, indikator, cog, diff, qtype, points}
+}
+
+func mustJSONLocal(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 // checkExamWriteAccess is the execute-layer access predicate for AI tools.
@@ -793,6 +899,39 @@ func (a *App) insertQuestionWithOptions(ctx context.Context, tenantID, userID st
 	id, err := a.insertQuestionWithOptionsTx(ctx, tx, tenantID, userID, args)
 	if err != nil {
 		return "", err
+	}
+	var qm map[string]any
+	_ = json.Unmarshal(args, &qm)
+	var examID string
+	if v, ok := qm["examId"].(string); ok { examID = v }
+	var usesKisiKisi bool
+	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(uses_kisi_kisi,false) FROM exams WHERE id=$1 AND tenant_id=$2`, examID, tenantID).Scan(&usesKisiKisi)
+	if usesKisiKisi {
+		if _, hasSlot := qm["blueprintSlotId"]; !hasSlot {
+			bpID, err := ensureExamBlueprintTx(ctx, tx, tenantID, examID, "merdeka")
+			if err != nil { return "", err }
+			bpPos := 0
+			_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
+			item := kisiItemFromQuestionMap(id, qm, bpPos)
+			var slotID string
+			if err := tx.QueryRowContext(ctx, `
+				INSERT INTO exam_blueprint_slots (
+				    exam_blueprint_id, position,
+				    competency_code, competency_description, materi, indikator,
+				    cognitive_level, difficulty, question_type, points
+				) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
+				RETURNING id::text`,
+				bpID, bpPos, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
+				item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,
+			).Scan(&slotID); err != nil { return "", err }
+			if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil { return "", err }
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE exam_blueprints SET
+				    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
+				    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
+				    updated_at = now()
+				WHERE id=$1`, bpID); err != nil { return "", err }
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return "", err
