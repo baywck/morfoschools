@@ -35,6 +35,7 @@ func ensureQuestionKisiKisiLink(ctx context.Context, tx *sql.Tx, tenantID string
 	if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, questionID, tenantID); err != nil {
 		return ensureQuestionKisiKisiResult{}, err
 	}
+	markExamAIContextStale(ctx, tx, tenantID, policy.ExamID)
 	return ensureQuestionKisiKisiResult{SlotID: slotID, Created: true}, nil
 }
 

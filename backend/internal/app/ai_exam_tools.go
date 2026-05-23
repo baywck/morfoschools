@@ -1104,5 +1104,6 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 			return "", err
 		}
 	}
+	markExamAIContextStale(ctx, tx, tenantID, p.ExamID)
 	return id, nil
 }

@@ -22,6 +22,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -114,6 +115,11 @@ func (a *App) appendExamContext(
 	fmt.Fprintf(sb, "Exam aktif: %q (id=%s)\n", title, examID)
 	fmt.Fprintf(sb, "Tipe: %s | Status: %s | Max: %.0f | Lulus: %.0f | Kisi-kisi: %t\n",
 		examType, status, maxScore, passing, usesKisi)
+	if idx, err := loadOrRebuildExamAIContextIndex(ctx, a.db, tenantID, examID); err == nil && len(idx.Summary) > 0 {
+		if b, err := json.Marshal(idx.Summary); err == nil {
+			fmt.Fprintf(sb, "Exam AI Index (ringkas, bukan sumber kebenaran write): %s\n", string(b))
+		}
+	}
 
 	// Section + question count
 	srows, err := a.db.QueryContext(ctx, `
@@ -317,10 +323,10 @@ func (a *App) appendBlueprintContext(
 func (a *App) appendQuestionFocus(ctx context.Context, sb *strings.Builder, tenantID, questionID string) {
 	var (
 		qType, content, expl, correct string
-		points                         float64
-		sortOrder                      int
-		slotID                         *string
-		groupID                        *string
+		points                        float64
+		sortOrder                     int
+		slotID                        *string
+		groupID                       *string
 	)
 	err := a.db.QueryRowContext(ctx, `
 		SELECT question_type, COALESCE(content,''), COALESCE(explanation,''),
@@ -440,10 +446,10 @@ func (a *App) appendGroupFocus(ctx context.Context, sb *strings.Builder, tenantI
 // or 'extract kisi-kisi from question' actions hit the right target.
 func (a *App) appendSlotFocus(ctx context.Context, sb *strings.Builder, tenantID, slotID string) {
 	var (
-		position                              int
+		position                                int
 		kd, materi, indikator, cog, diff, qtype string
-		points                                float64
-		linkedQID                             *string
+		points                                  float64
+		linkedQID                               *string
 	)
 	err := a.db.QueryRowContext(ctx, `
 		SELECT s.position,
@@ -501,6 +507,7 @@ func appendActiveDomains(domains []string, active map[string]string) []string {
 //   - exams (always when examId active)
 //   - blueprints only if message mentions kisi/blueprint/slot/AKM/etc.
 //   - stimuli only if message mentions stimulus/passage/bacaan/teks
+//
 // Reduces tool count from ~48 to ~28 on the typical "buat soal" flow.
 func appendActiveDomainsForMessage(domains []string, active map[string]string, msg string) []string {
 	if len(active) == 0 {
