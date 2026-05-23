@@ -85,6 +85,10 @@ func validateKisiKisiItem(it questionKisiKisiItem) string {
 	if strings.TrimSpace(it.Indikator) == "" {
 		return "indikator wajib diisi"
 	}
+	// competencyCode/Description are desirable but some providers ignore
+	// optional schema fields when tool schemas are compacted for token
+	// economy. Do not reject the proposal (that would force another costly
+	// LLM round); executor will synthesize safe non-empty fallbacks.
 	switch it.CognitiveLevel {
 	case "C1", "C2", "C3", "C4", "C5", "C6":
 	default:
@@ -192,6 +196,12 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 			return "", err
 		}
 		if it.QuestionType == "" { it.QuestionType = qType }
+		if strings.TrimSpace(it.CompetencyCode) == "" {
+			it.CompetencyCode = fmt.Sprintf("KOMP-%03d", pos+1)
+		}
+		if strings.TrimSpace(it.CompetencyDescription) == "" {
+			it.CompetencyDescription = synthesizeCompetencyDescription(it.Materi, it.Indikator)
+		}
 		points := qPoints
 		if it.Points != nil { points = *it.Points }
 
@@ -244,6 +254,21 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 	}
 	b, _ := json.Marshal(payload)
 	return string(b), nil
+}
+
+func synthesizeCompetencyDescription(materi, indikator string) string {
+	materi = strings.TrimSpace(materi)
+	indikator = strings.TrimSpace(indikator)
+	if materi == "" && indikator == "" {
+		return "Kompetensi yang diukur dari butir soal"
+	}
+	if materi == "" {
+		return indikator
+	}
+	if indikator == "" {
+		return "Memahami konsep dan penerapan " + materi
+	}
+	return "Memahami dan menerapkan konsep " + materi + " sesuai kompetensi yang diukur."
 }
 
 func ensureExamBlueprintTx(ctx context.Context, tx *sql.Tx, tenantID, examID, curriculumCode string) (string, error) {

@@ -115,7 +115,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 			"cognitiveLevel":{"type":"string","enum":["C1","C2","C3","C4","C5","C6"]},
 			"difficulty":{"type":"string","enum":["mudah","sedang","sulit"]},
 			"questionType":{"type":"string"},"points":{"type":"number"}
-		},"required":["examId","questionId","materi","indikator","cognitiveLevel","difficulty"]}`),
+		},"required":["examId","questionId","competencyCode","competencyDescription","materi","indikator","cognitiveLevel","difficulty"]}`),
 	}, a.capApplyQuestionKisiKisi)
 
 	reg.Register(Capability{
@@ -133,7 +133,7 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 				"cognitiveLevel":{"type":"string","enum":["C1","C2","C3","C4","C5","C6"]},
 				"difficulty":{"type":"string","enum":["mudah","sedang","sulit"]},
 				"questionType":{"type":"string"},"points":{"type":"number"}
-			},"required":["questionId","materi","indikator","cognitiveLevel","difficulty"]}}
+			},"required":["questionId","competencyCode","competencyDescription","materi","indikator","cognitiveLevel","difficulty"]}}
 		},"required":["examId","items"]}`),
 	}, a.capBulkApplyQuestionKisiKisi)
 
