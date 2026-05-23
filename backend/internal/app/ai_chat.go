@@ -70,8 +70,11 @@ func classifyShortReply(msg string) string {
 	return ""
 }
 
-// pendingProposalForSession returns up to N pending proposals on the session,
-// oldest first. Used to resolve free-text confirmation replies.
+// pendingProposalForSession returns the latest pending proposal on the session.
+// Confirmation replies like "ya" should execute the proposal the user just saw,
+// not every stale pending action in the session. Older versions returned up to
+// 10 oldest pendings; in long AI sessions this could execute/cancel unrelated
+// old proposals or appear to hang while processing stale bulk payloads.
 func (a *App) pendingProposalsForSession(ctx context.Context, sessionID, userID string) []struct {
 	ID       string
 	ToolName string
@@ -84,8 +87,8 @@ func (a *App) pendingProposalsForSession(ctx context.Context, sessionID, userID 
 		  FROM ai_pending_actions
 		 WHERE session_id = $1 AND user_id = $2
 		   AND status = 'pending' AND expires_at > now()
-		 ORDER BY created_at ASC
-		 LIMIT 10`,
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
 		sessionID, userID)
 	if err != nil {
 		return nil
@@ -263,7 +266,7 @@ func (a *App) handleShortReplyForProposals(
 	// propose those follow-up actions. Without this the conversation
 	// dead-ends at the first proposal even when the model's plan had
 	// 3 steps.
-	if len(successes) > 0 && len(failures) == 0 {
+	if len(successes) > 0 && len(failures) == 0 && !allTerminalProposalTools(pendings) {
 		if followup := a.runContinuationRound(ctx, r, sessionID, tenantID, auth, req, successes, resultBlocks); followup != "" {
 			content = followup
 		}
@@ -278,8 +281,27 @@ func (a *App) handleShortReplyForProposals(
 	return true
 }
 
-// summarizeToolResult extracts a short success message from a tool's JSON
-// result. Falls back to the raw result if the structure is unexpected.
+func allTerminalProposalTools(pendings []struct {
+	ID       string
+	ToolName string
+	ToolArgs json.RawMessage
+	TenantID string
+	Confirm  string
+}) bool {
+	if len(pendings) == 0 {
+		return false
+	}
+	for _, p := range pendings {
+		switch p.ToolName {
+		case "apply_question_kisi_kisi", "bulk_apply_question_kisi_kisi", "apply_blueprint_analysis", "update_question", "update_question_group":
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // summarizeToolResult extracts a short success message from a tool's JSON
 // result. Falls back to the raw result if the structure is unexpected.
 // IMPORTANT: detects error envelopes (ToolError shape) and returns the

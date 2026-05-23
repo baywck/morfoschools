@@ -73,7 +73,7 @@ const QUESTION_COMMANDS: Command[] = [
   {
     label: "Extract kisi-kisi",
     hint: "Generate KD/Materi/Indikator dari soal ini",
-    prompt: "Analisis soal fokus ini lalu rumuskan kisi-kisi lengkap (competencyCode, competencyDescription, materi, indikator, cognitiveLevel C1-C6, difficulty). PAKAI apply_question_kisi_kisi, bukan apply_blueprint_analysis dan bukan convert_questions_to_kisi_kisi. Jangan replace blueprint; cukup append 1 slot dan link ke questionId ini.",
+    prompt: "Analisis soal fokus ini lalu rumuskan kisi-kisi lengkap. Indikator harus konseptual: lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI apply_question_kisi_kisi dengan competencyCode, competencyDescription, materi, indikator, cognitiveLevel C1-C6, difficulty. Jangan pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
   },
   {
     label: "Generate dari kisi-kisi slot",
@@ -131,7 +131,7 @@ const GROUP_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi grup",
     hint: "Extract kisi-kisi dari semua soal di group",
-    prompt: "Untuk setiap soal di group fokus, rumuskan kisi-kisi lengkap (competencyCode, competencyDescription, materi, indikator, cognitiveLevel, difficulty). PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId di group. Jangan replace blueprint; append/link slot saja. JANGAN pakai apply_blueprint_analysis dan JANGAN pakai convert_questions_to_kisi_kisi.",
+    prompt: "Untuk setiap soal di group fokus, rumuskan kisi-kisi lengkap. Indikator harus konseptual: lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId di group, replace=false. JANGAN pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
   },
   {
     label: "Custom…",
@@ -207,7 +207,7 @@ const EXAM_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi dari semua soal",
     hint: "Extract KD/Materi/Indikator untuk seluruh soal",
-    prompt: "Untuk setiap soal di exam ini, rumuskan kisi-kisi lengkap (competencyCode, competencyDescription, materi, indikator, cognitiveLevel, difficulty). PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId. replace=false. JANGAN pakai apply_blueprint_analysis dan JANGAN pakai convert_questions_to_kisi_kisi.",
+    prompt: "Untuk setiap soal di exam ini, rumuskan kisi-kisi lengkap. Indikator harus konseptual: lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId, replace=false. JANGAN pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
   },
   {
     label: "Tambah N soal random",
