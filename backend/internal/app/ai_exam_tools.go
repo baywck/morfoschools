@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -399,6 +398,8 @@ func (a *App) capCreateQuestion(ctx context.Context, tenantID, userID string, ar
 		SectionID    string           `json:"sectionId"`
 		QuestionType string           `json:"questionType"`
 		Content      string           `json:"content"`
+		Explanation  string           `json:"explanation"`
+		GroupID      string           `json:"groupId"`
 		Options      []questionOption `json:"options"`
 		ScoringMode  string           `json:"scoringMode"`
 	}
@@ -469,6 +470,14 @@ func (a *App) capCreateQuestion(ctx context.Context, tenantID, userID string, ar
 			sb.WriteString(fmt.Sprintf("%s. %s%s\n", letter, oc, mark))
 		}
 	}
+	warnings := validateGeneratedQuestionDraft(defaultExamAuthoringPolicy(tenantID, p.ExamID), generatedQuestionDraft{
+		QuestionType: p.QuestionType,
+		Content:      p.Content,
+		Explanation:  p.Explanation,
+		Options:      p.Options,
+		Grouped:      p.GroupID != "",
+	})
+	appendAuthoringWarnings(&sb, warnings)
 	confirm := sb.String()
 
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
@@ -485,6 +494,7 @@ func (a *App) capBatchCreateQuestions(ctx context.Context, tenantID, userID stri
 			Explanation  string           `json:"explanation"`
 			Points       *float64         `json:"points"`
 			ScoringMode  string           `json:"scoringMode"`
+			GroupID      string           `json:"groupId"`
 			Options      []questionOption `json:"options"`
 		} `json:"questions"`
 	}
@@ -606,6 +616,14 @@ func (a *App) capBatchCreateQuestions(ctx context.Context, tenantID, userID stri
 				sb.WriteString(fmt.Sprintf("   %s. %s%s\n", letter, oc, mark))
 			}
 		}
+		warnings := validateGeneratedQuestionDraft(defaultExamAuthoringPolicy(tenantID, p.ExamID), generatedQuestionDraft{
+			QuestionType: q.QuestionType,
+			Content:      q.Content,
+			Explanation:  q.Explanation,
+			Options:      q.Options,
+			Grouped:      q.GroupID != "",
+		})
+		appendAuthoringWarnings(&sb, warnings)
 	}
 	preview := sb.String()
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
@@ -716,11 +734,13 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 	}
 	defer tx.Rollback()
 
-	var usesKisiKisi bool
-	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(uses_kisi_kisi,false) FROM exams WHERE id=$1 AND tenant_id=$2`, p.ExamID, tenantID).Scan(&usesKisiKisi)
+	policy, err := loadExamAuthoringPolicy(ctx, tx, tenantID, p.ExamID)
+	if err != nil {
+		return "", err
+	}
 	bpID := ""
 	bpPos := 0
-	if usesKisiKisi {
+	if policy.UsesKisiKisi {
 		bpID, _ = ensureExamBlueprintTx(ctx, tx, tenantID, p.ExamID, "merdeka")
 		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
 	}
@@ -751,7 +771,7 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 		createdIDs = append(createdIDs, id)
 		created++
 
-		if usesKisiKisi && bpID != "" {
+		if policy.UsesKisiKisi && bpID != "" {
 			if !questionHasBlueprintSlot(ctx, tx, id) {
 				item := kisiItemFromQuestionMap(id, qm, bpPos)
 				if strings.HasPrefix(item.CompetencyCode, "KOMP-") {
@@ -778,7 +798,7 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 			}
 		}
 	}
-	if usesKisiKisi && bpID != "" && linkedKisi > 0 {
+	if policy.UsesKisiKisi && bpID != "" && linkedKisi > 0 {
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE exam_blueprints SET
 			    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
@@ -872,59 +892,6 @@ func kisiItemFromQuestionMap(questionID string, qm map[string]any, pos int) auto
 	return autoKisiItem{code, desc, materi, indikator, cog, diff, qtype, points}
 }
 
-func inferNextCompetencyCodeTx(ctx context.Context, tx *sql.Tx, blueprintID string, fallbackPos int) string {
-	rows, err := tx.QueryContext(ctx, `
-		SELECT competency_code
-		  FROM exam_blueprint_slots
-		 WHERE exam_blueprint_id=$1
-		   AND competency_code IS NOT NULL
-		   AND competency_code <> ''
-		 ORDER BY position ASC`, blueprintID)
-	if err != nil {
-		return fallbackCompetencyCode(fallbackPos)
-	}
-	defer rows.Close()
-	codes := make([]string, 0, 16)
-	for rows.Next() {
-		var code string
-		if err := rows.Scan(&code); err == nil {
-			codes = append(codes, code)
-		}
-	}
-	return inferNextCompetencyCode(codes, fallbackPos)
-}
-
-func inferNextCompetencyCode(codes []string, fallbackPos int) string {
-	prefix := ""
-	maxN := 0
-	for _, raw := range codes {
-		code := strings.TrimSpace(raw)
-		if code == "" || strings.HasPrefix(code, "KOMP-") {
-			continue
-		}
-		lastDot := strings.LastIndex(code, ".")
-		if lastDot < 0 || lastDot >= len(code)-1 {
-			continue
-		}
-		n, err := strconv.Atoi(code[lastDot+1:])
-		if err != nil {
-			continue
-		}
-		if n > maxN {
-			maxN = n
-			prefix = code[:lastDot+1]
-		}
-	}
-	if maxN > 0 && prefix != "" {
-		return fmt.Sprintf("%s%d", prefix, maxN+1)
-	}
-	return fallbackCompetencyCode(fallbackPos)
-}
-
-func fallbackCompetencyCode(pos int) string {
-	return fmt.Sprintf("KD-%d", pos+1)
-}
-
 func questionHasBlueprintSlot(ctx context.Context, tx *sql.Tx, questionID string) bool {
 	var has bool
 	_ = tx.QueryRowContext(ctx, `SELECT blueprint_slot_id IS NOT NULL FROM exam_questions WHERE id=$1`, questionID).Scan(&has)
@@ -994,9 +961,11 @@ func (a *App) insertQuestionWithOptions(ctx context.Context, tenantID, userID st
 	if v, ok := qm["examId"].(string); ok {
 		examID = v
 	}
-	var usesKisiKisi bool
-	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(uses_kisi_kisi,false) FROM exams WHERE id=$1 AND tenant_id=$2`, examID, tenantID).Scan(&usesKisiKisi)
-	if usesKisiKisi {
+	policy, err := loadExamAuthoringPolicy(ctx, tx, tenantID, examID)
+	if err != nil {
+		return "", err
+	}
+	if policy.UsesKisiKisi {
 		if !questionHasBlueprintSlot(ctx, tx, id) {
 			bpID, err := ensureExamBlueprintTx(ctx, tx, tenantID, examID, "merdeka")
 			if err != nil {
