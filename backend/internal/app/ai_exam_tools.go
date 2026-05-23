@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -753,6 +754,9 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 		if usesKisiKisi && bpID != "" {
 			if !questionHasBlueprintSlot(ctx, tx, id) {
 				item := kisiItemFromQuestionMap(id, qm, bpPos)
+				if strings.HasPrefix(item.CompetencyCode, "KOMP-") {
+					item.CompetencyCode = inferNextCompetencyCodeTx(ctx, tx, bpID, bpPos)
+				}
 				var slotID string
 				if err := tx.QueryRowContext(ctx, `
 					INSERT INTO exam_blueprint_slots (
@@ -868,6 +872,59 @@ func kisiItemFromQuestionMap(questionID string, qm map[string]any, pos int) auto
 	return autoKisiItem{code, desc, materi, indikator, cog, diff, qtype, points}
 }
 
+func inferNextCompetencyCodeTx(ctx context.Context, tx *sql.Tx, blueprintID string, fallbackPos int) string {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT competency_code
+		  FROM exam_blueprint_slots
+		 WHERE exam_blueprint_id=$1
+		   AND competency_code IS NOT NULL
+		   AND competency_code <> ''
+		 ORDER BY position ASC`, blueprintID)
+	if err != nil {
+		return fallbackCompetencyCode(fallbackPos)
+	}
+	defer rows.Close()
+	codes := make([]string, 0, 16)
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err == nil {
+			codes = append(codes, code)
+		}
+	}
+	return inferNextCompetencyCode(codes, fallbackPos)
+}
+
+func inferNextCompetencyCode(codes []string, fallbackPos int) string {
+	prefix := ""
+	maxN := 0
+	for _, raw := range codes {
+		code := strings.TrimSpace(raw)
+		if code == "" || strings.HasPrefix(code, "KOMP-") {
+			continue
+		}
+		lastDot := strings.LastIndex(code, ".")
+		if lastDot < 0 || lastDot >= len(code)-1 {
+			continue
+		}
+		n, err := strconv.Atoi(code[lastDot+1:])
+		if err != nil {
+			continue
+		}
+		if n > maxN {
+			maxN = n
+			prefix = code[:lastDot+1]
+		}
+	}
+	if maxN > 0 && prefix != "" {
+		return fmt.Sprintf("%s%d", prefix, maxN+1)
+	}
+	return fallbackCompetencyCode(fallbackPos)
+}
+
+func fallbackCompetencyCode(pos int) string {
+	return fmt.Sprintf("KD-%d", pos+1)
+}
+
 func questionHasBlueprintSlot(ctx context.Context, tx *sql.Tx, questionID string) bool {
 	var has bool
 	_ = tx.QueryRowContext(ctx, `SELECT blueprint_slot_id IS NOT NULL FROM exam_questions WHERE id=$1`, questionID).Scan(&has)
@@ -948,6 +1005,9 @@ func (a *App) insertQuestionWithOptions(ctx context.Context, tenantID, userID st
 			bpPos := 0
 			_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
 			item := kisiItemFromQuestionMap(id, qm, bpPos)
+			if strings.HasPrefix(item.CompetencyCode, "KOMP-") {
+				item.CompetencyCode = inferNextCompetencyCodeTx(ctx, tx, bpID, bpPos)
+			}
 			var slotID string
 			if err := tx.QueryRowContext(ctx, `
 				INSERT INTO exam_blueprint_slots (

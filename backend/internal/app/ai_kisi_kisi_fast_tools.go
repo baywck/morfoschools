@@ -33,8 +33,8 @@ type questionKisiKisiItem struct {
 func (a *App) capApplyQuestionKisiKisi(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
 	var p struct {
-		ExamID         string  `json:"examId"`
-		CurriculumCode string  `json:"curriculumCode"`
+		ExamID         string `json:"examId"`
+		CurriculumCode string `json:"curriculumCode"`
 		questionKisiKisiItem
 	}
 	_ = json.Unmarshal(args, &p)
@@ -51,9 +51,9 @@ func (a *App) capApplyQuestionKisiKisi(ctx context.Context, tenantID, userID str
 func (a *App) capBulkApplyQuestionKisiKisi(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	sessionID, _ := ctx.Value(ctxKeySessionID{}).(string)
 	var p struct {
-		ExamID         string               `json:"examId"`
-		CurriculumCode string               `json:"curriculumCode"`
-		Replace        bool                 `json:"replace"`
+		ExamID         string                 `json:"examId"`
+		CurriculumCode string                 `json:"curriculumCode"`
+		Replace        bool                   `json:"replace"`
 		Items          []questionKisiKisiItem `json:"items"`
 	}
 	_ = json.Unmarshal(args, &p)
@@ -117,11 +117,21 @@ func confirmApplyQuestionKisiKisi(examID, curriculum string, items []questionKis
 			break
 		}
 		parts := []string{}
-		if it.CompetencyCode != "" { parts = append(parts, "KD="+it.CompetencyCode) }
-		if it.Materi != "" { parts = append(parts, "Materi="+truncateConfirm(it.Materi, 36)) }
-		if it.CognitiveLevel != "" { parts = append(parts, it.CognitiveLevel) }
-		if it.Difficulty != "" { parts = append(parts, it.Difficulty) }
-		if it.Indikator != "" { parts = append(parts, truncateConfirm(it.Indikator, 70)) }
+		if it.CompetencyCode != "" {
+			parts = append(parts, "KD="+it.CompetencyCode)
+		}
+		if it.Materi != "" {
+			parts = append(parts, "Materi="+truncateConfirm(it.Materi, 36))
+		}
+		if it.CognitiveLevel != "" {
+			parts = append(parts, it.CognitiveLevel)
+		}
+		if it.Difficulty != "" {
+			parts = append(parts, it.Difficulty)
+		}
+		if it.Indikator != "" {
+			parts = append(parts, truncateConfirm(it.Indikator, 70))
+		}
 		fmt.Fprintf(&sb, "  %d. Soal `%s` → %s\n", i+1, it.QuestionID, strings.Join(parts, " | "))
 	}
 	return sb.String()
@@ -134,19 +144,23 @@ func (a *App) execApplyQuestionKisiKisi(ctx context.Context, tenantID, userID st
 		questionKisiKisiItem
 	}
 	_ = json.Unmarshal(args, &p)
-	if p.CurriculumCode == "" { p.CurriculumCode = "merdeka" }
+	if p.CurriculumCode == "" {
+		p.CurriculumCode = "merdeka"
+	}
 	return a.applyQuestionKisiKisiItems(ctx, tenantID, userID, p.ExamID, p.CurriculumCode, false, []questionKisiKisiItem{p.questionKisiKisiItem})
 }
 
 func (a *App) execBulkApplyQuestionKisiKisi(ctx context.Context, tenantID, userID string, args json.RawMessage) (string, error) {
 	var p struct {
-		ExamID         string                `json:"examId"`
-		CurriculumCode string                `json:"curriculumCode"`
-		Replace        bool                  `json:"replace"`
+		ExamID         string                 `json:"examId"`
+		CurriculumCode string                 `json:"curriculumCode"`
+		Replace        bool                   `json:"replace"`
 		Items          []questionKisiKisiItem `json:"items"`
 	}
 	_ = json.Unmarshal(args, &p)
-	if p.CurriculumCode == "" { p.CurriculumCode = "merdeka" }
+	if p.CurriculumCode == "" {
+		p.CurriculumCode = "merdeka"
+	}
 	return a.applyQuestionKisiKisiItems(ctx, tenantID, userID, p.ExamID, p.CurriculumCode, p.Replace, p.Items)
 }
 
@@ -159,7 +173,9 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 	}
 
 	tx, err := a.db.BeginTx(ctx, nil)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer tx.Rollback()
 
 	if replace {
@@ -169,7 +185,9 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 	}
 
 	bpID, err := ensureExamBlueprintTx(ctx, tx, tenantID, examID, curriculumCode)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 
 	// Find current max position so appends don't collide.
 	var pos int
@@ -195,15 +213,19 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 			}
 			return "", err
 		}
-		if it.QuestionType == "" { it.QuestionType = qType }
+		if it.QuestionType == "" {
+			it.QuestionType = qType
+		}
 		if strings.TrimSpace(it.CompetencyCode) == "" {
-			it.CompetencyCode = fmt.Sprintf("KOMP-%03d", pos+1)
+			it.CompetencyCode = inferNextCompetencyCodeTx(ctx, tx, bpID, pos)
 		}
 		if strings.TrimSpace(it.CompetencyDescription) == "" {
 			it.CompetencyDescription = synthesizeCompetencyDescription(it.Materi, it.Indikator)
 		}
 		points := qPoints
-		if it.Points != nil { points = *it.Points }
+		if it.Points != nil {
+			points = *it.Points
+		}
 
 		var slotID string
 		if err := tx.QueryRowContext(ctx, `
@@ -222,7 +244,9 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE exam_questions SET blueprint_slot_id = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
 			slotID, it.QuestionID, tenantID,
-		); err != nil { return "", err }
+		); err != nil {
+			return "", err
+		}
 		linked++
 	}
 
@@ -235,22 +259,28 @@ func (a *App) applyQuestionKisiKisiItems(ctx context.Context, tenantID, userID, 
 		    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
 		    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
 		    updated_at = now()
-		WHERE id=$1`, bpID); err != nil { return "", err }
+		WHERE id=$1`, bpID); err != nil {
+		return "", err
+	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE exams SET uses_kisi_kisi = true, updated_at = now() WHERE id=$1 AND tenant_id=$2`, examID, tenantID); err != nil { return "", err }
+	if _, err := tx.ExecContext(ctx, `UPDATE exams SET uses_kisi_kisi = true, updated_at = now() WHERE id=$1 AND tenant_id=$2`, examID, tenantID); err != nil {
+		return "", err
+	}
 
-	if err := tx.Commit(); err != nil { return "", err }
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
 	a.auditAI(ctx, tenantID, userID, "exam_blueprints.fast_apply_kisi_kisi", "exam_blueprint", bpID)
 	msg := fmt.Sprintf("Kisi-kisi diterapkan ke %d soal", linked)
 	if len(skippedMissing) > 0 {
 		msg += fmt.Sprintf("; %d questionId dilewati karena tidak ditemukan di exam ini", len(skippedMissing))
 	}
 	payload := map[string]any{
-		"success": true,
-		"message": msg,
-		"blueprintId": bpID,
+		"success":         true,
+		"message":         msg,
+		"blueprintId":     bpID,
 		"linkedQuestions": linked,
-		"skippedMissing": skippedMissing,
+		"skippedMissing":  skippedMissing,
 	}
 	b, _ := json.Marshal(payload)
 	return string(b), nil
@@ -274,8 +304,12 @@ func synthesizeCompetencyDescription(materi, indikator string) string {
 func ensureExamBlueprintTx(ctx context.Context, tx *sql.Tx, tenantID, examID, curriculumCode string) (string, error) {
 	var bpID string
 	err := tx.QueryRowContext(ctx, `SELECT id::text FROM exam_blueprints WHERE exam_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 1`, examID, tenantID).Scan(&bpID)
-	if err == nil { return bpID, nil }
-	if err != sql.ErrNoRows { return "", err }
+	if err == nil {
+		return bpID, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", err
+	}
 
 	var curriculumID string
 	if err := tx.QueryRowContext(ctx, `SELECT id::text FROM curricula WHERE code=$1`, curriculumCode).Scan(&curriculumID); err != nil {
@@ -289,6 +323,8 @@ func ensureExamBlueprintTx(ctx context.Context, tx *sql.Tx, tenantID, examID, cu
 		) VALUES ($1,$2,NULL,NULL,'reverse_analysis','Kisi-Kisi (auto)', $3, 'reguler', false, 'draft')
 		RETURNING id::text`,
 		tenantID, examID, curriculumID,
-	).Scan(&bpID); err != nil { return "", err }
+	).Scan(&bpID); err != nil {
+		return "", err
+	}
 	return bpID, nil
 }
