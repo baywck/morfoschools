@@ -238,8 +238,108 @@ function splitProposalBlocks(text: string) {
   return { header: header.join("\n").trim(), blocks };
 }
 
-function firstMeaningfulLine(block: string) {
-  return block.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "Detail aksi";
+function parseQuestionProposalBlock(block: string) {
+  const lines = block.split("\n");
+  const first = lines[0] ?? "";
+  const title = first.match(/^\s*(\d+)\. \*\*\[([^,\]]+)(?:,\s*([^\]]+))?\]\*\*\s*(.*)$/);
+  const options: Array<{ label: string; text: string; correct: boolean }> = [];
+  const warnings: string[] = [];
+  const misc: string[] = [];
+  let inWarnings = false;
+
+  for (const raw of lines.slice(1)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.includes("Catatan kualitas")) {
+      inWarnings = true;
+      continue;
+    }
+    const opt = line.match(/^([A-Z])\.\s*(.*?)(\s*✅)?$/);
+    if (opt) {
+      options.push({ label: opt[1], text: opt[2].replace(/✅/g, "").trim(), correct: Boolean(opt[3]) || line.includes("✅") });
+      continue;
+    }
+    if (inWarnings || line.startsWith("- ")) warnings.push(line.replace(/^-\s*/, ""));
+    else misc.push(line);
+  }
+
+  return {
+    index: title?.[1] ?? "",
+    type: title?.[2] ?? "Aksi",
+    points: title?.[3] ?? "",
+    stem: (title?.[4] ?? first).trim(),
+    options,
+    warnings,
+    misc,
+  };
+}
+
+function QuestionProposalCard({ block, open, onToggle }: { block: string; open: boolean; onToggle: () => void }) {
+  const q = React.useMemo(() => parseQuestionProposalBlock(block), [block]);
+  const previewStem = q.stem || "Detail soal";
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--shell-input-border)] bg-[var(--shell-elevated,var(--card))]/70 shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-[var(--shell-hover)]/45 transition-colors"
+      >
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand)]/12 text-[10px] font-bold text-[var(--brand)]">
+          {q.index || "•"}
+        </span>
+        <span className="min-w-0 flex-1 space-y-1">
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full border border-[var(--shell-input-border)] bg-[var(--shell-input-bg)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--shell-muted)]">
+              {q.type.replaceAll("_", " ")}
+            </span>
+            {q.points && <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[var(--brand)]">{q.points}</span>}
+            {q.warnings.length > 0 && <span className="rounded-full bg-[var(--warning)]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[var(--warning)]">{q.warnings.length} warning</span>}
+          </span>
+          <span className="block max-h-12 overflow-hidden text-[11px] font-medium leading-relaxed text-[var(--shell-foreground)]">
+            {previewStem}
+          </span>
+        </span>
+        <ChevronDown className={cn("mt-1 h-3.5 w-3.5 shrink-0 text-[var(--shell-muted)] transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="space-y-2 border-t border-[var(--shell-input-border)] px-3 py-2.5">
+          <div className="rounded-xl bg-[var(--shell-input-bg)]/70 p-2.5 text-[11px] leading-relaxed text-[var(--shell-foreground)]">
+            {previewStem}
+          </div>
+          {q.options.length > 0 && (
+            <div className="space-y-1.5">
+              {q.options.map((opt) => (
+                <div
+                  key={opt.label}
+                  className={cn(
+                    "flex gap-2 rounded-xl border px-2.5 py-2 text-[11px] leading-relaxed",
+                    opt.correct
+                      ? "border-[var(--success)]/40 bg-[var(--success)]/10 text-[var(--shell-foreground)]"
+                      : "border-[var(--shell-input-border)] bg-[var(--shell-input-bg)]/45 text-[var(--shell-muted)]"
+                  )}
+                >
+                  <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold", opt.correct ? "bg-[var(--success)] text-white" : "bg-[var(--shell-active)] text-[var(--shell-foreground)]")}>{opt.label}</span>
+                  <span className="min-w-0 flex-1">{opt.text || <span className="text-[var(--warning)]">Opsi kosong</span>}</span>
+                  {opt.correct && <span className="shrink-0 text-[var(--success)]">✓</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {q.warnings.length > 0 && (
+            <div className="rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/10 p-2 text-[10px] leading-relaxed text-[var(--warning)]">
+              <div className="mb-1 font-semibold">Catatan kualitas</div>
+              <ul className="space-y-0.5">
+                {q.warnings.map((w, i) => <li key={i}>• {w}</li>)}
+              </ul>
+            </div>
+          )}
+          {q.misc.length > 0 && <div className="text-[10px] text-[var(--shell-muted)]">{q.misc.join(" ")}</div>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ProposalPreview({ text }: { text: string }) {
@@ -273,28 +373,14 @@ function ProposalPreview({ text }: { text: string }) {
         </button>
       </div>
       <div className="space-y-1.5">
-        {blocks.map((block, i) => {
-          const open = !!expanded[i];
-          return (
-            <div key={i} className="overflow-hidden rounded-xl border border-[var(--shell-input-border)] bg-[var(--shell-elevated,var(--card))]/55">
-              <button
-                type="button"
-                onClick={() => setExpanded((curr) => ({ ...curr, [i]: !curr[i] }))}
-                className="flex w-full items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--shell-hover)]/50 transition-colors"
-              >
-                <ChevronDown className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--brand)] transition-transform", open && "rotate-180")} />
-                <span className="max-h-9 overflow-hidden text-[11px] font-medium text-[var(--shell-foreground)]">
-                  {firstMeaningfulLine(block)}
-                </span>
-              </button>
-              {open && (
-                <div className="border-t border-[var(--shell-input-border)] px-2.5 py-2 text-[11px] leading-relaxed">
-                  {renderMessageContent(block)}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {blocks.map((block, i) => (
+          <QuestionProposalCard
+            key={i}
+            block={block}
+            open={!!expanded[i]}
+            onToggle={() => setExpanded((curr) => ({ ...curr, [i]: !curr[i] }))}
+          />
+        ))}
       </div>
     </div>
   );
