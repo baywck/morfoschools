@@ -421,6 +421,10 @@ func (a *App) executeConfirmedAction(ctx context.Context, tenantID, userID, tool
 		return a.execGenerateQuestionForSlot(ctx, tenantID, userID, args)
 	case "apply_blueprint_analysis":
 		return a.execApplyBlueprintAnalysis(ctx, tenantID, userID, args)
+	case "apply_question_kisi_kisi":
+		return a.execApplyQuestionKisiKisi(ctx, tenantID, userID, args)
+	case "bulk_apply_question_kisi_kisi":
+		return a.execBulkApplyQuestionKisiKisi(ctx, tenantID, userID, args)
 	case "set_uses_kisi_kisi":
 		return a.execSetUsesKisiKisi(ctx, tenantID, userID, args)
 	case "convert_questions_to_kisi_kisi":

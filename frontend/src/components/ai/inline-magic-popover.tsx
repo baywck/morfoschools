@@ -73,7 +73,7 @@ const QUESTION_COMMANDS: Command[] = [
   {
     label: "Extract kisi-kisi",
     hint: "Generate KD/Materi/Indikator dari soal ini",
-    prompt: "Analisis soal ini lalu rumuskan kisi-kisi yang sesuai berdasarkan konten + jawaban benar:\n- competencyCode (KD code, mis: KD-3.5)\n- competencyDescription (1 kalimat)\n- materi (topik utama)\n- indikator (kata kerja operasional + objek + konteks)\n- cognitiveLevel (C1-C6 sesuai Bloom)\n- difficulty (mudah/sedang/sulit)\n\nLalu PAKAI apply_blueprint_analysis dengan:\n- examId dari FOKUS\n- title: 'Kisi-Kisi (auto-extract)'\n- curriculumCode: 'merdeka' (atau 'k13' kalau lebih cocok)\n- replace: false\n- acceptedSlots: [{questionId: <id>, competencyCode, competencyDescription, materi, indikator, cognitiveLevel, difficulty, questionType, points}]\n\nJANGAN pakai convert_questions_to_kisi_kisi (heuristic, tidak isi KD/Materi/Indikator).",
+    prompt: "Analisis soal fokus ini lalu rumuskan kisi-kisi lengkap (competencyCode, competencyDescription, materi, indikator, cognitiveLevel C1-C6, difficulty). PAKAI apply_question_kisi_kisi, bukan apply_blueprint_analysis dan bukan convert_questions_to_kisi_kisi. Jangan replace blueprint; cukup append 1 slot dan link ke questionId ini.",
   },
   {
     label: "Generate dari kisi-kisi slot",
@@ -131,7 +131,7 @@ const GROUP_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi grup",
     hint: "Extract kisi-kisi dari semua soal di group",
-    prompt: "Untuk setiap soal di group ini (lihat FOKUS GROUP), rumuskan kisi-kisi: competencyCode, competencyDescription, materi, indikator, cognitiveLevel (C1-C6), difficulty (mudah/sedang/sulit). Lalu PAKAI apply_blueprint_analysis SEKALI dengan acceptedSlots berisi entry untuk setiap questionId di group. JANGAN pakai convert_questions_to_kisi_kisi (heuristic). Set replace: false agar slot existing tidak ditimpa.",
+    prompt: "Untuk setiap soal di group fokus, rumuskan kisi-kisi lengkap (competencyCode, competencyDescription, materi, indikator, cognitiveLevel, difficulty). PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId di group. Jangan replace blueprint; append/link slot saja. JANGAN pakai apply_blueprint_analysis dan JANGAN pakai convert_questions_to_kisi_kisi.",
   },
   {
     label: "Custom…",
@@ -207,7 +207,7 @@ const EXAM_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi dari semua soal",
     hint: "Extract KD/Materi/Indikator untuk seluruh soal",
-    prompt: "Untuk setiap soal di exam ini, rumuskan kisi-kisi: competencyCode (mis: KD-3.5), competencyDescription (1 kalimat), materi, indikator, cognitiveLevel (C1-C6), difficulty (mudah/sedang/sulit). Lalu PAKAI apply_blueprint_analysis SEKALI dengan: examId dari konteks, title='Kisi-Kisi (auto)', curriculumCode='merdeka', replace=true, acceptedSlots=[entry tiap questionId dengan field di atas + questionType + points]. JANGAN pakai convert_questions_to_kisi_kisi.",
+    prompt: "Untuk setiap soal di exam ini, rumuskan kisi-kisi lengkap (competencyCode, competencyDescription, materi, indikator, cognitiveLevel, difficulty). PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId. replace=false. JANGAN pakai apply_blueprint_analysis dan JANGAN pakai convert_questions_to_kisi_kisi.",
   },
   {
     label: "Tambah N soal random",

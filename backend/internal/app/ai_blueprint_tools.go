@@ -97,6 +97,46 @@ func (a *App) registerBlueprintCapabilities(reg *CapabilityRegistry) {
 		},"required":["examId"]}`),
 	}, a.capAnalyzeQuestionsToBlueprint)
 
+	// Fast path for LLM-extracted kisi-kisi from one/many existing
+	// questions. Unlike apply_blueprint_analysis, these tools append
+	// slots to the exam blueprint and link the target questions without
+	// replacing the whole blueprint. Designed for inline magic flows.
+	reg.Register(Capability{
+		Name:        "apply_question_kisi_kisi",
+		Description: "Append 1 kisi-kisi slot for an existing question and link it. Fast inline path; no blueprint replace.",
+		Permission:  "blueprints:write",
+		Risk:        "write",
+		Domain:      "blueprints",
+		Parameters: json.RawMessage(`{"type":"object","properties":{
+			"examId":{"type":"string"},"questionId":{"type":"string"},
+			"curriculumCode":{"type":"string","enum":["k13","merdeka","akm_numerasi","akm_literasi"]},
+			"competencyCode":{"type":"string"},"competencyDescription":{"type":"string"},
+			"materi":{"type":"string"},"indikator":{"type":"string"},
+			"cognitiveLevel":{"type":"string","enum":["C1","C2","C3","C4","C5","C6"]},
+			"difficulty":{"type":"string","enum":["mudah","sedang","sulit"]},
+			"questionType":{"type":"string"},"points":{"type":"number"}
+		},"required":["examId","questionId","materi","indikator","cognitiveLevel","difficulty"]}`),
+	}, a.capApplyQuestionKisiKisi)
+
+	reg.Register(Capability{
+		Name:        "bulk_apply_question_kisi_kisi",
+		Description: "Append/link kisi-kisi slots for multiple existing questions. Fast bulk path; no blueprint replace unless replace=true.",
+		Permission:  "blueprints:write",
+		Risk:        "write",
+		Domain:      "blueprints",
+		Parameters: json.RawMessage(`{"type":"object","properties":{
+			"examId":{"type":"string"},"curriculumCode":{"type":"string","enum":["k13","merdeka","akm_numerasi","akm_literasi"]},
+			"replace":{"type":"boolean"},
+			"items":{"type":"array","items":{"type":"object","properties":{
+				"questionId":{"type":"string"},"competencyCode":{"type":"string"},"competencyDescription":{"type":"string"},
+				"materi":{"type":"string"},"indikator":{"type":"string"},
+				"cognitiveLevel":{"type":"string","enum":["C1","C2","C3","C4","C5","C6"]},
+				"difficulty":{"type":"string","enum":["mudah","sedang","sulit"]},
+				"questionType":{"type":"string"},"points":{"type":"number"}
+			},"required":["questionId","materi","indikator","cognitiveLevel","difficulty"]}}
+		},"required":["examId","items"]}`),
+	}, a.capBulkApplyQuestionKisiKisi)
+
 	// ───── Write (proposal-first) ─────
 	reg.Register(Capability{
 		Name: "create_blueprint_template",
