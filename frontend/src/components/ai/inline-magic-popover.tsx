@@ -44,6 +44,8 @@ interface Command {
   inputHint?: string;
 }
 
+const QUESTION_QUALITY_CONTRACT = `Kualitas soal wajib tinggi. Sebelum membuat soal, buat kisi-kisi INTERNAL dulu untuk mengontrol kualitas (topik, jenjang/asumsi, kompetensi, indikator konseptual, cognitiveLevel, difficulty), tetapi JANGAN tampilkan kisi-kisi internal kecuali user meminta. Jika data user kurang lengkap, gunakan asumsi wajar dan tuliskan asumsi singkat di awal. Setiap soal harus: sesuai topik dan jenjang; level kognitif jelas; tidak ambigu; tidak sekadar hafalan jika diminta level tinggi; opsi homogen dan plausible; hanya satu jawaban benar; menyertakan kunci dan pembahasan singkat. Indikator internal harus konseptual, tidak menyalin redaksi soal, tidak membocorkan jawaban.`;
+
 const QUESTION_COMMANDS: Command[] = [
   {
     label: "Perbaiki redaksi",
@@ -180,7 +182,7 @@ const DRAFT_COMMANDS: Command[] = [
   {
     label: "Soal acak sesuai exam",
     hint: "AI pilih topik berdasarkan konteks exam",
-    prompt: "Buat 1 soal baru yang relevan dengan exam ini. Pilih topik yang BELUM pernah ditanyakan di soal existing (cek dulu pakai list_questions atau lihat konteks). Tipe + level kognitif menyesuaikan tema exam. Pakai create_question.",
+    prompt: `${QUESTION_QUALITY_CONTRACT}\n\nBuat 1 soal baru yang relevan dengan exam ini. Pilih topik yang BELUM pernah ditanyakan di soal existing (cek dulu pakai list_questions atau lihat konteks). Tipe + level kognitif menyesuaikan tema exam. Pakai create_question. Jangan tampilkan kisi-kisi internal kecuali diminta.`,
   },
   {
     label: "Soal dengan stimulus",
@@ -192,7 +194,7 @@ const DRAFT_COMMANDS: Command[] = [
   {
     label: "Buat dari kisi-kisi",
     hint: "Pilih slot blueprint kosong + isi otomatis",
-    prompt: "Lihat slot blueprint yang masih kosong di exam ini. Pilih satu, lalu generate 1 soal sesuai kisi-kisi slot tersebut (KD/materi/indikator/cognitive level/difficulty). Pakai create_question dengan blueprintSlotId.",
+    prompt: `${QUESTION_QUALITY_CONTRACT}\n\nLihat slot blueprint yang masih kosong di exam ini. Pilih satu, lalu generate 1 soal sesuai kisi-kisi slot tersebut (KD/materi/indikator/cognitive level/difficulty). Pakai create_question dengan blueprintSlotId.`,
   },
   {
     label: "Custom…",
@@ -419,12 +421,13 @@ export function InlineMagicPopover({
     // tool so the model creates stimulus + group + N questions in
     // ONE transaction (avoids reasoning-model multi-step plan failure).
     if (selectedCmd.label === "Soal dengan stimulus") {
-      finalPrompt = `Pakai create_stimulus_block (compound atomic) untuk topik berikut: ${trimmed}.
+      finalPrompt = `${QUESTION_QUALITY_CONTRACT}\n\nPakai create_stimulus_block (compound atomic) untuk topik berikut: ${trimmed}.
 
 Format output:
 - 1 stimulus (passage/teks/kasus) yang relevan dengan topik
 - 1 group yang mengikat stimulus
 - N soal multiple_choice yang merujuk ke stimulus tersebut (kalau user tidak menyebut N, default 3 soal)
+- Setiap soal harus benar-benar membutuhkan pemahaman stimulus, bukan bisa dijawab tanpa membaca stimulus
 - Lifecycle stimulus: exam_scoped (default Opsi B)
 - JANGAN chain create_stimulus + create_question_group + create_question terpisah — itu akan gagal karena step ke-2 butuh ID dari step ke-1.`;
     } else if (selectedCmd.label === "Buat / ganti stimulus") {
@@ -438,8 +441,12 @@ Format output:
 - Stimulus body: passage/teks/kasus yang factually correct dan relevan untuk dijadikan dasar soal
 - Pakai update_question_group dengan titleSnapshot + bodySnapshot baru
 - JANGAN buat group baru, JANGAN buat soal di turn ini—cuma stimulus dulu. Soal akan ditambahkan iteratif setelahnya.`;
+    } else if (selectedCmd.label === "Generate soal dari topik") {
+      finalPrompt = `${QUESTION_QUALITY_CONTRACT}\n\nBuat 1 soal berkualitas berdasarkan topik/permintaan user berikut: ${trimmed}. Gunakan create_question. Jika user tidak menyebut tipe, gunakan multiple_choice. Jangan tampilkan kisi-kisi internal kecuali diminta.`;
+    } else if (selectedCmd.label === "Tambah N soal random") {
+      finalPrompt = `${QUESTION_QUALITY_CONTRACT}\n\nTambahkan beberapa soal berkualitas ke exam ini berdasarkan permintaan: ${trimmed}. Pilih topik yang relevan dengan exam dan belum duplikatif dengan soal existing. Gunakan batch_create_questions. Variasikan level kognitif/difficulty sesuai permintaan. Jangan tampilkan kisi-kisi internal kecuali diminta.`;
     } else if (selectedCmd.label === "Tambah 1 soal sesuai stimulus") {
-      finalPrompt = `Tambahkan 1 soal baru ke group yang sedang difokus, yang merujuk ke stimulus group tersebut.
+      finalPrompt = `${QUESTION_QUALITY_CONTRACT}\n\nTambahkan 1 soal baru ke group yang sedang difokus, yang merujuk ke stimulus group tersebut.
 
 Detail dari user: ${trimmed}
 
@@ -448,7 +455,7 @@ Konstrain:
 - Soal harus genuinely require pembaca untuk paham stimulus untuk menjawab (jangan soal yang bisa dijawab tanpa baca stimulus)
 - Cek soal existing di group dulu via FOKUS GROUP — jangan duplikasi sudut pandang/fokus yang sama`;
     } else if (selectedCmd.label === "Tambah N soal ke group") {
-      finalPrompt = `Tambahkan beberapa soal baru ke group yang sedang difokus, yang merujuk ke stimulus group tersebut.
+      finalPrompt = `${QUESTION_QUALITY_CONTRACT}\n\nTambahkan beberapa soal baru ke group yang sedang difokus, yang merujuk ke stimulus group tersebut.
 
 Detail dari user: ${trimmed}
 
