@@ -182,10 +182,10 @@ export function QuestionAccordion({
     question?.stimulus?.title ?? null,
   );
 
-  // Kisi-Kisi subsection collapse state. Default collapsed so the
-  // accordion stays focused on content authoring; teachers expand
-  // when they want to attach pedagogical metadata.
-  const [kkOpen, setKkOpen] = useState(false);
+  // Expanded form tab. When kisi-kisi is enabled, teachers switch between
+  // Soal and Kisi-Kisi instead of scanning a long collapsed block below the
+  // question editor. Default stays on Soal for authoring speed.
+  const [activeTab, setActiveTab] = useState<"question" | "kisi">("question");
 
   // Phase 9.8 — inline kisi-kisi metadata. Pre-fill from the bound
   // slot when present (template clone or auto-blueprint), otherwise
@@ -546,7 +546,7 @@ export function QuestionAccordion({
 
       {/* Expanded body */}
       {isOpen && (
-        <div className="border-t border-[var(--border)] bg-[var(--accent)]/30 p-3 space-y-3">
+        <div className="border-t border-[var(--brand)]/30 bg-[var(--background)] p-3 space-y-3 shadow-[inset_0_1px_0_var(--brand-soft)] ring-1 ring-inset ring-[var(--brand)]/10">
           {slotMeta && (
             <div className="rounded-md border border-[var(--brand)]/30 bg-[var(--brand-soft)]/60 px-2.5 py-1.5 text-[10.5px] text-[var(--brand)]">
               <span className="font-semibold">
@@ -559,6 +559,36 @@ export function QuestionAccordion({
             </div>
           )}
 
+          {usesKisiKisi && (
+            <div className="flex rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setActiveTab("question")}
+                className={cn(
+                  "flex-1 rounded-lg px-3 py-2 text-[11.5px] font-semibold transition-all",
+                  activeTab === "question"
+                    ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+                    : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+                )}
+              >
+                Soal
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("kisi")}
+                className={cn(
+                  "flex-1 rounded-lg px-3 py-2 text-[11.5px] font-semibold transition-all",
+                  activeTab === "kisi"
+                    ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+                    : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
+                )}
+              >
+                Kisi-Kisi <span className="ml-1 opacity-80">{kkFilledCount}/{kkTotalCount}</span>
+              </button>
+            </div>
+          )}
+
+          {(!usesKisiKisi || activeTab === "question") && <>
           {/* 1. Tipe Soal + Points (metadata row, points top-right) */}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px]">
             <SelectField
@@ -747,37 +777,47 @@ export function QuestionAccordion({
             />
           </div>
 
-          {/* 6. Kisi-Kisi subsection — collapsible (default closed) */}
-          {usesKisiKisi && (
-            <KisiKisiSection
-              isOpen={kkOpen}
-              onToggle={() => setKkOpen((v) => !v)}
-              filledCount={kkFilledCount}
-              totalCount={kkTotalCount}
-              locked={false}
-              isAkm={isAkm}
-              canEdit={canEdit}
-              competency={kkCompetency}
-              competencyDescription={kkCompetencyDescription}
-              materi={kkMateri}
-              indikator={kkIndikator}
-              cognitive={kkCognitive}
-              difficulty={kkDifficulty}
-              akmKonten={kkAkmKonten}
-              akmKonteks={kkAkmKonteks}
-              akmProses={kkAkmProses}
-              akmLevel={kkAkmLevel}
-              onCompetency={setKkCompetency}
-              onCompetencyDescription={setKkCompetencyDescription}
-              onMateri={setKkMateri}
-              onIndikator={setKkIndikator}
-              onCognitive={setKkCognitive}
-              onDifficulty={setKkDifficulty}
-              onAkmKonten={setKkAkmKonten}
-              onAkmKonteks={setKkAkmKonteks}
-              onAkmProses={setKkAkmProses}
-              onAkmLevel={setKkAkmLevel}
-            />
+          </>}
+
+          {usesKisiKisi && activeTab === "kisi" && (
+            <div className="rounded-xl border border-[var(--brand)]/30 bg-[var(--card)] p-3 shadow-sm">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[12px] font-semibold text-[var(--foreground)]">Metadata Kisi-Kisi</p>
+                  <p className="text-[10.5px] text-[var(--muted-foreground)]">
+                    Isi kompetensi, materi, indikator, level kognitif, dan difficulty untuk mengontrol kualitas soal.
+                  </p>
+                </div>
+                <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand)]">
+                  {kkFilledCount}/{kkTotalCount}
+                </span>
+              </div>
+              <KisiKisiInline
+                isAkm={isAkm}
+                locked={false}
+                canEdit={canEdit}
+                competency={kkCompetency}
+                competencyDescription={kkCompetencyDescription}
+                materi={kkMateri}
+                indikator={kkIndikator}
+                cognitive={kkCognitive}
+                difficulty={kkDifficulty}
+                akmKonten={kkAkmKonten}
+                akmKonteks={kkAkmKonteks}
+                akmProses={kkAkmProses}
+                akmLevel={kkAkmLevel}
+                onCompetency={setKkCompetency}
+                onCompetencyDescription={setKkCompetencyDescription}
+                onMateri={setKkMateri}
+                onIndikator={setKkIndikator}
+                onCognitive={setKkCognitive}
+                onDifficulty={setKkDifficulty}
+                onAkmKonten={setKkAkmKonten}
+                onAkmKonteks={setKkAkmKonteks}
+                onAkmProses={setKkAkmProses}
+                onAkmLevel={setKkAkmLevel}
+              />
+            </div>
           )}
 
           {/* Footer */}
