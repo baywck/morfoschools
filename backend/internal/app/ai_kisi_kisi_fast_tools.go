@@ -286,7 +286,7 @@ func ensureExamBlueprintTx(ctx context.Context, tx *sql.Tx, tenantID, examID, cu
 		    tenant_id, exam_id, source_template_id, source_template_version,
 		    created_via, title, curriculum_id, blueprint_type,
 		    strict_coverage, status
-		) VALUES ($1,$2,NULL,NULL,'ai_fast_extract','Kisi-Kisi (auto)', $3, 'reguler', false, 'draft')
+		) VALUES ($1,$2,NULL,NULL,'reverse_analysis','Kisi-Kisi (auto)', $3, 'reguler', false, 'draft')
 		RETURNING id::text`,
 		tenantID, examID, curriculumID,
 	).Scan(&bpID); err != nil { return "", err }
