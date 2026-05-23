@@ -978,7 +978,9 @@ func (a *App) insertQuestionWithOptions(ctx context.Context, tenantID, userID st
 			return "", err
 		}
 		bpPos := 0
-		_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos); err != nil {
+			return "", err
+		}
 		result, err := ensureQuestionKisiKisiLink(ctx, tx, tenantID, policy, bpID, id, qm, bpPos)
 		if err != nil {
 			return "", err
@@ -1092,10 +1094,20 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 	// that slot and let the caller/auto-kisi path attach a fresh slot instead of
 	// failing the whole proposal.
 	if p.BlueprintSlotID != "" {
-		var occupied bool
-		_ = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM exam_questions WHERE blueprint_slot_id=$1 AND tenant_id=$2)`, p.BlueprintSlotID, tenantID).Scan(&occupied)
-		if occupied {
+		if !isUUID(p.BlueprintSlotID) {
+			// LLMs sometimes pass labels or stale non-UUID values as blueprintSlotId.
+			// Treat them as absent so the auto-kisi path can allocate a fresh slot;
+			// never run a UUID comparison with invalid text because PostgreSQL aborts
+			// the transaction and hides the root cause behind SQLSTATE 25P02.
 			p.BlueprintSlotID = ""
+		} else {
+			var occupied bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM exam_questions WHERE blueprint_slot_id=$1 AND tenant_id=$2)`, p.BlueprintSlotID, tenantID).Scan(&occupied); err != nil {
+				return "", err
+			}
+			if occupied {
+				p.BlueprintSlotID = ""
+			}
 		}
 	}
 
