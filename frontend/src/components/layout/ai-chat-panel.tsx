@@ -219,6 +219,87 @@ function renderInline(text: string): React.ReactNode {
   return parts.length > 0 ? <>{parts}</> : text;
 }
 
+function splitProposalBlocks(text: string) {
+  const lines = text.split("\n");
+  const header: string[] = [];
+  const blocks: string[] = [];
+  let current: string[] | null = null;
+
+  for (const line of lines) {
+    if (/^\d+\. \*\*\[/.test(line)) {
+      if (current) blocks.push(current.join("\n"));
+      current = [line];
+      continue;
+    }
+    if (current) current.push(line);
+    else header.push(line);
+  }
+  if (current) blocks.push(current.join("\n"));
+  return { header: header.join("\n").trim(), blocks };
+}
+
+function firstMeaningfulLine(block: string) {
+  return block.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "Detail aksi";
+}
+
+function ProposalPreview({ text }: { text: string }) {
+  const { header, blocks } = React.useMemo(() => splitProposalBlocks(text), [text]);
+  const [expanded, setExpanded] = React.useState<Record<number, boolean>>({});
+  const [allOpen, setAllOpen] = React.useState(false);
+
+  if (blocks.length < 3) {
+    return <>{renderMessageContent(text)}</>;
+  }
+
+  const toggleAll = () => {
+    const next = !allOpen;
+    setAllOpen(next);
+    setExpanded(Object.fromEntries(blocks.map((_, i) => [i, next])) as Record<number, boolean>);
+  };
+
+  return (
+    <div className="space-y-2">
+      {header && <div>{renderMessageContent(header)}</div>}
+      <div className="flex items-center justify-between rounded-xl border border-[var(--shell-input-border)] bg-[var(--shell-input-bg)]/60 px-2.5 py-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--shell-muted)]">
+          {blocks.length} detail soal
+        </span>
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="text-[10px] font-semibold text-[var(--brand)] hover:opacity-80"
+        >
+          {allOpen ? "Tutup semua" : "Buka semua"}
+        </button>
+      </div>
+      <div className="space-y-1.5">
+        {blocks.map((block, i) => {
+          const open = !!expanded[i];
+          return (
+            <div key={i} className="overflow-hidden rounded-xl border border-[var(--shell-input-border)] bg-[var(--shell-elevated,var(--card))]/55">
+              <button
+                type="button"
+                onClick={() => setExpanded((curr) => ({ ...curr, [i]: !curr[i] }))}
+                className="flex w-full items-start gap-2 px-2.5 py-2 text-left hover:bg-[var(--shell-hover)]/50 transition-colors"
+              >
+                <ChevronDown className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--brand)] transition-transform", open && "rotate-180")} />
+                <span className="max-h-9 overflow-hidden text-[11px] font-medium text-[var(--shell-foreground)]">
+                  {firstMeaningfulLine(block)}
+                </span>
+              </button>
+              {open && (
+                <div className="border-t border-[var(--shell-input-border)] px-2.5 py-2 text-[11px] leading-relaxed">
+                  {renderMessageContent(block)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // --- Main Panel ---
 
 // ScopeBadge displays which resource the AI conversation is
@@ -319,7 +400,7 @@ const MessageBubble = memo(function MessageBubble({
         {msg.proposal && msg.proposalStatus === "pending" && (
           <div className="mt-2.5 pt-2.5 border-t border-[var(--shell-input-border)]">
             <div className="text-[11px] leading-relaxed text-[var(--shell-foreground)] mb-2.5 [&_strong]:font-semibold [&_em]:italic [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--brand)]/40 [&_blockquote]:pl-2 [&_blockquote]:my-1 [&_blockquote]:text-[var(--shell-muted)] space-y-1">
-              {renderMessageContent(msg.proposal.confirmationText)}
+              <ProposalPreview text={msg.proposal.confirmationText} />
             </div>
             <div className="flex gap-2">
               <button
