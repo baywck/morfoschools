@@ -330,7 +330,7 @@ func (a *App) execCreateStimulusBlock(ctx context.Context, tenantID, userID stri
 		}
 		createdQuestionIDs = append(createdQuestionIDs, id)
 		if usesKisiKisi && bpID != "" {
-			if _, hasSlot := qm["blueprintSlotId"]; !hasSlot {
+			if !questionHasBlueprintSlot(ctx, tx, id) {
 				item := kisiItemFromQuestionMap(id, qm, bpPos)
 				var slotID string
 				if err := tx.QueryRowContext(ctx, `

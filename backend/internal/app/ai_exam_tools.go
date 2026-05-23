@@ -343,8 +343,8 @@ func (a *App) capFindSimilarQuestions(ctx context.Context, tenantID, userID stri
 	}
 
 	b, _ := json.Marshal(map[string]any{
-		"matches":      hits,
-		"threshold":    p.Threshold,
+		"matches":        hits,
+		"threshold":      p.Threshold,
 		"interpretation": "sim>=0.95 near-exact, 0.85-0.95 probable dup, 0.6-0.85 paraphrase candidate",
 	})
 	return string(b), nil
@@ -432,8 +432,8 @@ func (a *App) capCreateQuestion(ctx context.Context, tenantID, userID string, ar
 			}
 			b, _ := json.Marshal(map[string]any{
 				"error": map[string]any{
-					"code":    "DUPLICATE_FUZZY",
-					"message": fmt.Sprintf("Soal mirip dengan yang sudah ada (similarity=%.2f). Existing: %q", sim, excerpt),
+					"code":        "DUPLICATE_FUZZY",
+					"message":     fmt.Sprintf("Soal mirip dengan yang sudah ada (similarity=%.2f). Existing: %q", sim, excerpt),
 					"recoverable": true,
 					"recovery": map[string]any{
 						"hint": "Ganti pendekatan: topik berbeda, level kognitif berbeda, stimulus berbeda, atau konfirmasi ke user kalau memang mau soal serupa (variant problem). Pakai find_similar_questions untuk lihat top match.",
@@ -751,7 +751,7 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 		created++
 
 		if usesKisiKisi && bpID != "" {
-			if _, hasSlot := qm["blueprintSlotId"]; !hasSlot {
+			if !questionHasBlueprintSlot(ctx, tx, id) {
 				item := kisiItemFromQuestionMap(id, qm, bpPos)
 				var slotID string
 				if err := tx.QueryRowContext(ctx, `
@@ -780,7 +780,9 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 			    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
 			    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
 			    updated_at = now()
-			WHERE id=$1`, bpID); err != nil { return "", err }
+			WHERE id=$1`, bpID); err != nil {
+			return "", err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return "", err
@@ -795,7 +797,12 @@ func (a *App) execBatchCreateQuestions(ctx context.Context, tenantID, userID str
 
 	return fmt.Sprintf(`{"success":true,"message":"%d soal berhasil dibuat%s","count":%d,"questionIds":%s,"linkedKisiKisi":%d}`,
 		created,
-		func() string { if linkedKisi > 0 { return fmt.Sprintf("; %d kisi-kisi otomatis dibuat", linkedKisi) }; return "" }(),
+		func() string {
+			if linkedKisi > 0 {
+				return fmt.Sprintf("; %d kisi-kisi otomatis dibuat", linkedKisi)
+			}
+			return ""
+		}(),
 		created,
 		mustJSONLocal(createdIDs),
 		linkedKisi,
@@ -817,30 +824,54 @@ func kisiItemFromQuestionMap(questionID string, qm map[string]any, pos int) auto
 	get := func(keys ...string) string {
 		for _, k := range keys {
 			if v, ok := qm[k]; ok {
-				if s := strings.TrimSpace(fmt.Sprint(v)); s != "" && s != "<nil>" { return s }
+				if s := strings.TrimSpace(fmt.Sprint(v)); s != "" && s != "<nil>" {
+					return s
+				}
 			}
 		}
 		return ""
 	}
 	content := get("content")
 	materi := get("materi", "topic")
-	if materi == "" { materi = "Topik sesuai konteks soal" }
+	if materi == "" {
+		materi = "Topik sesuai konteks soal"
+	}
 	indikator := get("indikator", "indicator")
-	if indikator == "" { indikator = "Menganalisis informasi kontekstual pada soal untuk menentukan jawaban yang tepat" }
+	if indikator == "" {
+		indikator = "Menganalisis informasi kontekstual pada soal untuk menentukan jawaban yang tepat"
+	}
 	qtype := get("questionType")
-	if qtype == "" { qtype = "multiple_choice" }
+	if qtype == "" {
+		qtype = "multiple_choice"
+	}
 	points := 1.0
-	if v, ok := qm["points"].(float64); ok && v > 0 { points = v }
+	if v, ok := qm["points"].(float64); ok && v > 0 {
+		points = v
+	}
 	_ = content
 	code := get("competencyCode")
-	if code == "" { code = fmt.Sprintf("KOMP-%03d", pos+1) }
+	if code == "" {
+		code = fmt.Sprintf("KOMP-%03d", pos+1)
+	}
 	desc := get("competencyDescription")
-	if desc == "" { desc = synthesizeCompetencyDescription(materi, indikator) }
+	if desc == "" {
+		desc = synthesizeCompetencyDescription(materi, indikator)
+	}
 	cog := get("cognitiveLevel")
-	if cog == "" { cog = "C3" }
+	if cog == "" {
+		cog = "C3"
+	}
 	diff := get("difficulty")
-	if diff == "" { diff = "sedang" }
+	if diff == "" {
+		diff = "sedang"
+	}
 	return autoKisiItem{code, desc, materi, indikator, cog, diff, qtype, points}
+}
+
+func questionHasBlueprintSlot(ctx context.Context, tx *sql.Tx, questionID string) bool {
+	var has bool
+	_ = tx.QueryRowContext(ctx, `SELECT blueprint_slot_id IS NOT NULL FROM exam_questions WHERE id=$1`, questionID).Scan(&has)
+	return has
 }
 
 func mustJSONLocal(v any) string {
@@ -903,13 +934,17 @@ func (a *App) insertQuestionWithOptions(ctx context.Context, tenantID, userID st
 	var qm map[string]any
 	_ = json.Unmarshal(args, &qm)
 	var examID string
-	if v, ok := qm["examId"].(string); ok { examID = v }
+	if v, ok := qm["examId"].(string); ok {
+		examID = v
+	}
 	var usesKisiKisi bool
 	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(uses_kisi_kisi,false) FROM exams WHERE id=$1 AND tenant_id=$2`, examID, tenantID).Scan(&usesKisiKisi)
 	if usesKisiKisi {
-		if _, hasSlot := qm["blueprintSlotId"]; !hasSlot {
+		if !questionHasBlueprintSlot(ctx, tx, id) {
 			bpID, err := ensureExamBlueprintTx(ctx, tx, tenantID, examID, "merdeka")
-			if err != nil { return "", err }
+			if err != nil {
+				return "", err
+			}
 			bpPos := 0
 			_ = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position), -1) + 1 FROM exam_blueprint_slots WHERE exam_blueprint_id = $1`, bpID).Scan(&bpPos)
 			item := kisiItemFromQuestionMap(id, qm, bpPos)
@@ -923,14 +958,20 @@ func (a *App) insertQuestionWithOptions(ctx context.Context, tenantID, userID st
 				RETURNING id::text`,
 				bpID, bpPos, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
 				item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,
-			).Scan(&slotID); err != nil { return "", err }
-			if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil { return "", err }
+			).Scan(&slotID); err != nil {
+				return "", err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE exam_questions SET blueprint_slot_id=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3`, slotID, id, tenantID); err != nil {
+				return "", err
+			}
 			if _, err := tx.ExecContext(ctx, `
 				UPDATE exam_blueprints SET
 				    total_slots = (SELECT COUNT(*) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
 				    total_points = (SELECT COALESCE(SUM(points),0) FROM exam_blueprint_slots WHERE exam_blueprint_id=$1),
 				    updated_at = now()
-				WHERE id=$1`, bpID); err != nil { return "", err }
+				WHERE id=$1`, bpID); err != nil {
+				return "", err
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -1027,6 +1068,19 @@ func (a *App) insertQuestionWithOptionsTx(ctx context.Context, tx *sql.Tx, tenan
 		// when caller didn't pin a sortOrder.
 		if p.SortOrder == nil {
 			sortOrder = nextGroupPosition(ctx, tx, p.GroupID)
+		}
+	}
+
+	// Guard against LLM reusing an already-linked blueprint slot. The DB has
+	// idx_exam_questions_one_per_slot to enforce one question per slot; if the
+	// model passes a stale/occupied blueprintSlotId, create the question without
+	// that slot and let the caller/auto-kisi path attach a fresh slot instead of
+	// failing the whole proposal.
+	if p.BlueprintSlotID != "" {
+		var occupied bool
+		_ = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM exam_questions WHERE blueprint_slot_id=$1 AND tenant_id=$2)`, p.BlueprintSlotID, tenantID).Scan(&occupied)
+		if occupied {
+			p.BlueprintSlotID = ""
 		}
 	}
 
