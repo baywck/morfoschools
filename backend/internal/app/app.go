@@ -103,6 +103,7 @@ func (a *App) Handler() http.Handler {
 	a.registerBlueprintSlotRoutes(mux)
 	mux.HandleFunc("POST /api/v1/exams/{id}/blueprint/clone", a.handleCloneBlueprintToExam)
 	mux.HandleFunc("POST /api/v1/exams/{id}/blueprint/export", a.handleExportExamBlueprintToTemplate)
+	a.registerAIProviderSettingsRoutes(mux)
 	a.registerAIChatRoutes(mux)
 
 	return a.applyMiddleware(mux)

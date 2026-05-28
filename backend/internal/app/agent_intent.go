@@ -24,7 +24,12 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 	if !isAgentExamMutationCandidate(lower) {
 		return false
 	}
-	intent, err := a.extractAgentIntent(r.Context(), tenantID, sessionID, req)
+	auth := AuthFromContext(r.Context())
+	roles := []string{}
+	if auth != nil {
+		roles = auth.Roles
+	}
+	intent, err := a.extractAgentIntent(r.Context(), tenantID, userID, roles, sessionID, req)
 	if err != nil {
 		if fallback, ok := a.fallbackCreateExamIntent(r.Context(), tenantID, sessionID, req.Message); ok {
 			intent = fallback

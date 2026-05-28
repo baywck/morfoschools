@@ -1,16 +1,11 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 )
 
 // AI chat is intentionally reset to discussion-only mode.
@@ -132,7 +127,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		_, _ = a.db.ExecContext(r.Context(), `UPDATE ai_sessions SET message_count = message_count + 2, last_active_at = now() WHERE id=$1`, sessionID)
 		return
 	}
-	content, totalTokens, err := a.callDiscussionLLM(r.Context(), sessionID, tenantID, req.Shadow.ActiveEntities, req.Message)
+	content, totalTokens, err := a.callDiscussionLLM(r.Context(), sessionID, tenantID, auth.UserID, auth.Roles, req.Shadow.ActiveEntities, req.Message)
 	if err != nil {
 		a.logger.Error("discussion llm failed", "error", err)
 		writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI service unavailable", r)
@@ -147,7 +142,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID string, active map[string]string, userMessage string) (string, int, error) {
+func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID string, roles []string, active map[string]string, userMessage string) (string, int, error) {
 	messages := []llmMessage{{Role: "system", Content: a.discussionSystemPrompt(ctx, tenantID, active)}}
 	rows, err := a.db.QueryContext(ctx, `SELECT role, content FROM ai_messages WHERE session_id=$1 AND role IN ('user','assistant') ORDER BY created_at DESC LIMIT 12`, sessionID)
 	if err == nil {
@@ -164,7 +159,11 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID string,
 		}
 	}
 	messages = append(messages, llmMessage{Role: "user", Content: userMessage})
-	resp, err := a.callLLM(ctx, messages)
+	provider, err := a.resolveAIProvider(ctx, &AuthContext{UserID: userID, Roles: roles, EffectiveTenantID: &tenantID}, tenantID)
+	if err != nil {
+		return "", 0, err
+	}
+	resp, err := a.callLLMWithProvider(ctx, provider, messages)
 	if err != nil {
 		return "", 0, err
 	}
@@ -221,106 +220,11 @@ type llmResponse struct {
 }
 
 func (a *App) callLLM(ctx context.Context, messages []llmMessage) (*llmResponse, error) {
-	baseURL := strings.TrimRight(os.Getenv("AI_BASE_URL"), "/")
-	apiKey := os.Getenv("AI_API_KEY")
-	model := os.Getenv("AI_MODEL")
-	if model == "" {
-		model = "MORFOSCHOOLS"
-	}
-	if baseURL == "" || apiKey == "" {
-		return nil, fmt.Errorf("AI_BASE_URL/AI_API_KEY is not configured")
-	}
-
-	body := map[string]any{
-		"model":       model,
-		"messages":    messages,
-		"temperature": 0.4,
-		"max_tokens":  1200,
-	}
-	jsonBody, err := json.Marshal(body)
+	provider, err := a.resolveAIProvider(ctx, nil, "")
 	if err != nil {
 		return nil, err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("provider status %d", resp.StatusCode)
-	}
-	jsonBody2 := respBody
-	if idx := bytes.Index(jsonBody2, []byte("data: [DONE]")); idx > 0 {
-		jsonBody2 = bytes.TrimSpace(jsonBody2[:idx])
-	}
-	if idx := bytes.Index(jsonBody2, []byte("\ndata: ")); idx > 0 {
-		jsonBody2 = bytes.TrimSpace(jsonBody2[:idx])
-	}
-	var direct llmResponse
-	if json.Unmarshal(jsonBody2, &direct) == nil && len(direct.Choices) > 0 {
-		return &direct, nil
-	}
-	if bytes.Contains(respBody, []byte("data: ")) {
-		var content strings.Builder
-		var usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
-		}
-		for _, line := range bytes.Split(respBody, []byte("\n")) {
-			line = bytes.TrimSpace(line)
-			if !bytes.HasPrefix(line, []byte("data: ")) || bytes.Equal(line, []byte("data: [DONE]")) {
-				continue
-			}
-			var parsed struct {
-				Choices []struct {
-					Delta struct {
-						Content string `json:"content"`
-					} `json:"delta"`
-					Message struct {
-						Content string `json:"content"`
-					} `json:"message"`
-					FinishReason string `json:"finish_reason"`
-				} `json:"choices"`
-				Usage struct {
-					PromptTokens     int `json:"prompt_tokens"`
-					CompletionTokens int `json:"completion_tokens"`
-					TotalTokens      int `json:"total_tokens"`
-				} `json:"usage"`
-			}
-			if json.Unmarshal(bytes.TrimPrefix(line, []byte("data: ")), &parsed) != nil {
-				continue
-			}
-			if len(parsed.Choices) > 0 {
-				content.WriteString(parsed.Choices[0].Delta.Content)
-				content.WriteString(parsed.Choices[0].Message.Content)
-			}
-			if parsed.Usage.TotalTokens > 0 {
-				usage = parsed.Usage
-			}
-		}
-		return &llmResponse{Choices: []struct {
-			Message struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"message"`
-			FinishReason string `json:"finish_reason"`
-		}{{Message: struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		}{Role: "assistant", Content: content.String()}}}, Usage: usage}, nil
-	}
-	return nil, fmt.Errorf("failed to parse LLM response: %s", string(respBody[:min(len(respBody), 200)]))
+	return a.callLLMWithProvider(ctx, provider, messages)
 }
 
 var affirmativeWords = map[string]bool{

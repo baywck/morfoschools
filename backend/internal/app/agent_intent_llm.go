@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func (a *App) extractAgentIntent(ctx context.Context, tenantID, sessionID string, req aiChatRequest) (agentIntentResponse, error) {
+func (a *App) extractAgentIntent(ctx context.Context, tenantID, userID string, roles []string, sessionID string, req aiChatRequest) (agentIntentResponse, error) {
 	subjects := a.agentSubjectCatalog(ctx, tenantID)
 	conversationContext := a.agentRecentConversationContext(ctx, sessionID)
 	prompt := `Kamu adalah intent extractor. Balas JSON valid saja, tanpa markdown dan tanpa penjelasan.
@@ -33,7 +33,11 @@ Field wajib create_exam hanya title. Field wajib edit_exam adalah examId dan min
 missingFields hanya untuk field wajib yang benar-benar tidak bisa disimpulkan.
 Output shape: {"intent":"create_exam|edit_exam|create_exam_section|discussion|unsupported","workflow":"create_exam|edit_exam|create_exam_section","args":{},"missingFields":[]}`
 	messages := []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: req.Message}}
-	resp, err := a.callLLM(ctx, messages)
+	provider, providerErr := a.resolveAIProvider(ctx, &AuthContext{UserID: userID, Roles: roles, EffectiveTenantID: &tenantID}, tenantID)
+	if providerErr != nil {
+		return agentIntentResponse{}, providerErr
+	}
+	resp, err := a.callLLMWithProvider(ctx, provider, messages)
 	if err != nil {
 		return agentIntentResponse{}, err
 	}

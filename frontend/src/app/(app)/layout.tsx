@@ -5,7 +5,6 @@ import { ThemeProvider } from "@/lib/use-theme";
 import { ToastProvider } from "@/components/ui/toast";
 import { PromptProvider } from "@/components/ui/prompt-dialog";
 import { AppShell } from "@/components/layout/app-shell";
-import { QuestionMagicModalHost } from "@/components/ai/question-magic-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -112,7 +111,6 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       <AppShell navigation={navigation} brand={<TenantBrandLogo />}>
         {children}
       </AppShell>
-      <QuestionMagicModalHost />
     </AuthGuard>
   );
 }
