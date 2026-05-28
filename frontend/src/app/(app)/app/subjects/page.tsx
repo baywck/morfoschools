@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useAuth } from "@/lib/auth-provider";
 import { useCRUD } from "@/lib/use-crud";
 import { listSubjects, createSubject, updateSubject, archiveSubject, listSubjectTeachers, type Subject, type SubjectTeacher } from "@/lib/modules-api";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
+import { ComboboxField } from "@/components/ui/combobox-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -12,8 +14,11 @@ import { RowActions } from "@/components/ui/row-actions";
 import { PageShell } from "@/components/layout/page-shell";
 import { Plus, BookOpen, Trash2, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { KEMENDIKDASMEN_SUBJECTS } from "@/lib/kemendikdasmen-subjects";
+import { subjectsForTenant } from "@/lib/tenant-education";
 
 export default function SubjectsPage() {
+  const { session } = useAuth();
   const crud = useCRUD<Subject>({
     name: "Subject",
     list: listSubjects,
@@ -39,21 +44,30 @@ export default function SubjectsPage() {
   }, [crud.items]);
 
   // Create form
-  const [createForm, setCreateForm] = useState({ code: "", name: "", description: "" });
+  const officialSubjectOptions = useMemo(() => subjectsForTenant(session?.effectiveTenant).map((subject) => ({
+    value: subject.value,
+    label: subject.label,
+  })), [session?.effectiveTenant]);
+  const [createForm, setCreateForm] = useState({ officialSubject: "", name: "", description: "" });
 
   // Edit form
-  const [editForm, setEditForm] = useState({ name: "", description: "", status: "" });
+  const [editForm, setEditForm] = useState({ officialSubject: "", name: "", description: "", status: "" });
 
   function openEdit(subject: Subject) {
     crud.setEditTarget(subject);
     crud.setFieldErrors({});
-    setEditForm({ name: subject.name, description: subject.description || "", status: subject.status });
+    const official = KEMENDIKDASMEN_SUBJECTS.find((option) => option.label.toLowerCase() === subject.name.toLowerCase());
+    setEditForm({ officialSubject: official?.value || "", name: subject.name, description: subject.description || "", status: subject.status });
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    const success = await crud.handleCreate({ ...createForm, description: createForm.description || undefined });
-    if (success) setCreateForm({ code: "", name: "", description: "" });
+    const success = await crud.handleCreate({
+      code: createForm.officialSubject || undefined,
+      name: createForm.name,
+      description: createForm.description || undefined,
+    });
+    if (success) setCreateForm({ officialSubject: "", name: "", description: "" });
   }
 
   async function handleEdit(e: React.FormEvent) {
@@ -100,7 +114,7 @@ export default function SubjectsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium text-[var(--foreground)] truncate">{s.name}</p>
-                    <p className="text-[11px] text-[var(--muted-foreground)]">{s.code}</p>
+                    {s.description && <p className="text-[11px] text-[var(--muted-foreground)] truncate">{s.description}</p>}
                   </div>
                   {/* Assigned teachers — desktop only */}
                   {subjectTeachersMap[s.id]?.length > 0 && (
@@ -135,18 +149,17 @@ export default function SubjectsPage() {
       {/* Create Sheet */}
       <RightPullSheet open={crud.showCreate} title="Add Subject" onClose={() => crud.setShowCreate(false)}>
         <form onSubmit={handleCreate} className="space-y-3">
-          <InputField
-            label="Subject Code"
-            value={createForm.code}
-            onChange={(e) => setCreateForm({ ...createForm, code: e.target.value })}
-            error={crud.fieldErrors.code}
-            helperText="Unique identifier (e.g. MATH-101)"
-          />
-          <InputField
-            label="Subject Name"
-            value={createForm.name}
-            onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+          <ComboboxField
+            label="Subject"
+            value={createForm.officialSubject}
+            inputValue={createForm.name}
+            options={officialSubjectOptions}
+            onInputChange={(value) => setCreateForm({ ...createForm, name: value, officialSubject: "" })}
+            onSelect={(option) => setCreateForm({ ...createForm, officialSubject: option.value, name: option.label })}
+            onCreate={(typedSubject) => setCreateForm({ ...createForm, officialSubject: "", name: typedSubject })}
+            createLabel={(typedSubject) => `Tambah “${typedSubject}”`}
             error={crud.fieldErrors.name}
+            helperText="Ketik untuk mencari subject resmi. Jika tidak ada, tambahkan subject custom dari teks yang diketik."
             prefix={<BookOpen size={14} />}
           />
           <InputField
@@ -170,11 +183,17 @@ export default function SubjectsPage() {
       {/* Edit Sheet */}
       <RightPullSheet open={!!crud.editTarget} title="Edit Subject" onClose={() => crud.setEditTarget(null)}>
         <form onSubmit={handleEdit} className="space-y-3">
-          <InputField
-            label="Subject Name"
-            value={editForm.name}
-            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+          <ComboboxField
+            label="Subject"
+            value={editForm.officialSubject}
+            inputValue={editForm.name}
+            options={officialSubjectOptions}
+            onInputChange={(value) => setEditForm({ ...editForm, name: value, officialSubject: "" })}
+            onSelect={(option) => setEditForm({ ...editForm, officialSubject: option.value, name: option.label })}
+            onCreate={(typedSubject) => setEditForm({ ...editForm, officialSubject: "", name: typedSubject })}
+            createLabel={(typedSubject) => `Tambah “${typedSubject}”`}
             error={crud.fieldErrors.name}
+            helperText="Ketik untuk mencari subject resmi. Jika tidak ada, tambahkan subject custom dari teks yang diketik."
             prefix={<BookOpen size={14} />}
           />
           <InputField

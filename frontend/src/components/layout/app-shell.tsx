@@ -12,9 +12,10 @@ import { cn } from "@/lib/cn";
 type AppShellProps = {
   children: ReactNode;
   navigation: NavItem[];
+  brand?: ReactNode;
 };
 
-export function AppShell({ children, navigation }: AppShellProps) {
+export function AppShell({ children, navigation, brand }: AppShellProps) {
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const router = useRouter();
 
@@ -40,7 +41,7 @@ export function AppShell({ children, navigation }: AppShellProps) {
   return (
     <div className="h-screen overflow-hidden bg-[var(--shell)]">
       {/* Desktop sidebar */}
-      <Sidebar navigation={navigation} />
+      <Sidebar navigation={navigation} brand={brand} />
 
       {/* Main area — shrinks when AI chat is open */}
       <div className={cn(

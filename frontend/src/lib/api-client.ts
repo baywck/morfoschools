@@ -18,8 +18,9 @@ async function request<T>(
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE}${path}`;
 
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string>),
   };
 
@@ -61,15 +62,23 @@ export function get<T>(path: string) {
 }
 
 export function post<T>(path: string, body?: unknown) {
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
   return request<T>(path, {
     method: "POST",
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
   });
 }
 
 export function patch<T>(path: string, body?: unknown) {
   return request<T>(path, {
     method: "PATCH",
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+export function put<T>(path: string, body?: unknown) {
+  return request<T>(path, {
+    method: "PUT",
     body: body ? JSON.stringify(body) : undefined,
   });
 }

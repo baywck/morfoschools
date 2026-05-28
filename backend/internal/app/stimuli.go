@@ -41,18 +41,18 @@ func (a *App) registerStimuliRoutes(mux *http.ServeMux) {
 }
 
 type stimulusRow struct {
-	ID            string  `json:"id"`
-	OwnerUserID   string  `json:"ownerUserId"`
-	OwnerName     string  `json:"ownerName"`
-	Type          string  `json:"type"`
-	Title         string  `json:"title"`
-	Content       string  `json:"content"`
-	Source        *string `json:"source,omitempty"`
-	Lifecycle     string  `json:"lifecycle"`
-	ParentExamID  *string `json:"parentExamId,omitempty"`
-	UsageCount    int     `json:"usageCount"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	ID           string  `json:"id"`
+	OwnerUserID  string  `json:"ownerUserId"`
+	OwnerName    string  `json:"ownerName"`
+	Type         string  `json:"type"`
+	Title        string  `json:"title"`
+	Content      string  `json:"content"`
+	Source       *string `json:"source,omitempty"`
+	Lifecycle    string  `json:"lifecycle"`
+	ParentExamID *string `json:"parentExamId,omitempty"`
+	UsageCount   int     `json:"usageCount"`
+	CreatedAt    string  `json:"createdAt"`
+	UpdatedAt    string  `json:"updatedAt"`
 }
 
 func (a *App) handleListStimuli(w http.ResponseWriter, r *http.Request) {
@@ -266,8 +266,8 @@ func (a *App) handleCreateStimulus(w http.ResponseWriter, r *http.Request) {
 		Title        string  `json:"title"`
 		Content      string  `json:"content"`
 		Source       string  `json:"source"`
-		Lifecycle    string  `json:"lifecycle"`     // "exam_scoped" | "shared"
-		ParentExamID *string `json:"parentExamId"`  // required when lifecycle=exam_scoped
+		Lifecycle    string  `json:"lifecycle"`    // "exam_scoped" | "shared"
+		ParentExamID *string `json:"parentExamId"` // required when lifecycle=exam_scoped
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid body", r)

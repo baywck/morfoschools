@@ -14,11 +14,16 @@ import (
 
 // Config holds application configuration.
 type Config struct {
-	Port    string
-	AppEnv  string
-	DBUrl   string
-	Valkey  string
-	NatsUrl string
+	Port        string
+	AppEnv      string
+	DBUrl       string
+	Valkey      string
+	NatsUrl     string
+	R2Endpoint  string
+	R2AccessKey string
+	R2SecretKey string
+	R2Bucket    string
+	R2PublicURL string
 }
 
 // App is the main application container.
@@ -27,8 +32,6 @@ type App struct {
 	logger       *slog.Logger
 	db           *sql.DB
 	loginLimiter *loginLimiter
-	toolRegistry *ToolRegistry
-	capRegistry  *CapabilityRegistry
 }
 
 // New creates a new App instance.
@@ -38,12 +41,7 @@ func New(cfg Config, logger *slog.Logger, db *sql.DB) (*App, error) {
 		logger:       logger,
 		db:           db,
 		loginLimiter: newLoginLimiter(),
-		toolRegistry: NewToolRegistry(),
 	}
-	a.RegisterSchoolTools(a.toolRegistry)
-	a.RegisterWriteTools(a.toolRegistry)
-	a.capRegistry = NewCapabilityRegistry()
-	a.RegisterAllCapabilities(a.capRegistry)
 	return a, nil
 }
 
@@ -86,6 +84,7 @@ func (a *App) Handler() http.Handler {
 
 	// Academic
 	a.registerSubjectRoutes(mux)
+	a.registerCurriculumCPRoutes(mux)
 	a.registerClassSectionRoutes(mux)
 	a.registerTeacherSubjectRoutes(mux)
 	a.registerAcademicYearRoutes(mux)
@@ -218,7 +217,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	allowed := map[string]bool{
-		"http://localhost:1666":  true,
+		"http://localhost:1666": true,
 		"http://127.0.0.1:1666": true,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +228,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.Header().Add("Vary", "Origin")
 		}
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, X-Tenant-ID, X-CSRF-Token")
 			w.Header().Set("Access-Control-Max-Age", "600")
 			w.WriteHeader(http.StatusNoContent)

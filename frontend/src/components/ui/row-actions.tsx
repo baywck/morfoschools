@@ -10,6 +10,7 @@ interface RowAction {
   icon?: React.ReactNode;
   onClick: () => void;
   variant?: "default" | "danger";
+  disabled?: boolean;
 }
 
 interface RowActionsProps {
@@ -53,6 +54,7 @@ export function RowActions({ actions }: RowActionsProps) {
   }
 
   function handleAction(action: RowAction) {
+    if (action.disabled) return;
     setOpen(false);
     // Delay action to allow dropdown to close and portal to unmount
     requestAnimationFrame(() => {
@@ -80,11 +82,13 @@ export function RowActions({ actions }: RowActionsProps) {
             <button
               key={i}
               onClick={() => handleAction(action)}
+              disabled={action.disabled}
               className={cn(
                 "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[11px] font-medium transition-colors",
                 action.variant === "danger"
                   ? "text-[var(--danger)] hover:bg-[var(--danger-soft)]"
-                  : "text-[var(--foreground)] hover:bg-[var(--muted)]"
+                  : "text-[var(--foreground)] hover:bg-[var(--muted)]",
+                action.disabled && "cursor-not-allowed opacity-50 hover:bg-transparent"
               )}
             >
               {action.icon}

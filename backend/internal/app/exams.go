@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"morfoschools/backend/internal/platform/httpx"
 )
@@ -28,6 +29,7 @@ func (a *App) registerExamRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/v1/exams/{id}/publish", a.handlePublishExam)
 	mux.HandleFunc("PATCH /api/v1/exams/{id}/archive", a.handleArchiveExam)
 	mux.HandleFunc("PATCH /api/v1/exams/{id}/restore", a.handleRestoreExam)
+	mux.HandleFunc("DELETE /api/v1/exams/{id}", a.handleHardDeleteExam)
 }
 
 type examRow struct {
@@ -36,6 +38,7 @@ type examRow struct {
 	Description           *string `json:"description"`
 	SubjectID             *string `json:"subjectId"`
 	SubjectName           *string `json:"subjectName,omitempty"`
+	GradeLevel            *string `json:"gradeLevel"`
 	ExamType              string  `json:"examType"`
 	DurationMinutes       *int    `json:"durationMinutes"`
 	MaxScore              float64 `json:"maxScore"`
@@ -50,6 +53,8 @@ type examRow struct {
 	QuestionCount         int     `json:"questionCount"`
 	TotalPoints           float64 `json:"totalPoints"`
 	CanAccess             bool    `json:"canAccess"`
+	CanWrite              bool    `json:"canWrite"`
+	CanDelete             bool    `json:"canDelete"`
 }
 
 // isAdminOverrideRole returns true if the auth context can override the
@@ -85,22 +90,56 @@ func (a *App) handleListExams(w http.ResponseWriter, r *http.Request) {
 	search := httpx.QueryString(r, "search", "")
 	status := httpx.QueryString(r, "status", "")
 	subjectID := httpx.QueryString(r, "subjectId", "")
+	auth := AuthFromContext(r.Context())
 
-	countQuery := `SELECT COUNT(*) FROM exams WHERE tenant_id = $1`
+	appendExamListAccessFilter := func(query *string, args *[]any, argIdx *int) {
+		if isTenantAdmin(auth) {
+			return
+		}
+		if auth == nil || auth.UserID == "" {
+			*query += ` AND false`
+			return
+		}
+		ownerArg := *argIdx
+		*args = append(*args, auth.UserID)
+		*argIdx++
+		collabArg := *argIdx
+		*args = append(*args, auth.UserID)
+		*argIdx++
+		subjectUserArg := *argIdx
+		*args = append(*args, auth.UserID)
+		*argIdx++
+		*query += ` AND (
+			e.owner_user_id = $` + strconv.Itoa(ownerArg) + `
+			OR EXISTS (SELECT 1 FROM exam_collaborators ec WHERE ec.exam_id = e.id AND ec.user_id = $` + strconv.Itoa(collabArg) + `)
+			OR EXISTS (
+				SELECT 1 FROM teacher_subjects ts
+				  JOIN teachers t ON t.id = ts.teacher_id
+				 WHERE t.user_id = $` + strconv.Itoa(subjectUserArg) + `
+				   AND ts.tenant_id = e.tenant_id
+				   AND ts.subject_id = e.subject_id
+				   AND ts.status = 'active'
+				   AND t.status = 'active'
+			)
+		)`
+	}
+
+	countQuery := `SELECT COUNT(*) FROM exams e WHERE e.tenant_id = $1`
 	args := []any{tenantID}
 	argIdx := 2
+	appendExamListAccessFilter(&countQuery, &args, &argIdx)
 	if search != "" {
-		countQuery += ` AND title ILIKE $` + strconv.Itoa(argIdx)
+		countQuery += ` AND e.title ILIKE $` + strconv.Itoa(argIdx)
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
 	if status != "" {
-		countQuery += ` AND status = $` + strconv.Itoa(argIdx)
+		countQuery += ` AND e.status = $` + strconv.Itoa(argIdx)
 		args = append(args, status)
 		argIdx++
 	}
 	if subjectID != "" {
-		countQuery += ` AND subject_id = $` + strconv.Itoa(argIdx)
+		countQuery += ` AND e.subject_id = $` + strconv.Itoa(argIdx)
 		args = append(args, subjectID)
 		argIdx++
 	}
@@ -115,7 +154,7 @@ func (a *App) handleListExams(w http.ResponseWriter, r *http.Request) {
 	// Aggregate question count + total points in the same query — admins
 	// see this on the list view, no need for an N+1 follow-up.
 	query := `
-		SELECT e.id, e.title, e.description, e.subject_id, s.name AS subject_name,
+		SELECT e.id, e.title, e.description, e.subject_id, s.name AS subject_name, e.grade_level,
 		       e.exam_type, e.duration_minutes, e.max_score, e.passing_score,
 		       e.status, e.uses_kisi_kisi,
 		       e.shuffle_questions, e.shuffle_options, e.show_result_immediately,
@@ -128,6 +167,7 @@ func (a *App) handleListExams(w http.ResponseWriter, r *http.Request) {
 
 	args = []any{tenantID}
 	argIdx = 2
+	appendExamListAccessFilter(&query, &args, &argIdx)
 	if search != "" {
 		query += ` AND e.title ILIKE $` + strconv.Itoa(argIdx)
 		args = append(args, "%"+search+"%")
@@ -160,7 +200,7 @@ func (a *App) handleListExams(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var e examRow
 		if err := rows.Scan(
-			&e.ID, &e.Title, &e.Description, &e.SubjectID, &e.SubjectName,
+			&e.ID, &e.Title, &e.Description, &e.SubjectID, &e.SubjectName, &e.GradeLevel,
 			&e.ExamType, &e.DurationMinutes, &e.MaxScore, &e.PassingScore,
 			&e.Status, &e.UsesKisiKisi,
 			&e.ShuffleQuestions, &e.ShuffleOptions, &e.ShowResultImmediately,
@@ -172,11 +212,12 @@ func (a *App) handleListExams(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, e.ID)
 	}
 
-	// Populate canAccess via batch (ADR-0009 list-response contract).
-	auth := AuthFromContext(r.Context())
-	access := a.canAccessExamReadBatch(r.Context(), tenantID, auth, ids)
+	access := a.examAccessBatch(r.Context(), tenantID, auth, ids)
 	for i := range out {
-		out[i].CanAccess = access[out[i].ID]
+		acc := access[out[i].ID]
+		out[i].CanAccess = acc.CanRead
+		out[i].CanWrite = acc.CanWrite
+		out[i].CanDelete = acc.CanDelete
 	}
 
 	writeJSON(w, http.StatusOK, httpx.NewPaginatedResponse(out, p, total))
@@ -201,7 +242,7 @@ func (a *App) handleGetExam(w http.ResponseWriter, r *http.Request) {
 
 	var e examRow
 	err := a.db.QueryRowContext(r.Context(), `
-		SELECT e.id, e.title, e.description, e.subject_id, s.name AS subject_name,
+		SELECT e.id, e.title, e.description, e.subject_id, s.name AS subject_name, e.grade_level,
 		       e.exam_type, e.duration_minutes, e.max_score, e.passing_score,
 		       e.status, e.uses_kisi_kisi,
 		       e.shuffle_questions, e.shuffle_options, e.show_result_immediately,
@@ -213,7 +254,7 @@ func (a *App) handleGetExam(w http.ResponseWriter, r *http.Request) {
 		 WHERE e.id = $1 AND e.tenant_id = $2`,
 		examID, tenantID,
 	).Scan(
-		&e.ID, &e.Title, &e.Description, &e.SubjectID, &e.SubjectName,
+		&e.ID, &e.Title, &e.Description, &e.SubjectID, &e.SubjectName, &e.GradeLevel,
 		&e.ExamType, &e.DurationMinutes, &e.MaxScore, &e.PassingScore,
 		&e.Status, &e.UsesKisiKisi,
 		&e.ShuffleQuestions, &e.ShuffleOptions, &e.ShowResultImmediately,
@@ -243,6 +284,7 @@ func (a *App) handleCreateExam(w http.ResponseWriter, r *http.Request) {
 		Title                 string   `json:"title"`
 		Description           string   `json:"description"`
 		SubjectID             *string  `json:"subjectId"`
+		GradeLevel            *string  `json:"gradeLevel"`
 		ExamType              string   `json:"examType"`
 		DurationMinutes       *int     `json:"durationMinutes"`
 		MaxScore              *float64 `json:"maxScore"`
@@ -270,6 +312,11 @@ func (a *App) handleCreateExam(w http.ResponseWriter, r *http.Request) {
 	usesKisiKisi := false
 	if req.UsesKisiKisi != nil {
 		usesKisiKisi = *req.UsesKisiKisi
+	}
+	if req.GradeLevel != nil {
+		for key, message := range a.validateTenantGradeLevel(r.Context(), tenantID, *req.GradeLevel) {
+			fields[key] = message
+		}
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
@@ -318,14 +365,14 @@ func (a *App) handleCreateExam(w http.ResponseWriter, r *http.Request) {
 	var id string
 	err = tx.QueryRowContext(r.Context(), `
 		INSERT INTO exams (
-		    tenant_id, title, description, subject_id, exam_type,
+		    tenant_id, title, description, subject_id, grade_level, exam_type,
 		    duration_minutes, max_score, passing_score,
 		    shuffle_questions, shuffle_options, show_result_immediately,
 		    created_by, owner_user_id, status, uses_kisi_kisi
-		) VALUES ($1, $2, NULLIF($3,''), NULLIF($4,'')::uuid, $5,
-		          $6, $7, $8, $9, $10, $11, $12, $12, 'draft', $13)
+		) VALUES ($1, $2, NULLIF($3,''), NULLIF($4,'')::uuid, NULLIF($5,''), $6,
+		          $7, $8, $9, $10, $11, $12, $13, $13, 'draft', $14)
 		RETURNING id`,
-		tenantID, req.Title, req.Description, ptrToString(req.SubjectID), req.ExamType,
+		tenantID, req.Title, req.Description, ptrToString(req.SubjectID), ptrToString(req.GradeLevel), req.ExamType,
 		req.DurationMinutes, maxScore, passingScore,
 		req.ShuffleQuestions, req.ShuffleOptions, req.ShowResultImmediately,
 		auth.UserID, usesKisiKisi,
@@ -405,6 +452,7 @@ func (a *App) handleUpdateExam(w http.ResponseWriter, r *http.Request) {
 		Title                 *string  `json:"title"`
 		Description           *string  `json:"description"`
 		SubjectID             *string  `json:"subjectId"`
+		GradeLevel            *string  `json:"gradeLevel"`
 		ExamType              *string  `json:"examType"`
 		DurationMinutes       *int     `json:"durationMinutes"`
 		MaxScore              *float64 `json:"maxScore"`
@@ -417,6 +465,13 @@ func (a *App) handleUpdateExam(w http.ResponseWriter, r *http.Request) {
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid request body", r)
 		return
+	}
+
+	if req.GradeLevel != nil {
+		if fields := a.validateTenantGradeLevel(r.Context(), tenantID, *req.GradeLevel); len(fields) > 0 {
+			writeValidationError(w, fields, r)
+			return
+		}
 	}
 
 	// Kisi-kisi toggle gate (ADR-0012). Same admin override contract as
@@ -500,6 +555,13 @@ func (a *App) handleUpdateExam(w http.ResponseWriter, r *http.Request) {
 			parts = append(parts, "subject_id = NULL")
 		} else {
 			add("subject_id", *req.SubjectID)
+		}
+	}
+	if req.GradeLevel != nil {
+		if strings.TrimSpace(*req.GradeLevel) == "" {
+			parts = append(parts, "grade_level = NULL")
+		} else {
+			add("grade_level", strings.TrimSpace(*req.GradeLevel))
 		}
 	}
 	if req.ExamType != nil {
@@ -700,6 +762,45 @@ func (a *App) handleArchiveExam(w http.ResponseWriter, r *http.Request) {
 
 	a.audit(r.Context(), &tenantID, auth.UserID, "exams.archive", "exam", examID, r)
 	writeJSON(w, http.StatusOK, map[string]any{"id": examID, "status": "archived"})
+}
+
+func (a *App) handleHardDeleteExam(w http.ResponseWriter, r *http.Request) {
+	if !a.RequirePermission(w, r, "exams:write") {
+		return
+	}
+	tenantID := a.RequireEffectiveTenant(w, r)
+	if tenantID == "" {
+		return
+	}
+	if !a.RequireCSRF(w, r) {
+		return
+	}
+	examID := r.PathValue("id")
+	if !a.requireExamAccess(w, r, examID, ActionDelete) {
+		return
+	}
+
+	auth := AuthFromContext(r.Context())
+	if _, ok := a.requireExamWriteAccess(w, r, tenantID, auth, examID); !ok {
+		return
+	}
+
+	res, err := a.db.ExecContext(r.Context(),
+		`DELETE FROM exams WHERE id = $1 AND tenant_id = $2`,
+		examID, tenantID,
+	)
+	if err != nil {
+		a.logger.Error("hard delete exam failed", "error", err, "examId", examID)
+		writeErrorJSON(w, http.StatusInternalServerError, "delete_failed", "Could not permanently delete exam", r)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Exam not found", r)
+		return
+	}
+
+	a.audit(r.Context(), &tenantID, auth.UserID, "exams.hard_delete", "exam", examID, r)
+	writeJSON(w, http.StatusOK, map[string]any{"id": examID, "status": "deleted"})
 }
 
 func (a *App) handleRestoreExam(w http.ResponseWriter, r *http.Request) {

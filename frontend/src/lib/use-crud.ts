@@ -36,6 +36,7 @@ interface CRUDState<T> {
   search: string;
   setSearch: (v: string) => void;
   reload: () => void;
+  setItems: React.Dispatch<React.SetStateAction<T[]>>;
 
   /* Create */
   showCreate: boolean;
@@ -224,7 +225,7 @@ export function useCRUD<T, TCreate = any, TUpdate = any>(
   }, [name, toast, reload]);
 
   return {
-    items, total, loading, search, setSearch, reload,
+    items, total, loading, search, setSearch, reload, setItems,
     showCreate, setShowCreate, creating, handleCreate,
     editTarget, setEditTarget, editing, handleEdit,
     archiveTarget, setArchiveTarget, archiving, handleArchive,

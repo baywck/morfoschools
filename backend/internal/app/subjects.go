@@ -34,7 +34,7 @@ func (a *App) handleListSubjects(w http.ResponseWriter, r *http.Request) {
 	argIdx := 2
 
 	if search != "" {
-		countQuery += ` AND (name ILIKE $` + strconv.Itoa(argIdx) + ` OR code ILIKE $` + strconv.Itoa(argIdx) + `)`
+		countQuery += ` AND (name ILIKE $` + strconv.Itoa(argIdx) + ` OR COALESCE(code,'') ILIKE $` + strconv.Itoa(argIdx) + `)`
 		countArgs = append(countArgs, "%"+search+"%")
 		argIdx++
 	}
@@ -56,7 +56,7 @@ func (a *App) handleListSubjects(w http.ResponseWriter, r *http.Request) {
 	argIdx = 2
 
 	if search != "" {
-		query += ` AND (name ILIKE $` + strconv.Itoa(argIdx) + ` OR code ILIKE $` + strconv.Itoa(argIdx) + `)`
+		query += ` AND (name ILIKE $` + strconv.Itoa(argIdx) + ` OR COALESCE(code,'') ILIKE $` + strconv.Itoa(argIdx) + `)`
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
@@ -123,9 +123,6 @@ func (a *App) handleCreateSubject(w http.ResponseWriter, r *http.Request) {
 	fields := map[string]string{}
 	req.Code = strings.TrimSpace(req.Code)
 	req.Name = strings.TrimSpace(req.Name)
-	if req.Code == "" {
-		fields["code"] = "Code is required"
-	}
 	if req.Name == "" {
 		fields["name"] = "Name is required"
 	}
@@ -134,11 +131,20 @@ func (a *App) handleCreateSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Code == "" {
+		req.Code = slugifySubjectName(req.Name)
+	}
+
 	// Uniqueness
 	var exists bool
-	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM subjects WHERE tenant_id = $1 AND code = $2)`, tenantID, req.Code).Scan(&exists)
+	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM subjects WHERE tenant_id = $1 AND lower(name) = lower($2) AND status != 'archived')`, tenantID, req.Name).Scan(&exists)
 	if exists {
-		writeValidationError(w, map[string]string{"code": "Code already in use"}, r)
+		writeValidationError(w, map[string]string{"name": "Subject already exists"}, r)
+		return
+	}
+	_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM subjects WHERE tenant_id = $1 AND code = $2 AND status != 'archived')`, tenantID, req.Code).Scan(&exists)
+	if exists {
+		writeValidationError(w, map[string]string{"name": "Subject already exists"}, r)
 		return
 	}
 
@@ -231,6 +237,24 @@ func (a *App) handleArchiveSubject(w http.ResponseWriter, r *http.Request) {
 	a.audit(r.Context(), &tenantID, auth.UserID, "subjects.archive", "subject", subjectID, r)
 
 	writeJSON(w, http.StatusOK, map[string]any{"status": "archived"})
+}
+
+func slugifySubjectName(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 func (a *App) handleListSubjectTeachers(w http.ResponseWriter, r *http.Request) {

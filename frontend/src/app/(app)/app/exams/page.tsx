@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-provider";
 import { useCRUD } from "@/lib/use-crud";
 import {
   listExams,
@@ -9,6 +10,7 @@ import {
   updateExam,
   archiveExam,
   restoreExam,
+  hardDeleteExam,
   publishExam,
   listSubjects,
   type Exam,
@@ -34,6 +36,8 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { tenantEnabledPhases } from "@/lib/tenant-education";
+import { gradeOptionsForPhases, phaseForGrade } from "@/lib/grade-options";
 
 const examTypeOptions = [
   { value: "quiz", label: "Quiz" },
@@ -59,6 +63,8 @@ const statusTone = (status: string) => {
 export default function ExamsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { session } = useAuth();
+  const gradeOptions = useMemo(() => gradeOptionsForPhases(tenantEnabledPhases(session?.effectiveTenant)), [session?.effectiveTenant]);
 
   const crud = useCRUD<Exam>({
     name: "Exam",
@@ -70,10 +76,13 @@ export default function ExamsPage() {
   });
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<Exam | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [createForm, setCreateForm] = useState({
     title: "",
     description: "",
     subjectId: "",
+    gradeLevel: "",
     examType: "quiz",
     durationMinutes: "",
     maxScore: "100",
@@ -85,6 +94,7 @@ export default function ExamsPage() {
     title: "",
     description: "",
     subjectId: "",
+    gradeLevel: "",
     examType: "quiz",
     durationMinutes: "",
     maxScore: "100",
@@ -92,6 +102,36 @@ export default function ExamsPage() {
     shuffleQuestions: false,
     shuffleOptions: false,
   });
+
+  const actionsForExam = (e: Exam) => {
+    const base = [
+      {
+        label: "Manage soal",
+        icon: <ListChecks size={14} />,
+        onClick: () => router.push(`/app/exams/${e.id}`),
+      },
+      {
+        label: "Manage blueprint",
+        icon: <ClipboardList size={14} />,
+        onClick: () => router.push(`/app/exams/${e.id}#blueprint`),
+      },
+    ];
+    const canWrite = e.canWrite !== false;
+    const canDelete = e.canDelete === true;
+    if (e.status === "archived") {
+      return [
+        ...(canDelete ? [{ label: "Restore", icon: <RotateCcw size={14} />, onClick: () => crud.handleRestore(e.id) }] : []),
+        ...(canDelete ? [{ label: "Hard delete", icon: <Trash2 size={14} />, onClick: () => setDeleteTarget(e), variant: "danger" as const }] : []),
+      ];
+    }
+    return [
+      ...base,
+      ...(canWrite ? [{ label: "Edit", icon: <Pencil size={14} />, onClick: () => openEdit(e) }] : []),
+      ...(canWrite && e.status === "draft" ? [{ label: "Publish", icon: <Send size={14} />, onClick: () => handlePublish(e) }] : []),
+      ...(canDelete ? [{ label: "Archive", icon: <Trash2 size={14} />, onClick: () => crud.setArchiveTarget(e), variant: "danger" as const }] : []),
+      ...(canDelete ? [{ label: "Hard delete", icon: <Trash2 size={14} />, onClick: () => setDeleteTarget(e), variant: "danger" as const }] : []),
+    ];
+  };
 
   // Load subjects once on mount for the subject dropdowns.
   useEffect(() => {
@@ -107,6 +147,7 @@ export default function ExamsPage() {
       title: exam.title,
       description: exam.description ?? "",
       subjectId: exam.subjectId ?? "",
+      gradeLevel: exam.gradeLevel ?? "",
       examType: exam.examType,
       durationMinutes:
         exam.durationMinutes != null ? String(exam.durationMinutes) : "",
@@ -122,6 +163,7 @@ export default function ExamsPage() {
       title: form.title,
       description: form.description,
       subjectId: form.subjectId || undefined,
+      gradeLevel: form.gradeLevel || undefined,
       examType: form.examType,
       durationMinutes: form.durationMinutes
         ? Number(form.durationMinutes)
@@ -141,6 +183,7 @@ export default function ExamsPage() {
         title: "",
         description: "",
         subjectId: "",
+        gradeLevel: "",
         examType: "quiz",
         durationMinutes: "",
         maxScore: "100",
@@ -155,6 +198,21 @@ export default function ExamsPage() {
     e.preventDefault();
     if (!crud.editTarget) return;
     await crud.handleEdit(crud.editTarget.id, buildPayload(editForm));
+  }
+
+  async function handleHardDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const res = await hardDeleteExam(deleteTarget.id);
+    setDeleting(false);
+    if (res.error) {
+      toast({ tone: "error", title: "Delete failed", description: res.error.message });
+      return;
+    }
+    toast({ tone: "success", title: "Exam permanently deleted" });
+    setDeleteTarget(null);
+    crud.reload();
+    window.dispatchEvent(new Event("morfoschools:data-changed"));
   }
 
   async function handlePublish(exam: Exam) {
@@ -222,7 +280,7 @@ export default function ExamsPage() {
                       {e.title}
                     </p>
                     <p className="text-[11px] text-[var(--muted-foreground)] truncate">
-                      {e.subjectName || "No subject"} · {e.examType} ·{" "}
+                      {e.subjectName || "No subject"} · {e.gradeLevel ? `Kelas ${e.gradeLevel} · ` : ""}{e.examType} ·{" "}
                       {e.questionCount} question{e.questionCount !== 1 ? "s" : ""} ·{" "}
                       {e.totalPoints} pts
                     </p>
@@ -236,51 +294,7 @@ export default function ExamsPage() {
                     {e.status}
                   </span>
                   <div onClick={(ev) => ev.stopPropagation()}>
-                    <RowActions
-                      actions={
-                        e.status === "archived"
-                          ? [
-                              {
-                                label: "Restore",
-                                icon: <RotateCcw size={14} />,
-                                onClick: () => crud.handleRestore(e.id),
-                              },
-                            ]
-                          : [
-                              {
-                                label: "Manage soal",
-                                icon: <ListChecks size={14} />,
-                                onClick: () => router.push(`/app/exams/${e.id}`),
-                              },
-                              {
-                                label: "Manage blueprint",
-                                icon: <ClipboardList size={14} />,
-                                onClick: () =>
-                                  router.push(`/app/exams/${e.id}#blueprint`),
-                              },
-                              {
-                                label: "Edit",
-                                icon: <Pencil size={14} />,
-                                onClick: () => openEdit(e),
-                              },
-                              ...(e.status === "draft"
-                                ? [
-                                    {
-                                      label: "Publish",
-                                      icon: <Send size={14} />,
-                                      onClick: () => handlePublish(e),
-                                    },
-                                  ]
-                                : []),
-                              {
-                                label: "Archive",
-                                icon: <Trash2 size={14} />,
-                                onClick: () => crud.setArchiveTarget(e),
-                                variant: "danger" as const,
-                              },
-                            ]
-                      }
-                    />
+                    <RowActions actions={actionsForExam(e)} />
                   </div>
                 </div>
               ))}
@@ -318,6 +332,15 @@ export default function ExamsPage() {
             options={[
               { value: "", label: "None" },
               ...subjects.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+          />
+          <SelectField
+            label="Grade (optional)"
+            value={createForm.gradeLevel}
+            onChange={(val) => setCreateForm({ ...createForm, gradeLevel: val })}
+            options={[
+              { value: "", label: "None" },
+              ...gradeOptions.map((grade) => ({ value: grade, label: `Kelas ${grade} · Fase ${(phaseForGrade(grade) || "?").toUpperCase()}` })),
             ]}
           />
           <SelectField
@@ -424,6 +447,15 @@ export default function ExamsPage() {
             ]}
           />
           <SelectField
+            label="Grade (optional)"
+            value={editForm.gradeLevel}
+            onChange={(val) => setEditForm({ ...editForm, gradeLevel: val })}
+            options={[
+              { value: "", label: "None" },
+              ...gradeOptions.map((grade) => ({ value: grade, label: `Kelas ${grade} · Fase ${(phaseForGrade(grade) || "?").toUpperCase()}` })),
+            ]}
+          />
+          <SelectField
             label="Exam Type"
             value={editForm.examType}
             onChange={(val) => setEditForm({ ...editForm, examType: val })}
@@ -508,6 +540,17 @@ export default function ExamsPage() {
           crud.archiveTarget && crud.handleArchive(crud.archiveTarget.id)
         }
         onCancel={() => crud.setArchiveTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Permanently delete exam?"
+        description={`Hard delete "${deleteTarget?.title}" and all related questions, options, sections, gates, groups, blueprint snapshot, collaborators, attempts, and AI context. This cannot be undone.`}
+        confirmLabel="Hard delete"
+        destructive
+        loading={deleting}
+        onConfirm={handleHardDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
     </>
   );

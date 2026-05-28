@@ -28,11 +28,13 @@ type kdPattern struct {
 }
 
 type generatedQuestionRules struct {
-	DefaultQuestionType string
-	MinStandaloneWords  int
-	MinStandaloneSent   int
-	RequireExplanation  bool
-	RequireFourOptions  bool
+	DefaultQuestionType       string
+	MinStandaloneWords        int
+	MinStandaloneSent         int
+	RequireExplanation        bool
+	DefaultOptionCount        int
+	AllowConstructedResponse  bool
+	RequireHomogeneousOptions bool
 }
 
 func defaultExamAuthoringPolicy(tenantID, examID string) examAuthoringPolicy {
@@ -42,11 +44,13 @@ func defaultExamAuthoringPolicy(tenantID, examID string) examAuthoringPolicy {
 		UsesKisiKisi: false,
 		KDPattern:    detectKDPattern(nil),
 		QuestionRules: generatedQuestionRules{
-			DefaultQuestionType: "multiple_choice",
-			MinStandaloneWords:  35,
-			MinStandaloneSent:   2,
-			RequireExplanation:  true,
-			RequireFourOptions:  true,
+			DefaultQuestionType:       "multiple_choice",
+			MinStandaloneWords:        35,
+			MinStandaloneSent:         2,
+			RequireExplanation:        true,
+			DefaultOptionCount:        5,
+			AllowConstructedResponse:  false,
+			RequireHomogeneousOptions: true,
 		},
 	}
 }

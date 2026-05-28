@@ -27,11 +27,16 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggerLevel}))
 
 	cfg := app.Config{
-		Port:    envOr("PORT", "8080"),
-		AppEnv:  envOr("APP_ENV", "development"),
-		DBUrl:   envOr("DATABASE_URL", ""),
-		Valkey:  envOr("VALKEY_URL", ""),
-		NatsUrl: envOr("NATS_URL", ""),
+		Port:        envOr("PORT", "8080"),
+		AppEnv:      envOr("APP_ENV", "development"),
+		DBUrl:       envOr("DATABASE_URL", ""),
+		Valkey:      envOr("VALKEY_URL", ""),
+		NatsUrl:     envOr("NATS_URL", ""),
+		R2Endpoint:  envOr("R2_ENDPOINT", ""),
+		R2AccessKey: envOr("R2_ACCESS_KEY_ID", ""),
+		R2SecretKey: envOr("R2_SECRET_ACCESS_KEY", ""),
+		R2Bucket:    envOr("R2_BUCKET", ""),
+		R2PublicURL: envOr("R2_PUBLIC_URL", ""),
 	}
 
 	// Connect to database

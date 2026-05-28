@@ -1,4 +1,4 @@
-import { get, post, patch, del } from "./api-client";
+import { get, post, patch, put, del } from "./api-client";
 
 // --- Roles ---
 export interface Role {
@@ -9,6 +9,49 @@ export interface Role {
 
 export function listRoles() {
   return get<{ data: Role[] }>("/api/v1/roles");
+}
+
+// --- AI Provider Settings ---
+export interface AIModelInfo { id: string }
+export interface AIProviderSettings {
+  scope: "user" | "tenant" | "environment";
+  baseUrl: string;
+  hasApiKey: boolean;
+  defaultModel: string;
+  availableModels: AIModelInfo[];
+  chatbotModels?: AIModelInfo[];
+  allowedRoles?: string[];
+  enabled: boolean;
+  updatedAt?: string;
+}
+
+export function getMyAISettings() {
+  return get<AIProviderSettings>("/api/v1/ai/settings");
+}
+
+export function saveMyAISettings(data: { baseUrl: string; apiKey: string; defaultModel?: string; chatbotModels?: string[]; enabled?: boolean }) {
+  const { baseUrl, apiKey, defaultModel, chatbotModels, enabled } = data;
+  return put<AIProviderSettings>("/api/v1/ai/settings", { baseUrl, apiKey, defaultModel, chatbotModels, enabled });
+}
+
+export function patchMyAISettings(data: { enabled: boolean }) {
+  return patch<AIProviderSettings>("/api/v1/ai/settings", data);
+}
+
+export function getTenantAISettings(tenantId?: string) {
+  return get<AIProviderSettings>(tenantId ? `/api/v1/tenants/${tenantId}/ai-settings` : "/api/v1/ai/tenant-settings");
+}
+
+export function saveTenantAISettings(data: { baseUrl: string; apiKey: string; defaultModel?: string; chatbotModels?: string[]; allowedRoles?: string[]; enabled?: boolean }, tenantId?: string) {
+  return put<AIProviderSettings>(tenantId ? `/api/v1/tenants/${tenantId}/ai-settings` : "/api/v1/ai/tenant-settings", data);
+}
+
+export function patchTenantAISettings(data: { enabled: boolean }, tenantId?: string) {
+  return patch<AIProviderSettings>(tenantId ? `/api/v1/tenants/${tenantId}/ai-settings` : "/api/v1/ai/tenant-settings", data);
+}
+
+export function listAIModels() {
+  return get<{ scope: string; defaultModel: string; models: AIModelInfo[] }>("/api/v1/ai/models");
 }
 
 // --- Users ---
@@ -56,12 +99,17 @@ export function restoreUser(id: string, email?: string) {
 }
 
 // --- Tenants ---
+export type SchoolType = "sd" | "smp" | "sma" | "smk" | "mixed";
+
 export interface Tenant {
   id: string;
   name: string;
   code: string;
   status: string;
   logoUrl: string | null;
+  schoolType: SchoolType;
+  enabledPhases: string[];
+  includeVocationalSubjects: boolean;
   createdAt: string;
 }
 
@@ -79,12 +127,18 @@ export function listTenants(params?: { page?: number; search?: string; status?: 
   return get<TenantListResponse>(`/api/v1/tenants${qs ? `?${qs}` : ""}`);
 }
 
-export function createTenant(data: { name: string; code: string }) {
+export function createTenant(data: { name: string; code: string; schoolType?: SchoolType; enabledPhases?: string[]; includeVocationalSubjects?: boolean }) {
   return post<Tenant>("/api/v1/tenants", data);
 }
 
-export function updateTenant(id: string, data: { name?: string; status?: string }) {
+export function updateTenant(id: string, data: { name?: string; status?: string; schoolType?: SchoolType; enabledPhases?: string[]; includeVocationalSubjects?: boolean }) {
   return patch<Tenant>(`/api/v1/tenants/${id}`, data);
+}
+
+export function uploadTenantLogo(id: string, file: File) {
+  const formData = new FormData();
+  formData.append("logo", file);
+  return post<{ id: string; logoUrl: string }>(`/api/v1/tenants/${id}/logo`, formData);
 }
 
 export function archiveTenant(id: string) {
@@ -283,7 +337,7 @@ export function listSubjects(params?: { page?: number; search?: string; status?:
   return get<SubjectListResponse>(`/api/v1/subjects${qs ? `?${qs}` : ""}`);
 }
 
-export function createSubject(data: { code: string; name: string; description?: string }) {
+export function createSubject(data: { code?: string; name: string; description?: string }) {
   return post<Subject>("/api/v1/subjects", data);
 }
 
@@ -555,6 +609,7 @@ export interface Exam {
   description: string | null;
   subjectId: string | null;
   subjectName?: string | null;
+  gradeLevel?: string | null;
   examType: string;
   durationMinutes: number | null;
   maxScore: number;
@@ -568,6 +623,9 @@ export interface Exam {
   createdAt: string;
   questionCount: number;
   totalPoints: number;
+  canAccess?: boolean;
+  canWrite?: boolean;
+  canDelete?: boolean;
 }
 
 export interface ExamListResponse {
@@ -593,6 +651,7 @@ export interface CreateExamPayload {
   title: string;
   description?: string;
   subjectId?: string;
+  gradeLevel?: string;
   examType?: string;
   durationMinutes?: number;
   maxScore?: number;
@@ -633,6 +692,10 @@ export function archiveExam(id: string) {
 
 export function restoreExam(id: string) {
   return patch<{ id: string; status: string }>(`/api/v1/exams/${id}/restore`);
+}
+
+export function hardDeleteExam(id: string) {
+  return del<{ id: string; status: string }>(`/api/v1/exams/${id}`);
 }
 
 // --- Exam Sections ---
@@ -677,19 +740,18 @@ export interface QuestionOption {
 export interface QuestionSlotRef {
   id: string;
   position: number;
-  competencyCode?: string | null;
-  competencyDescription?: string | null;
-  materi?: string | null;
-  indikator?: string | null;
+  cpElementId?: string | null;
+  capaianPembelajaran?: string | null;
+  elemenCp?: string | null;
+  tujuanPembelajaran?: string | null;
+  materiPokok?: string | null;
+  kelas?: string | null;
+  semester?: string | null;
+  indikatorSoal?: string | null;
   cognitiveLevel?: string | null;
   difficulty?: string | null;
   questionType?: string | null;
   points: number;
-  /** AKM-specific dimensions, populated when blueprint_type is AKM. */
-  akmKonten?: string | null;
-  akmKonteks?: string | null;
-  akmProses?: string | null;
-  akmLevel?: number | null;
   /** Phase 9.8 — true when the slot's parent blueprint was cloned
    *  from a template. The accordion locks pedagogical fields when
    *  this is set; auto-blueprint slots stay editable. */
@@ -755,16 +817,16 @@ export interface CreateQuestionPayload {
   // Phase 9.8 — inline kisi-kisi metadata. When the exam tracks
   // kisi-kisi the backend either auto-creates a slot or writes the
   // values through to the bound slot in the same transaction.
-  competencyCode?: string;
-  competencyDescription?: string;
-  materi?: string;
-  indikator?: string;
   cognitiveLevel?: string;
   difficulty?: string;
-  akmKonten?: string;
-  akmKonteks?: string;
-  akmProses?: string;
-  akmLevel?: number;
+  cpElementId?: string;
+  capaianPembelajaran?: string;
+  elemenCp?: string;
+  tujuanPembelajaran?: string;
+  materiPokok?: string;
+  kelas?: string;
+  semester?: string;
+  indikatorSoal?: string;
 }
 
 export function createQuestion(examId: string, data: CreateQuestionPayload) {
@@ -1103,9 +1165,9 @@ export function promoteStimulus(id: string) {
 // Phase 9.5 — Blueprint templates (library)
 // ==========================================================================
 
-export type BlueprintType = "reguler" | "akm_literasi" | "akm_numerasi";
+export type BlueprintType = "reguler";
 export type BlueprintStatus = "draft" | "published" | "archived";
-export type CurriculumCode = "k13" | "merdeka" | "akm_numerasi" | "akm_literasi";
+export type CurriculumCode = "merdeka";
 
 export interface BlueprintTemplate {
   id: string;
@@ -1208,24 +1270,28 @@ export function restoreBlueprintTemplate(id: string) {
   );
 }
 
+export function hardDeleteBlueprintTemplate(id: string) {
+  return del<{ id: string; status: string }>(`/api/v1/blueprint-templates/${id}`);
+}
+
 // ─── Slots: dual-table (template + exam blueprint) ───
 export interface BlueprintSlot {
   id: string;
   position: number;
   competencyId: string | null;
-  competencyCode: string | null;
-  competencyDescription: string | null;
-  materi: string | null;
-  indikator: string | null;
   cognitiveLevel: string | null;
   difficulty: string | null;
   questionType: string | null;
   points: number;
   stimulusId: string | null;
-  akmKonten: string | null;
-  akmKonteks: string | null;
-  akmProses: string | null;
-  akmLevel: number | null;
+  cpElementId: string | null;
+  capaianPembelajaran: string | null;
+  elemenCp: string | null;
+  tujuanPembelajaran: string | null;
+  materiPokok: string | null;
+  kelas: string | null;
+  semester: string | null;
+  indikatorSoal: string | null;
   questionId?: string | null;
   filled?: boolean;
   createdAt: string;
@@ -1233,19 +1299,19 @@ export interface BlueprintSlot {
 
 export interface SlotPayload {
   position?: number;
-  competencyCode?: string;
-  competencyDescription?: string;
-  materi?: string;
-  indikator?: string;
   cognitiveLevel?: string;
   difficulty?: string;
   questionType?: string;
   points?: number;
   stimulusId?: string;
-  akmKonten?: string;
-  akmKonteks?: string;
-  akmProses?: string;
-  akmLevel?: number;
+  cpElementId?: string;
+  capaianPembelajaran?: string;
+  elemenCp?: string;
+  tujuanPembelajaran?: string;
+  materiPokok?: string;
+  kelas?: string;
+  semester?: string;
+  indikatorSoal?: string;
 }
 
 export function listTemplateSlots(templateId: string) {
@@ -1395,4 +1461,82 @@ export function getSlotsWithQuestions(examId: string) {
   return get<SlotsWithQuestionsResponse>(
     `/api/v1/exams/${examId}/slots-with-questions`,
   );
+}
+
+// --- Curriculum CP master data ---
+export interface CurriculumCPElement {
+  id: string;
+  name: string;
+  content: string;
+  sortOrder: number;
+}
+
+export interface CurriculumCPReference {
+  id: string;
+  curriculumCode: string;
+  levelCode: string;
+  levelName: string | null;
+  subjectCode: string;
+  subjectName: string;
+  phase: string;
+  generalCp: string;
+  sourceName: string;
+  sourceUrl: string | null;
+  status: string;
+  elementsCount: number;
+  elements?: CurriculumCPElement[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CurriculumCPListResponse {
+  data: CurriculumCPReference[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function listCurriculumCPReferences(params?: { page?: number; search?: string; level?: string; phase?: string }) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.search) query.set("search", params.search);
+  if (params?.level) query.set("level", params.level);
+  if (params?.phase) query.set("phase", params.phase);
+  const qs = query.toString();
+  return get<CurriculumCPListResponse>(`/api/v1/curriculum/cp-references${qs ? `?${qs}` : ""}`);
+}
+
+export function getCurriculumCPReference(id: string) {
+  return get<CurriculumCPReference>(`/api/v1/curriculum/cp-references/${id}`);
+}
+
+export function seedCurriculumCPReference(data: { levelCode: string; subjectCode: string; phase: string }) {
+  return post<CurriculumCPReference>("/api/v1/curriculum/cp-references/seed", data);
+}
+
+export function createCurriculumCPReference(data: {
+  levelCode: string;
+  levelName?: string;
+  subjectCode: string;
+  subjectName: string;
+  phase: string;
+  generalCp: string;
+  sourceUrl?: string;
+  elements?: Array<{ name: string; content: string }>;
+}) {
+  return post<CurriculumCPReference>("/api/v1/curriculum/cp-references", data);
+}
+
+export function createCurriculumCPElement(referenceId: string, data: { name: string; content: string; sortOrder?: number }) {
+  return post<{ id: string }>(`/api/v1/curriculum/cp-references/${referenceId}/elements`, data);
+}
+
+export function deleteCurriculumCPElement(id: string) {
+  return del<{ status: string }>(`/api/v1/curriculum/cp-elements/${id}`);
+}
+
+export function updateCurriculumCPReference(id: string, data: { subjectName?: string; generalCp?: string; status?: string }) {
+  return patch<CurriculumCPReference>(`/api/v1/curriculum/cp-references/${id}`, data);
+}
+
+export function updateCurriculumCPElement(id: string, data: { name?: string; content?: string; sortOrder?: number }) {
+  return patch<{ id: string; status: string }>(`/api/v1/curriculum/cp-elements/${id}`, data);
 }

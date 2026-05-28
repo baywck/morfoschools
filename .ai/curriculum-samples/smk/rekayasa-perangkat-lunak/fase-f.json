@@ -1,0 +1,44 @@
+{
+  "compiled": {
+    "params": {
+      "level": "smk",
+      "subject": "rekayasa-perangkat-lunak",
+      "phase": "f"
+    },
+    "phase": "f",
+    "pdfList": [
+      {
+        "pdf": "https://drive.google.com/file/d/1vfUkLrAVQGnCC6J_TM2QF_dGtf4QdiMe/view?usp=sharing",
+        "tags": "",
+        "year": "2022",
+        "source": "BSKAP"
+      },
+      {
+        "pdf": "https://drive.google.com/file/d/1hSZDdoPoUFcnrXSYZ9YZGk4Zwzmd2_IV/view?usp=sharing",
+        "tags": "",
+        "year": "2022",
+        "source": "BSKAP"
+      }
+    ],
+    "generalInfo": "Pada akhir fase F peserta didik akan mampu mengimplementasikan bahasa pemrograman, basis data, dan aplikasi desain untuk mengembangkan perangkat lunak yang mampu beroperasi pada berbagai perangkat atau teknologi terkini.",
+    "elements": [
+      {
+        "name": "Basis Data\r\n\r\n",
+        "content": "Pada akhir fase F peserta didik mampu memahami, menerapkan, dan mengomunikasikan pengertian, konsep struktur, hierarki, aturan, komponen, instalasi, dan dasar administrasi basis data baik secara mandiri atau berkelompok serta memahami dan menerapkan Data Definition Language, Data Manipulation Language, Data Control Language, perintah bertingkat, function and stored procedure, trigger, backup, restore, dan replikasi pada pengelolaan basis data sesuai permasalahan yang kontekstual.\r\n"
+      },
+      {
+        "name": "Pemrograman Berbasis Teks, Grafis, dan Multimedia\r\n",
+        "content": "Pada akhir fase F peserta didik mampu melakukan pemrograman terstruktur dan pemrograman berorientasi objek tingkat lanjut, menunjukkan dasar pemodelan perangkat lunak berorientasi objek dengan memahami konsep, menerapkan alur kerja sistem, menunjukkan model, menerapkan relasi antar kelas, menerapkan interaksi antar objek, menerapkan objek multimedia dalam aplikasi dengan menunjukkan aplikasi yang dapat menampilkan gambar, audio, dan video, melakukan pemrograman antar muka grafis (Graphical User Interface) dengan memanfaatkan pustaka (library) pada proyek yang lebih kompleks melalui interpretasi model perangkat lunak secara kolaboratif pada proyek pengembangan perangkat lunak.\r\n"
+      },
+      {
+        "name": "Pemrograman Web\r\n",
+        "content": "Pada akhir fase F peserta didik mampu memahami konsep dan menerapkan perintah HTML, CSS, pemrograman Javascript, bahasa pemrograman server-side serta implementasi framework pada pembuatan web statis dan dinamis untuk beragam kebutuhan yang kontekstual. Selain itu, peserta didik juga mampu mendokumentasikan serta mempresentasikan web statis dan dinamis yang telah dikembangkan.\r\n"
+      },
+      {
+        "name": "Pemrograman Perangkat Bergerak",
+        "content": "Pada akhir fase F peserta didik mampu memahami dan mengomunikasikan pengertian, sejarah, dan komponen dalam sistem operasi perangkat bergerak serta pengembangan aplikasinya, memahami konsep serta menerapkan Integrated Development Environment, framework dan bahasa pemrograman untuk pengembangan aplikasi perangkat bergerak, memahami konsep serta menerapkan basis data perangkat bergerak, bahasa pemrograman untuk pengembangan aplikasi perangkat bergerak untuk beragam kebutuhan yang kontekstual, antarmuka aplikasi yang saling berhubungan dengan aplikasi lainnya (Application Programming Interface). Selain itu, peserta didik juga mampu mendokumentasikan dan mempresentasikan aplikasi perangkat bergerak yang telah dikembangkan."
+      }
+    ]
+  },
+  "subject": "Rekayasa Perangkat Lunak"
+}

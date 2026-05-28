@@ -37,8 +37,14 @@ services:
       NATS_URL: ${NATS_URL:-nats://nats:4222}
       SEED_DEV_DATA: ${SEED_DEV_DATA:-true}
       AI_BASE_URL: ${AI_BASE_URL:-http://43.156.68.104:20128/v1}
-      AI_API_KEY: ${AI_API_KEY:-sk-841bf458187295cd-t8ydsw-b3be0f88}
+      AI_API_KEY: ${AI_API_KEY:?AI_API_KEY is required}
       AI_MODEL: ${AI_MODEL:-MORFOSCHOOLS}
+      AI_SETTINGS_ENCRYPTION_KEY: ${AI_SETTINGS_ENCRYPTION_KEY:-${AI_API_KEY}}
+      R2_ENDPOINT: ${R2_ENDPOINT:?R2_ENDPOINT is required}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID is required}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY is required}
+      R2_BUCKET: ${R2_BUCKET:?R2_BUCKET is required}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
     depends_on:
       pgbouncer:
         condition: service_started

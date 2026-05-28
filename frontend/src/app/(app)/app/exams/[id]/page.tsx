@@ -27,6 +27,7 @@ import { ExportBlueprintButton } from "@/components/exams/export-blueprint-butto
 import { ExportBlueprintSheet } from "@/components/exams/export-blueprint-sheet";
 import {
   CalendarClock,
+  FileQuestion,
   Plus,
   Send,
   Share2,
@@ -40,11 +41,6 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-const AKM_LABEL: Record<string, string> = {
-  akm_literasi: "AKM Literasi",
-  akm_numerasi: "AKM Numerasi",
-};
-
 export default function ExamDetailPage({ params }: PageProps) {
   const { id: examId } = use(params);
   const { toast } = useToast();
@@ -54,7 +50,6 @@ export default function ExamDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
 
   const [hasBlueprint, setHasBlueprint] = useState(false);
-  const [blueprintType, setBlueprintType] = useState<string | null>(null);
 
   const [showShare, setShowShare] = useState(false);
   const [pendingToggleNotice, setPendingToggleNotice] = useState<string | null>(
@@ -80,11 +75,6 @@ export default function ExamDetailPage({ params }: PageProps) {
     if (examRes.data) setExam(examRes.data);
     if (gatesRes.data) setGates(gatesRes.data.data);
     setHasBlueprint(!!bpRes.data?.blueprint);
-    if (bpRes.data?.blueprint) {
-      setBlueprintType(bpRes.data.blueprint.blueprintType);
-    } else {
-      setBlueprintType(null);
-    }
     setLoading(false);
   }
 
@@ -213,11 +203,6 @@ export default function ExamDetailPage({ params }: PageProps) {
     );
   }
 
-  const akmLabel =
-    blueprintType && exam.usesKisiKisi
-      ? (AKM_LABEL[blueprintType] ?? null)
-      : null;
-
   return (
     <>
       <PageShell
@@ -233,9 +218,11 @@ export default function ExamDetailPage({ params }: PageProps) {
               entityId={exam.id}
               examId={exam.id}
             />
-            <KisiKisiToggle exam={exam} onToggle={handleKisiKisiToggle} />
+            {exam.canWrite !== false && (
+              <KisiKisiToggle exam={exam} onToggle={handleKisiKisiToggle} />
+            )}
             <LoadKisiKisiButton
-              visible={exam.usesKisiKisi}
+              visible={exam.usesKisiKisi && exam.canWrite !== false}
               hasBlueprint={hasBlueprint}
               onClick={() => setShowLoadKK(true)}
             />
@@ -243,7 +230,7 @@ export default function ExamDetailPage({ params }: PageProps) {
               visible={exam.usesKisiKisi && hasBlueprint}
               onClick={() => setShowExportKK(true)}
             />
-            {exam.status === "draft" && (
+            {exam.canWrite !== false && exam.status === "draft" && (
               <button
                 onClick={handlePublish}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm hover:opacity-90 active:scale-[0.97] transition-all"
@@ -251,13 +238,15 @@ export default function ExamDetailPage({ params }: PageProps) {
                 <Send size={14} /> Publish
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setShowShare(true)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
-            >
-              <Share2 size={14} /> Collaborator
-            </button>
+            {exam.canDelete === true && (
+              <button
+                type="button"
+                onClick={() => setShowShare(true)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
+              >
+                <Share2 size={14} /> Collaborator
+              </button>
+            )}
           </>
         }
       >
@@ -275,9 +264,9 @@ export default function ExamDetailPage({ params }: PageProps) {
           >
             {exam.status}
           </span>
-          {akmLabel && (
+          {exam.usesKisiKisi && (
             <span className="inline-flex items-center gap-1 rounded-md bg-[var(--brand-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand)]">
-              <Sparkles size={10} /> {akmLabel}
+              <Sparkles size={10} /> Kurikulum Merdeka · CP/TP
             </span>
           )}
           <span className="text-[11px] text-[var(--muted-foreground)]">
@@ -300,21 +289,47 @@ export default function ExamDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Single canvas */}
-        <ExamCanvas
+        <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+                <FileQuestion size={17} />
+              </div>
+              <div>
+                <h2 className="text-[14px] font-bold text-[var(--foreground)]">
+                  Questions Manager
+                </h2>
+                <p className="text-[11px] text-[var(--muted-foreground)]">
+                  Susun section, group stimulus, dan soal ujian dari satu kanvas.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-medium text-[var(--muted-foreground)]">
+              <span className="rounded-md bg-[var(--muted)] px-2 py-1">
+                {exam.questionCount} soal
+              </span>
+              <span className="rounded-md bg-[var(--muted)] px-2 py-1">
+                {exam.totalPoints} pts
+              </span>
+            </div>
+          </div>
+          <div className="p-3 md:p-4">
+            <ExamCanvas
           exam={exam}
           onExamChange={reload}
-          onBlueprintTypeChange={setBlueprintType}
+          onBlueprintTypeChange={() => {}}
           onRequestLoadKisiKisi={() => setShowLoadKK(true)}
-          onGenerateFromQuestions={() => {
-            toast({
-              tone: "info",
-              title: "Buka AI chat",
-              description:
-                "Panggil convert_questions_to_kisi_kisi via chat untuk konfirmasi reverse-flow.",
-            });
-          }}
-        />
+              onGenerateFromQuestions={() => {
+                toast({
+                  tone: "info",
+                  title: "Buka AI chat",
+                  description:
+                    "Panggil convert_questions_to_kisi_kisi via chat untuk konfirmasi reverse-flow.",
+                });
+              }}
+            />
+          </div>
+        </div>
 
         {/* Schedule (Gate Windows) — kept below canvas */}
         <div className="mt-8 space-y-3">
@@ -322,12 +337,14 @@ export default function ExamDetailPage({ params }: PageProps) {
             <h2 className="text-[14px] font-semibold text-[var(--foreground)]">
               Schedule (Gate Windows)
             </h2>
-            <button
-              onClick={() => setShowGateForm(true)}
-              className="inline-flex h-7 items-center gap-1 rounded-md bg-[var(--muted)] px-2.5 text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--border)]"
-            >
-              <Plus size={12} /> Window
-            </button>
+            {exam.canWrite !== false && (
+              <button
+                onClick={() => setShowGateForm(true)}
+                className="inline-flex h-7 items-center gap-1 rounded-md bg-[var(--muted)] px-2.5 text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--border)]"
+              >
+                <Plus size={12} /> Window
+              </button>
+            )}
           </div>
 
           {showGateForm && (
@@ -399,12 +416,14 @@ export default function ExamDetailPage({ params }: PageProps) {
                       {g.isOpen ? "Currently open" : "Currently closed"}
                     </p>
                   </div>
-                  <button
-                    onClick={() => handleDeleteGate(g)}
-                    className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--destructive-soft)] hover:text-[var(--destructive)] transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {exam.canWrite !== false && (
+                    <button
+                      onClick={() => handleDeleteGate(g)}
+                      className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--destructive-soft)] hover:text-[var(--destructive)] transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -435,7 +454,7 @@ export default function ExamDetailPage({ params }: PageProps) {
         resource="exams"
         resourceId={exam.id}
         resourceName={exam.title}
-        currentUserCanManage={true}
+        currentUserCanManage={exam.canDelete === true}
       />
 
       <ExportBlueprintSheet

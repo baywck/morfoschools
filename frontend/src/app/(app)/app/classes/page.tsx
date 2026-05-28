@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/lib/auth-provider";
 import { useToast } from "@/components/ui/toast";
 import { 
@@ -23,9 +23,11 @@ import { RowActions } from "@/components/ui/row-actions";
 import { PageShell } from "@/components/layout/page-shell";
 import { Plus, School2, Trash2, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { gradeOptionsForPhases } from "@/lib/grade-options";
 
 export default function ClassesPage() {
   const { toast } = useToast();
+  const { session } = useAuth();
   const [classes, setClasses] = useState<ClassSection[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
@@ -38,7 +40,7 @@ export default function ClassesPage() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newGradeLevelSelection, setNewGradeLevelSelection] = useState("");
-  const [newCustomGradeLevel, setNewCustomGradeLevel] = useState("");
+
   const [newAcademicYearId, setNewAcademicYearId] = useState("");
   const [newHomeroomTeacherId, setNewHomeroomTeacherId] = useState("");
   const [newCapacity, setNewCapacity] = useState("");
@@ -48,7 +50,7 @@ export default function ClassesPage() {
   const [editTarget, setEditTarget] = useState<ClassSection | null>(null);
   const [editing, setEditing] = useState(false);
   const [editGradeLevelSelection, setEditGradeLevelSelection] = useState("");
-  const [editCustomGradeLevel, setEditCustomGradeLevel] = useState("");
+
   const [editForm, setEditForm] = useState({ 
     name: "", 
     gradeLevel: "", 
@@ -61,21 +63,10 @@ export default function ClassesPage() {
   const [archiveTarget, setArchiveTarget] = useState<ClassSection | null>(null);
   const [archiving, setArchiving] = useState(false);
 
-  const gradeLevelOptions = [
-    { value: "SD-1", label: "SD Kelas 1" },
-    { value: "SD-2", label: "SD Kelas 2" },
-    { value: "SD-3", label: "SD Kelas 3" },
-    { value: "SD-4", label: "SD Kelas 4" },
-    { value: "SD-5", label: "SD Kelas 5" },
-    { value: "SD-6", label: "SD Kelas 6" },
-    { value: "SMP-7", label: "SMP Kelas 7" },
-    { value: "SMP-8", label: "SMP Kelas 8" },
-    { value: "SMP-9", label: "SMP Kelas 9" },
-    { value: "SMA-10", label: "SMA Kelas 10" },
-    { value: "SMA-11", label: "SMA Kelas 11" },
-    { value: "SMA-12", label: "SMA Kelas 12" },
-    { value: "custom", label: "Custom..." },
-  ];
+  const gradeLevelOptions = useMemo(() => {
+    const phases = session?.effectiveTenant?.enabledPhases?.length ? session.effectiveTenant.enabledPhases : ["e", "f"];
+    return gradeOptionsForPhases(phases).map((grade) => ({ value: grade, label: `Kelas ${grade}` }));
+  }, [session?.effectiveTenant]);
 
   async function loadData() {
     setLoading(true);
@@ -115,7 +106,7 @@ export default function ClassesPage() {
     setCreating(true);
     
     const capacityVal = newCapacity ? parseInt(newCapacity, 10) : undefined;
-    const finalGradeLevel = newGradeLevelSelection === "custom" ? newCustomGradeLevel : newGradeLevelSelection;
+    const finalGradeLevel = newGradeLevelSelection;
     
     const res = await createClassSection({ 
       name: newName, 
@@ -135,7 +126,7 @@ export default function ClassesPage() {
     setShowCreate(false);
     setNewName("");
     setNewGradeLevelSelection("");
-    setNewCustomGradeLevel("");
+
     setNewAcademicYearId("");
     setNewHomeroomTeacherId("");
     setNewCapacity("");
@@ -147,11 +138,7 @@ export default function ClassesPage() {
   function openEdit(cls: ClassSection) {
     setEditTarget(cls);
     
-    // Determine if grade level is custom
-    const isPredefined = gradeLevelOptions.some(opt => opt.value === cls.gradeLevel && opt.value !== "custom");
-    
-    setEditGradeLevelSelection(isPredefined ? cls.gradeLevel : "custom");
-    setEditCustomGradeLevel(isPredefined ? "" : cls.gradeLevel);
+    setEditGradeLevelSelection(cls.gradeLevel);
 
     setEditForm({ 
       name: cls.name, 
@@ -170,7 +157,7 @@ export default function ClassesPage() {
     setEditing(true);
     
     const capacityVal = editForm.capacity ? parseInt(editForm.capacity, 10) : undefined;
-    const finalGradeLevel = editGradeLevelSelection === "custom" ? editCustomGradeLevel : editGradeLevelSelection;
+    const finalGradeLevel = editGradeLevelSelection;
     
     const res = await updateClassSection(editTarget.id, {
       name: editForm.name,
@@ -296,15 +283,7 @@ export default function ClassesPage() {
             options={gradeLevelOptions}
             error={fieldErrors.gradeLevel}
           />
-          {newGradeLevelSelection === "custom" && (
-            <InputField
-              label="Custom Grade Level"
-              value={newCustomGradeLevel}
-              onChange={(e) => setNewCustomGradeLevel(e.target.value)}
-              error={fieldErrors.gradeLevel}
-              helperText="Enter custom grade level name"
-            />
-          )}
+
           <SelectField
             label="Academic Year"
             value={newAcademicYearId}
@@ -354,14 +333,7 @@ export default function ClassesPage() {
             options={gradeLevelOptions}
             error={fieldErrors.gradeLevel}
           />
-          {editGradeLevelSelection === "custom" && (
-            <InputField
-              label="Custom Grade Level"
-              value={editCustomGradeLevel}
-              onChange={(e) => setEditCustomGradeLevel(e.target.value)}
-              error={fieldErrors.gradeLevel}
-            />
-          )}
+
           <SelectField
             label="Homeroom Teacher"
             value={editForm.homeroomTeacherId}

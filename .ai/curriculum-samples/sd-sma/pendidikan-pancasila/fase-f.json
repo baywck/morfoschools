@@ -1,0 +1,31 @@
+{
+  "compiled": {
+    "params": {
+      "level": "sd-sma",
+      "subject": "pendidikan-pancasila",
+      "phase": "f"
+    },
+    "phase": "f",
+    "pdfList": [],
+    "generalInfo": "Pada fase ini, peserta didik mendeskripsikan rumusan dan keterkaitan sila-sila dalam Pancasila, kedudukan Pancasila sebagai ideologi negara, identitas nasional, serta peluang dan tantangan penerapan nilai-nilai Pancasila dalam kehidupan sehari-hari dan global; menganalisis periodisasi pemberlakuan undang-undang dasar di Indonesia dan perubahan Undang-Undang Dasar Negara Republik Indonesia Tahun 1945; menunjukan sikap demokratis berdasarkan Undang-Undang Dasar Negara Republik Indonesia Tahun 1945 dalam era keterbukaan informasi; menganalisis dan merumuskan solusi kasus pelanggaran hak dan pengingkaran kewajiban warga negara; menganalisis potensi konflik dan bersama-sama memberi solusi yang berkeadilan terhadap permasalahan keberagaman di masyarakat; menginisiasi kegiatan bersama dengan prinsip gotong royong dalam praktik hidup sehari-hari; mendemonstrasikan praktik demokrasi dalam kehidupan berbangsa dan bernegara; menganalisis dan merumuskan solusi terkait ancaman, tantangan, hambatan, dan gangguan (ATHG); menganalisis bentuk negara, bentuk pemerintahan, sistem pemerintahan Indonesia, dan peran lembaga-lembaga negara dalam bidang politik, ekonomi, sosial, budaya, pertahanan dan keamanan.",
+    "elements": [
+      {
+        "name": "Pancasila",
+        "content": "Peserta didik mampu mendeskripsikan rumusan dan keterkaitan sila-sila dalam Pancasila; menganalisis kedudukan Pancasila sebagai ideologi negara serta peluang dan tantangan penerapan nilai-nilai Pancasila dalam kehidupan global dan membiasakan perilaku yang sesuai dengan nilai-nilai Pancasila sebagai identitas nasional dalam kehidupan sehari-hari."
+      },
+      {
+        "name": "Undang-Undang Dasar Negara Republik Indonesia Tahun 1945",
+        "content": "Peserta didik mampu menganalisis periodisasi pemberlakuan undang-undang dasar di Indonesia; menganalisis perubahan Undang- Undang Dasar Negara Republik Indonesia Tahun 1945; menunjukan sikap demokratis berdasarkan Undang- Undang Dasar Negara Republik Indonesia Tahun 1945 dalam era keterbukaan informasi; menganalisis kasus pelanggaran hak dan pengingkaran kewajiban warga negara dan merumuskan solusi dari permasalahan tersebut."
+      },
+      {
+        "name": "Bhinneka Tunggal Ika",
+        "content": "Peserta didik mampu menganalisis potensi konflik dan bersama-sama memberi solusi yang berkeadilan terhadap permasalahan keberagaman di masyarakat; menginisiasi kegiatan bersama dengan prinsip gotong royong dalam praktik hidup sehari-hari."
+      },
+      {
+        "name": "Negara Kesatuan Republik Indonesia",
+        "content": "Peserta didik mampu mendemonstrasikan praktik demokrasi dalam kehidupan berbangsa dan bernegara; menganalisis dan merumuskan solusi terkait ancaman, tantangan, hambatan, dan gangguan (ATHG) yang dihadapi Indonesia; menganalisis bentuk negara, bentuk pemerintahan, sistem pemerintahan Indonesia, dan peran lembaga-lembaga negara dalam  bidang  politik, ekonomi, sosial, budaya, pertahanan dan keamanan."
+      }
+    ]
+  },
+  "subject": "Pendidikan Pancasila"
+}

@@ -54,29 +54,37 @@ type slotPayload struct {
 	QuestionType          *string  `json:"questionType,omitempty"`
 	Points                *float64 `json:"points,omitempty"`
 	StimulusID            *string  `json:"stimulusId,omitempty"`
-	AkmKonten             *string  `json:"akmKonten,omitempty"`
-	AkmKonteks            *string  `json:"akmKonteks,omitempty"`
-	AkmProses             *string  `json:"akmProses,omitempty"`
-	AkmLevel              *int     `json:"akmLevel,omitempty"`
+	CPElementID           *string  `json:"cpElementId,omitempty"`
+	CapaianPembelajaran   *string  `json:"capaianPembelajaran,omitempty"`
+	ElemenCP              *string  `json:"elemenCp,omitempty"`
+	TujuanPembelajaran    *string  `json:"tujuanPembelajaran,omitempty"`
+	MateriPokok           *string  `json:"materiPokok,omitempty"`
+	Kelas                 *string  `json:"kelas,omitempty"`
+	Semester              *string  `json:"semester,omitempty"`
+	IndikatorSoal         *string  `json:"indikatorSoal,omitempty"`
 }
 
 type slotRow struct {
-	ID                    string   `json:"id"`
-	Position              int      `json:"position"`
-	CompetencyID          *string  `json:"competencyId,omitempty"`
-	CompetencyCode        *string  `json:"competencyCode,omitempty"`
-	CompetencyDescription *string  `json:"competencyDescription,omitempty"`
-	Materi                *string  `json:"materi,omitempty"`
-	Indikator             *string  `json:"indikator,omitempty"`
-	CognitiveLevel        *string  `json:"cognitiveLevel,omitempty"`
-	Difficulty            *string  `json:"difficulty,omitempty"`
-	QuestionType          *string  `json:"questionType,omitempty"`
-	Points                float64  `json:"points"`
-	StimulusID            *string  `json:"stimulusId,omitempty"`
-	AkmKonten             *string  `json:"akmKonten,omitempty"`
-	AkmKonteks            *string  `json:"akmKonteks,omitempty"`
-	AkmProses             *string  `json:"akmProses,omitempty"`
-	AkmLevel              *int     `json:"akmLevel,omitempty"`
+	ID                    string  `json:"id"`
+	Position              int     `json:"position"`
+	CompetencyID          *string `json:"competencyId,omitempty"`
+	CompetencyCode        *string `json:"competencyCode,omitempty"`
+	CompetencyDescription *string `json:"competencyDescription,omitempty"`
+	Materi                *string `json:"materi,omitempty"`
+	Indikator             *string `json:"indikator,omitempty"`
+	CognitiveLevel        *string `json:"cognitiveLevel,omitempty"`
+	Difficulty            *string `json:"difficulty,omitempty"`
+	QuestionType          *string `json:"questionType,omitempty"`
+	Points                float64 `json:"points"`
+	StimulusID            *string `json:"stimulusId,omitempty"`
+	CPElementID           *string `json:"cpElementId,omitempty"`
+	CapaianPembelajaran   *string `json:"capaianPembelajaran,omitempty"`
+	ElemenCP              *string `json:"elemenCp,omitempty"`
+	TujuanPembelajaran    *string `json:"tujuanPembelajaran,omitempty"`
+	MateriPokok           *string `json:"materiPokok,omitempty"`
+	Kelas                 *string `json:"kelas,omitempty"`
+	Semester              *string `json:"semester,omitempty"`
+	IndikatorSoal         *string `json:"indikatorSoal,omitempty"`
 	// Only populated for exam_blueprint_slots:
 	QuestionID *string `json:"questionId,omitempty"`
 	Filled     bool    `json:"filled"`
@@ -85,36 +93,8 @@ type slotRow struct {
 
 // validateSlot returns a (fields, ok) tuple for slot payloads.
 func validateSlot(p slotPayload, isCreate bool) map[string]string {
-	errs := map[string]string{}
-	if p.CognitiveLevel != nil && *p.CognitiveLevel != "" {
-		switch *p.CognitiveLevel {
-		case "C1", "C2", "C3", "C4", "C5", "C6":
-		default:
-			errs["cognitiveLevel"] = "Must be C1..C6"
-		}
-	}
-	if p.Difficulty != nil && *p.Difficulty != "" {
-		switch *p.Difficulty {
-		case "mudah", "sedang", "sulit":
-		default:
-			errs["difficulty"] = "Must be mudah/sedang/sulit"
-		}
-	}
-	if p.QuestionType != nil && *p.QuestionType != "" {
-		switch *p.QuestionType {
-		case "multiple_choice", "true_false", "short_answer", "essay":
-		default:
-			errs["questionType"] = "Must be multiple_choice/true_false/short_answer/essay"
-		}
-	}
-	if p.AkmLevel != nil && (*p.AkmLevel < 1 || *p.AkmLevel > 5) {
-		errs["akmLevel"] = "Must be 1..5"
-	}
-	if p.Points != nil && *p.Points < 0 {
-		errs["points"] = "Must be non-negative"
-	}
 	_ = isCreate // reserved for create-only checks
-	return errs
+	return validateMerdekaKisiKisiPayload(p)
 }
 
 // buildSlotInsertSQL constructs an INSERT statement for either
@@ -160,17 +140,29 @@ func buildSlotInsertSQL(table, parentCol, parentID string, position int, p slotP
 	if p.StimulusID != nil && *p.StimulusID != "" {
 		addOpt("stimulus_id", *p.StimulusID)
 	}
-	if p.AkmKonten != nil {
-		addOpt("akm_konten", *p.AkmKonten)
+	if p.CPElementID != nil && *p.CPElementID != "" {
+		addOpt("cp_element_id", *p.CPElementID)
 	}
-	if p.AkmKonteks != nil {
-		addOpt("akm_konteks", *p.AkmKonteks)
+	if p.CapaianPembelajaran != nil {
+		addOpt("capaian_pembelajaran", *p.CapaianPembelajaran)
 	}
-	if p.AkmProses != nil {
-		addOpt("akm_proses", *p.AkmProses)
+	if p.ElemenCP != nil {
+		addOpt("elemen_cp", *p.ElemenCP)
 	}
-	if p.AkmLevel != nil {
-		addOpt("akm_level", *p.AkmLevel)
+	if p.TujuanPembelajaran != nil {
+		addOpt("tujuan_pembelajaran", *p.TujuanPembelajaran)
+	}
+	if p.MateriPokok != nil {
+		addOpt("materi_pokok", *p.MateriPokok)
+	}
+	if p.Kelas != nil {
+		addOpt("kelas", *p.Kelas)
+	}
+	if p.Semester != nil {
+		addOpt("semester", *p.Semester)
+	}
+	if p.IndikatorSoal != nil {
+		addOpt("indikator_soal", *p.IndikatorSoal)
 	}
 	q := "INSERT INTO " + table + " (" + strings.Join(cols, ", ") +
 		") VALUES (" + strings.Join(vals, ", ") + ") RETURNING id::text"
@@ -217,14 +209,16 @@ func buildSlotUpdateSQL(table, slotID string, p slotPayload) (string, []any) {
 	addOptStr("difficulty", p.Difficulty)
 	addOptStr("question_type", p.QuestionType)
 	addOptStr("stimulus_id", p.StimulusID)
-	addOptStr("akm_konten", p.AkmKonten)
-	addOptStr("akm_konteks", p.AkmKonteks)
-	addOptStr("akm_proses", p.AkmProses)
+	addOptStr("cp_element_id", p.CPElementID)
+	addOptStr("capaian_pembelajaran", p.CapaianPembelajaran)
+	addOptStr("elemen_cp", p.ElemenCP)
+	addOptStr("tujuan_pembelajaran", p.TujuanPembelajaran)
+	addOptStr("materi_pokok", p.MateriPokok)
+	addOptStr("kelas", p.Kelas)
+	addOptStr("semester", p.Semester)
+	addOptStr("indikator_soal", p.IndikatorSoal)
 	if p.Points != nil {
 		add("points", *p.Points)
-	}
-	if p.AkmLevel != nil {
-		add("akm_level", *p.AkmLevel)
 	}
 	if len(parts) == 0 && len(args) == 0 {
 		return "", nil
@@ -273,7 +267,8 @@ func (a *App) handleListTemplateSlots(w http.ResponseWriter, r *http.Request) {
 		SELECT id::text, position, competency_id::text, competency_code,
 		       competency_description, materi, indikator, cognitive_level,
 		       difficulty, question_type, points, stimulus_id::text,
-		       akm_konten, akm_konteks, akm_proses, akm_level,
+		       cp_element_id::text, capaian_pembelajaran, elemen_cp,
+		       tujuan_pembelajaran, materi_pokok, kelas, semester, indikator_soal,
 		       created_at::text
 		  FROM blueprint_template_slots
 		 WHERE template_id = $1
@@ -295,7 +290,8 @@ func (a *App) handleListTemplateSlots(w http.ResponseWriter, r *http.Request) {
 			&s.CompetencyDescription, &s.Materi, &s.Indikator,
 			&s.CognitiveLevel, &s.Difficulty, &s.QuestionType,
 			&s.Points, &stimID,
-			&s.AkmKonten, &s.AkmKonteks, &s.AkmProses, &s.AkmLevel,
+			&s.CPElementID, &s.CapaianPembelajaran, &s.ElemenCP,
+			&s.TujuanPembelajaran, &s.MateriPokok, &s.Kelas, &s.Semester, &s.IndikatorSoal,
 			&s.CreatedAt); err == nil {
 			if compID.Valid {
 				v := compID.String
@@ -329,7 +325,7 @@ func (a *App) handleCreateTemplateSlot(w http.ResponseWriter, r *http.Request) {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid body", r)
 		return
 	}
-	if errs := validateSlot(p, true); len(errs) > 0 {
+	if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, p); len(errs) > 0 {
 		writeValidationError(w, errs, r)
 		return
 	}
@@ -393,10 +389,12 @@ func (a *App) handleBulkAddTemplateSlots(w http.ResponseWriter, r *http.Request)
 
 	// Validate every payload first so we don't leave a half-inserted set.
 	for i, p := range req.Slots {
-		if errs := validateSlot(p, true); len(errs) > 0 {
-			writeValidationError(w, map[string]string{
-				"slots": "Invalid slot at index " + strconv.Itoa(i) + ": see field errors",
-			}, r)
+		if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, p); len(errs) > 0 {
+			fields := map[string]string{"slots": "Invalid slot at index " + strconv.Itoa(i) + ": see field errors"}
+			for k, v := range errs {
+				fields["slots."+strconv.Itoa(i)+"."+k] = v
+			}
+			writeValidationError(w, fields, r)
 			return
 		}
 	}
@@ -479,7 +477,12 @@ func (a *App) handleUpdateTemplateSlot(w http.ResponseWriter, r *http.Request) {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid body", r)
 		return
 	}
-	if errs := validateSlot(p, false); len(errs) > 0 {
+	current, err := a.loadSlotPayload(r.Context(), "blueprint_template_slots", slotID)
+	if err != nil {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Slot not found", r)
+		return
+	}
+	if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, mergeSlotPayload(current, p)); len(errs) > 0 {
 		writeValidationError(w, errs, r)
 		return
 	}
@@ -555,7 +558,7 @@ func (a *App) handleDeleteTemplateSlot(w http.ResponseWriter, r *http.Request) {
 // Response shape:
 //
 //	{
-//	  "blueprintType": "akm_literasi" | "akm_numerasi" | "reguler" | null,
+//	  "blueprintType": "reguler" | null,
 //	  "slots": [{ slot fields..., question: {...} | null }],
 //	  "unlinked": [{ id, content, questionType, points, sortOrder,
 //	                 stimulus?, group? }],
@@ -593,21 +596,19 @@ func (a *App) handleListSlotsWithQuestions(w http.ResponseWriter, r *http.Reques
 		Question *slotQuestion `json:"question"`
 	}
 
-	// Pull blueprint type + source template id up-front so the
-	// response carries the AKM signal AND the template-locked flag
-	// even when the slot list itself is empty.
-	var bpType sql.NullString
+	// Pull source template id up-front so response can mark template-cloned slots.
 	var bpTemplateID sql.NullString
 	_ = a.db.QueryRowContext(r.Context(),
-		`SELECT blueprint_type, source_template_id::text FROM exam_blueprints WHERE exam_id = $1 AND tenant_id = $2`,
+		`SELECT source_template_id::text FROM exam_blueprints WHERE exam_id = $1 AND tenant_id = $2`,
 		examID, tenantID,
-	).Scan(&bpType, &bpTemplateID)
+	).Scan(&bpTemplateID)
 
 	rows, err := a.db.QueryContext(r.Context(), `
 		SELECT s.id::text, s.position, s.competency_id::text, s.competency_code,
 		       s.competency_description, s.materi, s.indikator, s.cognitive_level,
 		       s.difficulty, s.question_type, s.points, s.stimulus_id::text,
-		       s.akm_konten, s.akm_konteks, s.akm_proses, s.akm_level,
+		       s.cp_element_id::text, s.capaian_pembelajaran, s.elemen_cp,
+		       s.tujuan_pembelajaran, s.materi_pokok, s.kelas, s.semester, s.indikator_soal,
 		       s.created_at::text,
 		       q.id::text, q.content, q.question_type, q.points, q.sort_order,
 		       q.stimulus_id::text, q.group_id::text,
@@ -642,7 +643,8 @@ func (a *App) handleListSlotsWithQuestions(w http.ResponseWriter, r *http.Reques
 			&s.CompetencyDescription, &s.Materi, &s.Indikator,
 			&s.CognitiveLevel, &s.Difficulty, &s.QuestionType,
 			&s.Points, &stimID,
-			&s.AkmKonten, &s.AkmKonteks, &s.AkmProses, &s.AkmLevel,
+			&s.CPElementID, &s.CapaianPembelajaran, &s.ElemenCP,
+			&s.TujuanPembelajaran, &s.MateriPokok, &s.Kelas, &s.Semester, &s.IndikatorSoal,
 			&s.CreatedAt,
 			&qID, &qContent, &qType, &qPoints, &qSortOrder,
 			&qStimulusID, &qGroupID,
@@ -752,9 +754,6 @@ func (a *App) handleListSlotsWithQuestions(w http.ResponseWriter, r *http.Reques
 			"total":  len(slots),
 		},
 	}
-	if bpType.Valid {
-		resp["blueprintType"] = bpType.String
-	}
 	if bpTemplateID.Valid && bpTemplateID.String != "" {
 		resp["sourceTemplateId"] = bpTemplateID.String
 	}
@@ -776,23 +775,23 @@ func (a *App) handleGetExamBlueprint(w http.ResponseWriter, r *http.Request) {
 	tenantID := a.RequireEffectiveTenant(w, r)
 
 	type examBlueprintRow struct {
-		ID                   string  `json:"id"`
-		ExamID               string  `json:"examId"`
-		SourceTemplateID     *string `json:"sourceTemplateId,omitempty"`
-		SourceTemplateVersion *int   `json:"sourceTemplateVersion,omitempty"`
-		CreatedVia           string  `json:"createdVia"`
-		Title                string  `json:"title"`
-		Description          *string `json:"description,omitempty"`
-		CurriculumCode       string  `json:"curriculumCode"`
-		CompetencyLabel      string  `json:"competencyLabel"`
-		BlueprintType        string  `json:"blueprintType"`
-		TotalSlots           int     `json:"totalSlots"`
-		TotalPoints          float64 `json:"totalPoints"`
-		StrictCoverage       bool    `json:"strictCoverage"`
-		Status               string  `json:"status"`
-		FilledSlots          int     `json:"filledSlots"`
-		Coverage             float64 `json:"coverage"`
-		CreatedAt            string  `json:"createdAt"`
+		ID                    string  `json:"id"`
+		ExamID                string  `json:"examId"`
+		SourceTemplateID      *string `json:"sourceTemplateId,omitempty"`
+		SourceTemplateVersion *int    `json:"sourceTemplateVersion,omitempty"`
+		CreatedVia            string  `json:"createdVia"`
+		Title                 string  `json:"title"`
+		Description           *string `json:"description,omitempty"`
+		CurriculumCode        string  `json:"curriculumCode"`
+		CompetencyLabel       string  `json:"competencyLabel"`
+		BlueprintType         string  `json:"blueprintType"`
+		TotalSlots            int     `json:"totalSlots"`
+		TotalPoints           float64 `json:"totalPoints"`
+		StrictCoverage        bool    `json:"strictCoverage"`
+		Status                string  `json:"status"`
+		FilledSlots           int     `json:"filledSlots"`
+		Coverage              float64 `json:"coverage"`
+		CreatedAt             string  `json:"createdAt"`
 	}
 
 	var bp examBlueprintRow
@@ -858,7 +857,8 @@ func (a *App) handleListExamBlueprintSlots(w http.ResponseWriter, r *http.Reques
 		SELECT s.id::text, s.position, s.competency_id::text, s.competency_code,
 		       s.competency_description, s.materi, s.indikator, s.cognitive_level,
 		       s.difficulty, s.question_type, s.points, s.stimulus_id::text,
-		       s.akm_konten, s.akm_konteks, s.akm_proses, s.akm_level,
+		       s.cp_element_id::text, s.capaian_pembelajaran, s.elemen_cp,
+		       s.tujuan_pembelajaran, s.materi_pokok, s.kelas, s.semester, s.indikator_soal,
 		       s.created_at::text,
 		       (SELECT q.id::text FROM exam_questions q WHERE q.blueprint_slot_id = s.id) AS question_id
 		  FROM exam_blueprint_slots s
@@ -882,7 +882,8 @@ func (a *App) handleListExamBlueprintSlots(w http.ResponseWriter, r *http.Reques
 			&s.CompetencyDescription, &s.Materi, &s.Indikator,
 			&s.CognitiveLevel, &s.Difficulty, &s.QuestionType,
 			&s.Points, &stimID,
-			&s.AkmKonten, &s.AkmKonteks, &s.AkmProses, &s.AkmLevel,
+			&s.CPElementID, &s.CapaianPembelajaran, &s.ElemenCP,
+			&s.TujuanPembelajaran, &s.MateriPokok, &s.Kelas, &s.Semester, &s.IndikatorSoal,
 			&s.CreatedAt, &qID); err == nil {
 			if compID.Valid {
 				v := compID.String
@@ -937,7 +938,7 @@ func (a *App) handleCreateExamBlueprintSlot(w http.ResponseWriter, r *http.Reque
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid body", r)
 		return
 	}
-	if errs := validateSlot(p, true); len(errs) > 0 {
+	if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, p); len(errs) > 0 {
 		writeValidationError(w, errs, r)
 		return
 	}
@@ -983,7 +984,12 @@ func (a *App) handleUpdateExamBlueprintSlot(w http.ResponseWriter, r *http.Reque
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid body", r)
 		return
 	}
-	if errs := validateSlot(p, false); len(errs) > 0 {
+	current, err := a.loadSlotPayload(r.Context(), "exam_blueprint_slots", slotID)
+	if err != nil {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Slot not found", r)
+		return
+	}
+	if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, mergeSlotPayload(current, p)); len(errs) > 0 {
 		writeValidationError(w, errs, r)
 		return
 	}

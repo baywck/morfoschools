@@ -17,7 +17,6 @@ import {
   ChevronRight,
   GripVertical,
   Layers,
-  Loader2,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -29,33 +28,10 @@ import {
 } from "@/lib/modules-api";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { RenderedContent, stripHtmlPreview } from "@/components/ui/rendered-content";
-import { StimulusLibraryModal } from "@/components/exams/stimulus-library-modal";
+import { stripHtmlPreview } from "@/components/ui/rendered-content";
+import { StimulusEditorPanel } from "@/components/exams/stimulus-editor-panel";
+import { normalizeRichTextForEditor } from "@/lib/rich-text";
 import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
-import { RichEditor } from "@/components/ui/rich-editor";
-import { InputField } from "@/components/ui/input-field";
-import { isHtmlContent } from "@/components/ui/rendered-content";
-
-// Convert plain-text stimulus content (legacy or AI-generated
-// without HTML tags) into TipTap-friendly paragraph HTML so the
-// editor preserves newlines and the rendered output matches.
-// RenderedContent already handles plain text via white-space:
-// pre-wrap, but TipTap collapses whitespace inside its DOM —
-// the editor view would show one giant blob without this.
-function normalizeStimulusForEditor(raw: string): string {
-  if (!raw) return "";
-  if (isHtmlContent(raw)) return raw;
-  const escaped = raw
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  // Treat double-newline as paragraph break, single newline as <br>
-  // so the editor mirrors what RenderedContent shows.
-  return escaped
-    .split(/\n{2,}/)
-    .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
-    .join("");
-}
 import { cn } from "@/lib/cn";
 
 export interface GroupCardProps {
@@ -102,7 +78,7 @@ export function GroupCard({
   // as an explicit action for power users.
   const [editTitle, setEditTitle] = useState(group.stimulusTitleSnapshot ?? "");
   const [editBody, setEditBody] = useState(
-    normalizeStimulusForEditor(group.stimulusBodySnapshot ?? "")
+    normalizeRichTextForEditor(group.stimulusBodySnapshot)
   );
   const [showLibrary, setShowLibrary] = useState(false);
 
@@ -111,7 +87,7 @@ export function GroupCard({
   // stale values when the canonical group data is refreshed.
   useEffect(() => {
     setEditTitle(group.stimulusTitleSnapshot ?? "");
-    setEditBody(normalizeStimulusForEditor(group.stimulusBodySnapshot ?? ""));
+    setEditBody(normalizeRichTextForEditor(group.stimulusBodySnapshot));
   }, [group.stimulusTitleSnapshot, group.stimulusBodySnapshot, group.id]);
 
   // When the group body is collapsed, also hide the stimulus editor
@@ -251,19 +227,6 @@ export function GroupCard({
         </div>
         {canEdit && (
           <>
-            <button
-              type="button"
-              onClick={() => setStimulusOpen((v) => !v)}
-              className={cn(
-                "inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10.5px] font-medium transition-colors",
-                stimulusTitle
-                  ? "border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                  : "bg-[var(--brand-soft)] text-[var(--brand)] hover:opacity-90",
-              )}
-            >
-              {savingStim && <Loader2 size={10} className="animate-spin" />}
-              {stimulusTitle ? "Edit stimulus" : "+ Tambah stimulus"}
-            </button>
             <InlineMagicPopover
               entityKind="group"
               entityId={group.id}
@@ -282,130 +245,40 @@ export function GroupCard({
         )}
       </div>
 
-      {/* Stimulus inline editor (collapsible). When the group body
-          is collapsed this is also hidden via the bodyOpen effect.
-          Layout: header strip with title + library shortcut, body
-          stack with title + content + library opt-in, footer with
-          destructive-left / neutral-right action grouping. */}
-      {stimulusOpen && canEdit && bodyOpen && (
-        <div className="border-b border-[var(--border)] bg-[var(--background)]">
-          {/* Editor header */}
-          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--accent)]/30 px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <Layers size={12} className="text-[var(--brand)]" />
-              <h4 className="text-[12px] font-semibold text-[var(--foreground)]">
-                {group.stimulusId ? "Edit stimulus" : "Stimulus baru"}
-              </h4>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowLibrary(true)}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-[10.5px] font-medium text-[var(--muted-foreground)] hover:border-[var(--brand)]/40 hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] transition-colors"
-            >
-              📚 Pilih dari library
-            </button>
-          </div>
-
-          {/* Editor body */}
-          <div className="space-y-4 px-4 py-4">
-            <InputField
-              label="Judul stimulus"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-            />
-            <div>
-              <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                Isi stimulus
-              </label>
-              <RichEditor value={editBody} onChange={setEditBody} />
-            </div>
-
-            {/* Library opt-in card */}
-            <label
-              className={cn(
-                "flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors select-none",
-                saveToLibrary
-                  ? "border-[var(--brand)]/40 bg-[var(--brand-soft)]/40"
-                  : "border-[var(--border)] bg-[var(--accent)]/20 hover:bg-[var(--accent)]/40",
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={saveToLibrary}
-                onChange={(e) => setSaveToLibrary(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] text-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/40"
-              />
-              <div className="flex-1">
-                <p className="text-[12px] font-semibold text-[var(--foreground)]">
-                  Simpan ke library bersama
-                </p>
-                <p className="mt-0.5 text-[10.5px] leading-relaxed text-[var(--muted-foreground)]">
-                  Stimulus ini bisa dipakai ulang di exam lain. Tanpa centang ini, stimulus tetap eksklusif untuk group ini.
-                </p>
-              </div>
-            </label>
-          </div>
-
-          {/* Editor footer */}
-          <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--accent)]/20 px-4 py-2.5">
-            <div>
-              {group.stimulusId && (
-                <button
-                  type="button"
-                  onClick={handleClearStimulus}
-                  disabled={savingStim}
-                  className="inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--destructive-soft)] hover:text-[var(--destructive)] disabled:opacity-50 transition-colors"
-                >
-                  <Trash2 size={11} />
-                  Hapus stimulus
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setStimulusOpen(false)}
-                className="h-8 rounded-md px-3 text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveSnapshot}
-                disabled={savingStim}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--brand)] px-3.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
-              >
-                {savingStim && <Loader2 size={11} className="animate-spin" />}
-                Simpan
-              </button>
-            </div>
-          </div>
-
-          {showLibrary && (
-            <StimulusLibraryModal
-              open={showLibrary}
-              onClose={() => setShowLibrary(false)}
-              onSelect={(s) => {
-                setEditTitle(s.title);
-                setEditBody(normalizeStimulusForEditor(s.content));
-              }}
-            />
-          )}
+      {canEdit && bodyOpen && (
+        <div className="border-b border-[var(--border)] bg-[var(--background)] p-2">
+          <StimulusEditorPanel
+            canEdit={canEdit}
+            open={stimulusOpen}
+            stimulusId={group.stimulusId ?? null}
+            title={editTitle}
+            body={editBody}
+            saving={savingStim}
+            saveToLibrary={saveToLibrary}
+            showLibrary={showLibrary}
+            deleteLabel="Hapus stimulus"
+            onToggle={() => setStimulusOpen((v) => !v)}
+            onTitleChange={setEditTitle}
+            onBodyChange={setEditBody}
+            onSaveToLibraryChange={setSaveToLibrary}
+            onSave={handleSaveSnapshot}
+            onDelete={handleClearStimulus}
+            onSelect={handleSelectStimulus}
+            onClear={handleClearStimulus}
+            onOpenLibrary={() => setShowLibrary(true)}
+            onCloseLibrary={() => setShowLibrary(false)}
+            onSelectLibrary={(s) => {
+              setShowLibrary(false);
+              setEditTitle(s.title);
+              setEditBody(normalizeRichTextForEditor(s.content));
+            }}
+          />
         </div>
       )}
 
       {/* Body — child questions + footer */}
       {bodyOpen && (
         <div className="space-y-1.5 p-2">
-          {/* Render the stimulus body inline above the questions when
-              not in edit mode and there's actual content to read. */}
-          {!stimulusOpen && stimulusBody && (
-            <div className="mb-2 rounded-lg border border-[var(--border)] bg-[var(--accent)]/30 px-3 py-2.5">
-              <div className="text-[11.5px] leading-relaxed text-[var(--foreground)] [&_p]:mb-1.5 last:[&_p]:mb-0">
-                <RenderedContent html={stimulusBody} />
-              </div>
-            </div>
-          )}
           {children}
           {canEdit && (
             <button

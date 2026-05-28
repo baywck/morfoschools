@@ -142,6 +142,9 @@ func (a *App) handleCreateClassSection(w http.ResponseWriter, r *http.Request) {
 	if req.AcademicYearID == "" {
 		fields["academicYearId"] = "Academic year is required"
 	}
+	for key, message := range a.validateTenantGradeLevel(r.Context(), tenantID, req.GradeLevel) {
+		fields[key] = message
+	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
 		return
@@ -211,7 +214,12 @@ func (a *App) handleUpdateClassSection(w http.ResponseWriter, r *http.Request) {
 		_, _ = a.db.ExecContext(r.Context(), `UPDATE class_sections SET name = $1, updated_at = now() WHERE id = $2`, strings.TrimSpace(*req.Name), sectionID)
 	}
 	if req.GradeLevel != nil {
-		_, _ = a.db.ExecContext(r.Context(), `UPDATE class_sections SET grade_level = $1, updated_at = now() WHERE id = $2`, strings.TrimSpace(*req.GradeLevel), sectionID)
+		gradeLevel := strings.TrimSpace(*req.GradeLevel)
+		if fields := a.validateTenantGradeLevel(r.Context(), tenantID, gradeLevel); len(fields) > 0 {
+			writeValidationError(w, fields, r)
+			return
+		}
+		_, _ = a.db.ExecContext(r.Context(), `UPDATE class_sections SET grade_level = $1, updated_at = now() WHERE id = $2`, gradeLevel, sectionID)
 	}
 	if req.HomeroomTeacherID != nil {
 		if *req.HomeroomTeacherID == "" {

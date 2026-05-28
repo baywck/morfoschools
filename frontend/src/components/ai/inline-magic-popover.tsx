@@ -36,21 +36,24 @@ interface Command {
   label: string;
   /** Short descriptor under the label */
   hint: string;
-  /** Pre-composed user message sent to /api/v1/ai/chat */
+  /** Pre-composed instruction sent to AI */
   prompt: string;
+  /** Deterministic focused action endpoint action id */
+  action?: string;
   /** Free-text follow-up needed (e.g. user describes variant) */
   needsInput?: boolean;
   /** Placeholder for the input field when needsInput=true */
   inputHint?: string;
 }
 
-const QUESTION_QUALITY_CONTRACT = `Kualitas soal wajib tinggi. Sebelum membuat soal, buat kisi-kisi INTERNAL dulu untuk mengontrol kualitas (topik, jenjang/asumsi, kompetensi, indikator konseptual, cognitiveLevel, difficulty), tetapi JANGAN tampilkan kisi-kisi internal kecuali user meminta. Jika exam memakai kisi-kisi dan soal baru belum punya blueprintSlotId, setelah soal dibuat lanjutkan dengan apply_question_kisi_kisi/bulk_apply_question_kisi_kisi untuk menyimpan kisi-kisi yang sesuai dan link ke soal. Jika data user kurang lengkap, gunakan asumsi wajar dan tuliskan asumsi singkat di awal. Setiap soal minimal memiliki stimulus/konteks; stimulus boleh berdiri sendiri atau langsung tertanam di stem soal. Untuk soal biasa, stem/content harus berupa konteks atau skenario 2-4 kalimat sebelum pertanyaan, bukan satu kalimat pendek seperti '... adalah untuk'. Jangan membuat stem terlalu pendek tanpa konteks kecuali user eksplisit meminta. Default tipe soal adalah multiple_choice; jangan membuat short_answer kecuali user eksplisit meminta. Setiap soal harus: sesuai topik dan jenjang; level kognitif jelas; tidak ambigu; tidak sekadar hafalan jika diminta level tinggi; opsi jawaban homogen, setara panjang/jenisnya, dan plausible; hanya satu jawaban benar; menyertakan kunci dan pembahasan singkat. Indikator internal harus konseptual, tidak menyalin redaksi soal, tidak membocorkan jawaban.`;
+const QUESTION_QUALITY_CONTRACT = `Kualitas soal wajib tinggi. Sebelum membuat soal, buat kisi-kisi INTERNAL dulu untuk mengontrol kualitas (topik, jenjang/asumsi, kompetensi, indikator konseptual, cognitiveLevel, difficulty), tetapi JANGAN tampilkan kisi-kisi internal kecuali user meminta. Jika exam memakai kisi-kisi dan soal baru belum punya blueprintSlotId, setelah soal dibuat lanjutkan dengan apply_question_kisi_kisi/bulk_apply_question_kisi_kisi untuk menyimpan kisi-kisi yang sesuai dan link ke soal. Jika data user kurang lengkap, gunakan asumsi wajar dan tuliskan asumsi singkat di awal. Setiap soal minimal memiliki stimulus/konteks berupa berita/informasi aktual yang relevan; stimulus boleh berdiri sendiri atau langsung tertanam di stem soal. Untuk soal biasa, stem/content harus berupa konteks atau skenario 2-4 kalimat sebelum pertanyaan, bukan satu kalimat pendek seperti '... adalah untuk'. Jangan membuat stem terlalu pendek tanpa konteks kecuali user eksplisit meminta. Default tipe soal adalah multiple_choice; jangan membuat short_answer kecuali user eksplisit meminta. Setiap soal harus: sesuai topik dan jenjang; level kognitif jelas; tidak ambigu; tidak sekadar hafalan jika diminta level tinggi; opsi jawaban default 5 jika user tidak menentukan jumlah, tetapi 3/4 opsi valid jika user meminta; opsi harus homogen, setara panjang/jenisnya, plausible, dan tidak duplikat; hanya satu jawaban benar; menyertakan kunci dan pembahasan singkat. Indikator internal harus konseptual, tidak menyalin redaksi soal, tidak membocorkan jawaban.`;
 
 const QUESTION_COMMANDS: Command[] = [
   {
     label: "Perbaiki redaksi",
     hint: "Tata bahasa + kejelasan, tipe & jawaban tetap",
-    prompt: "Tolong perbaiki redaksi soal ini agar lebih jelas dan tata bahasa benar. Pertahankan tipe soal, opsi, dan jawaban benar. Hasil: update_question dengan content yang sudah diperbaiki.",
+    action: "improve_wording",
+    prompt: "Perbaiki redaksi soal fokus agar lebih jelas dan tata bahasa benar. Pertahankan tipe soal, opsi, dan jawaban benar.",
   },
   {
     label: "Buat varian",
@@ -60,31 +63,36 @@ const QUESTION_COMMANDS: Command[] = [
   {
     label: "Naikkan ke HOTS",
     hint: "Convert ke level kognitif lebih tinggi",
-    prompt: "Tulis ulang soal ini ke level kognitif HOTS (analisis/evaluasi/mencipta). Pertahankan topik, tapi minta penalaran lebih tinggi. Pakai update_question.",
+    action: "upgrade_hots",
+    prompt: "Tulis ulang soal fokus ke level kognitif HOTS (analisis/evaluasi/mencipta). Pertahankan topik, tapi naikkan penalaran dengan stimulus/kasus aktual yang relevan.",
   },
   {
     label: "Tambah penjelasan",
     hint: "Generate explanation untuk jawaban benar",
-    prompt: "Tulis penjelasan/pembahasan untuk jawaban benar soal ini. Pakai update_question dengan field explanation.",
+    action: "add_explanation",
+    prompt: "Tulis penjelasan/pembahasan untuk jawaban benar soal fokus. Ubah field explanation saja kecuali perlu perbaikan kecil.",
   },
   {
     label: "Tambah opsi distractor",
     hint: "Generate opsi pengecoh tambahan (MCQ saja)",
-    prompt: "Tambahkan opsi distractor (pengecoh) yang masuk akal untuk soal ini. Pakai update_question dengan options yang lebih banyak dan plausible. Hanya untuk multiple_choice.",
+    action: "add_distractor",
+    prompt: "Tambahkan/perbaiki opsi distractor untuk soal fokus. Options default 5 opsi jika user tidak menentukan jumlah; 3/4 opsi tetap valid jika user meminta. Opsi harus homogen, plausible, tidak duplikat, dan tepat satu jawaban benar.",
   },
   {
     label: "Extract kisi-kisi",
-    hint: "Generate KD/Materi/Indikator dari soal ini",
-    prompt: "Analisis soal fokus ini lalu rumuskan kisi-kisi lengkap. Bedakan field: competencyCode = kode KD saja (mis. 3.6); materi = topik/ruang lingkup materi tanpa awalan KD/kode; competencyDescription = uraian kompetensi yang diukur, bukan salinan materi; indikator = perilaku terukur yang konseptual. Indikator harus lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI apply_question_kisi_kisi dengan competencyCode, competencyDescription, materi, indikator, cognitiveLevel C1-C6, difficulty. Jangan pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
+    hint: "Generate CP/TP/Materi/Indikator dari soal ini",
+    action: "extract_kisi_kisi",
+    prompt: "Analisis soal fokus ini lalu rumuskan kisi-kisi Kurikulum Merdeka lengkap. Jangan gunakan KD/SK. Gunakan CP resmi, Elemen CP, Tujuan Pembelajaran, Materi Pokok, Kelas/Semester, level kognitif C1-C6, difficulty, dan Indikator Soal yang diawali 'Disajikan ...' serta memuat stimulus/konteks.",
   },
   {
     label: "Generate dari kisi-kisi slot",
     hint: "Buat soal baru sesuai slot yang sudah terikat",
-    prompt: "Soal ini sudah terikat ke blueprint slot. Generate 1 soal varian baru yang sesuai dengan kisi-kisi slot tersebut (KD/Materi/Indikator/cognitive level/difficulty sama), tapi dengan konteks/angka/skenario berbeda. Pakai create_question dengan blueprintSlotId yang sama.",
+    prompt: "Soal ini sudah terikat ke blueprint slot. Generate 1 soal varian baru yang sesuai dengan CP/Elemen CP/TP/Materi Pokok/Indikator Soal/cognitive level/difficulty pada slot tersebut, tapi dengan konteks/angka/skenario berbeda. Pakai create_question dengan blueprintSlotId yang sama."
   },
   {
     label: "Convert tipe",
     hint: "MCQ ↔ essay ↔ true/false",
+    action: "convert_type",
     prompt: "",
     needsInput: true,
     inputHint: "Convert ke tipe apa? (essay/multiple_choice/true_false/short_answer)",
@@ -92,6 +100,7 @@ const QUESTION_COMMANDS: Command[] = [
   {
     label: "Custom…",
     hint: "Tulis instruksi bebas",
+    action: "custom_edit",
     prompt: "",
     needsInput: true,
     inputHint: "Apa yang ingin diubah dari soal ini?",
@@ -123,7 +132,8 @@ const GROUP_COMMANDS: Command[] = [
   {
     label: "Refine stimulus",
     hint: "Perbaiki teks stimulus tanpa rusak soal",
-    prompt: "Perbaiki redaksi stimulus group ini agar lebih jelas dan tata bahasa rapi. Pertahankan fakta utama. Pakai update_question_group dengan bodySnapshot/titleSnapshot baru.",
+    action: "refine_stimulus",
+    prompt: "Perbaiki redaksi stimulus group ini agar lebih jelas dan tata bahasa rapi. Pertahankan fakta utama. Buat output beberapa paragraf dengan newline asli.",
   },
   {
     label: "Generate distractor batch",
@@ -133,7 +143,7 @@ const GROUP_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi grup",
     hint: "Extract kisi-kisi dari semua soal di group",
-    prompt: "Untuk setiap soal di group fokus, rumuskan kisi-kisi lengkap. Indikator harus konseptual: lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId di group, replace=false. JANGAN pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
+    prompt: "Untuk setiap soal di group fokus, rumuskan kisi-kisi Kurikulum Merdeka lengkap: CP resmi, Elemen CP, TP, Materi Pokok, Kelas/Semester, level kognitif, difficulty, dan Indikator Soal yang diawali 'Disajikan ...'. PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId di group, replace=false. JANGAN pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
   },
   {
     label: "Custom…",
@@ -147,8 +157,8 @@ const GROUP_COMMANDS: Command[] = [
 const SLOT_COMMANDS: Command[] = [
   {
     label: "Generate soal dari kisi-kisi",
-    hint: "Buat soal sesuai KD/Materi/Indikator slot ini",
-    prompt: "Buat 1 soal yang sesuai dengan kisi-kisi slot ini (KD, materi, indikator, cognitive level, difficulty). Pakai create_question dengan blueprintSlotId pointing ke slot ini.",
+    hint: "Buat soal sesuai CP/TP/Indikator slot ini",
+    prompt: "Buat 1 soal yang sesuai dengan kisi-kisi slot ini (CP, Elemen CP, TP, Materi Pokok, Indikator Soal, cognitive level, difficulty). Pakai create_question dengan blueprintSlotId pointing ke slot ini.",
   },
   {
     label: "Generate N varian",
@@ -160,7 +170,7 @@ const SLOT_COMMANDS: Command[] = [
   {
     label: "Refine kisi-kisi",
     hint: "Perbaiki redaksi indikator tanpa ubah cognitive level",
-    prompt: "Perbaiki redaksi indikator slot kisi-kisi ini agar lebih jelas dan operasional (kata kerja konkret sesuai cognitive level). Pertahankan KD, materi, dan cognitive level. Pakai update_blueprint_slot.",
+    prompt: "Perbaiki redaksi Indikator Soal slot kisi-kisi ini agar lebih jelas, operasional, diawali 'Disajikan ...', dan selaras dengan cognitive level. Pertahankan CP, Elemen CP, TP, Materi Pokok, dan cognitive level. Pakai update_blueprint_slot."
   },
   {
     label: "Custom…",
@@ -194,7 +204,7 @@ const DRAFT_COMMANDS: Command[] = [
   {
     label: "Buat dari kisi-kisi",
     hint: "Pilih slot blueprint kosong + isi otomatis",
-    prompt: `${QUESTION_QUALITY_CONTRACT}\n\nLihat slot blueprint yang masih kosong di exam ini. Pilih satu, lalu generate 1 soal sesuai kisi-kisi slot tersebut (KD/materi/indikator/cognitive level/difficulty). Pakai create_question dengan blueprintSlotId.`,
+    prompt: `${QUESTION_QUALITY_CONTRACT}\n\nLihat slot blueprint yang masih kosong di exam ini. Pilih satu, lalu generate 1 soal sesuai kisi-kisi slot tersebut (CP/Elemen CP/TP/Materi Pokok/Indikator Soal/cognitive level/difficulty). Pakai create_question dengan blueprintSlotId.`,
   },
   {
     label: "Custom…",
@@ -208,8 +218,8 @@ const DRAFT_COMMANDS: Command[] = [
 const EXAM_COMMANDS: Command[] = [
   {
     label: "Generate kisi-kisi dari semua soal",
-    hint: "Extract KD/Materi/Indikator untuk seluruh soal",
-    prompt: "Untuk setiap soal di exam ini, rumuskan kisi-kisi lengkap. Indikator harus konseptual: lebih umum dari redaksi soal, tidak menyalin frasa soal, tidak menyebut opsi/jawaban benar, dan tidak menjadi bocoran; tulis kompetensi yang diuji guru, bukan petunjuk untuk siswa. PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId, replace=false. JANGAN pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi.",
+    hint: "Extract CP/TP/Indikator untuk seluruh soal",
+    prompt: "Untuk setiap soal di exam ini, rumuskan kisi-kisi Kurikulum Merdeka lengkap: CP resmi, Elemen CP, TP, Materi Pokok, Kelas/Semester, level kognitif, difficulty, dan Indikator Soal yang diawali 'Disajikan ...'. PAKAI bulk_apply_question_kisi_kisi SEKALI dengan items untuk semua questionId, replace=false. JANGAN pakai apply_blueprint_analysis / convert_questions_to_kisi_kisi."
   },
   {
     label: "Tambah N soal random",
@@ -327,7 +337,34 @@ export function InlineMagicPopover({
     setError(null);
   }
 
-  async function dispatch(prompt: string) {
+  async function dispatch(prompt: string, action?: string) {
+    if (entityKind === "question" && action && action !== "create_variant") {
+      window.dispatchEvent(new CustomEvent("morfoschools:question-magic-open", {
+        detail: {
+          entityKind: "question",
+          questionId: entityId,
+          action,
+          instruction: prompt,
+          title: selectedCmd?.label,
+        },
+      }));
+      closeAll();
+      return;
+    }
+    if (entityKind === "group") {
+      window.dispatchEvent(new CustomEvent("morfoschools:question-magic-open", {
+        detail: {
+          entityKind: "group",
+          groupId: entityId,
+          action: action || "custom_group_edit",
+          instruction: prompt,
+          title: selectedCmd?.label,
+          mode: action === "add_question" || action === "add_questions" ? "create" : "edit",
+        },
+      }));
+      closeAll();
+      return;
+    }
     setSending(true);
     setError(null);
     try {
@@ -356,7 +393,6 @@ export function InlineMagicPopover({
       if (examId) activeEntities.examId = examId;
       if (templateId) activeEntities.templateId = templateId;
       if (entityKind === "question") activeEntities.questionId = entityId;
-      else if (entityKind === "group") activeEntities.groupId = entityId;
       else if (entityKind === "slot") activeEntities.slotId = entityId;
       else if (entityKind === "exam") {
         // exam-level: examId already set above; nothing entity-specific to add
@@ -408,7 +444,7 @@ export function InlineMagicPopover({
       setInputValue("");
       return;
     }
-    void dispatch(cmd.prompt);
+    void dispatch(cmd.prompt, cmd.action);
   }
 
   function handleInputSubmit(e: React.FormEvent) {
@@ -434,13 +470,7 @@ Format output:
       // Group-scoped: write stimulus snapshot to the EXISTING group
       // (don't create a new group). Pakai update_question_group
       // dengan titleSnapshot + bodySnapshot baru.
-      finalPrompt = `Generate teks stimulus untuk group yang sedang difokus, dengan topik: ${trimmed}.
-
-Format output:
-- Stimulus title yang descriptive
-- Stimulus body: passage/teks/kasus yang factually correct dan relevan untuk dijadikan dasar soal
-- Pakai update_question_group dengan titleSnapshot + bodySnapshot baru
-- JANGAN buat group baru, JANGAN buat soal di turn ini—cuma stimulus dulu. Soal akan ditambahkan iteratif setelahnya.`;
+      finalPrompt = `Generate teks stimulus untuk group yang sedang difokus, dengan topik: ${trimmed}. Buat stimulus aktual, relevan, cukup panjang, dan rapi dalam beberapa paragraf. Jangan buat group baru dan jangan buat soal.`;
     } else if (selectedCmd.label === "Generate soal dari topik") {
       finalPrompt = `${QUESTION_QUALITY_CONTRACT}\n\nBuat 1 soal berkualitas berdasarkan topik/permintaan user berikut: ${trimmed}. Gunakan create_question. Jika user tidak menyebut tipe, gunakan multiple_choice. Jangan tampilkan kisi-kisi internal kecuali diminta.`;
     } else if (selectedCmd.label === "Tambah N soal random") {
@@ -467,9 +497,18 @@ Konstrain:
     } else if (selectedCmd.prompt) {
       finalPrompt = `${selectedCmd.prompt}\n\nDetail dari user: ${trimmed}`;
     } else {
-      finalPrompt = trimmed;
+      finalPrompt = entityKind === "question"
+        ? `Instruksi custom user untuk soal fokus: ${trimmed}`
+        : trimmed;
     }
-    void dispatch(finalPrompt);
+    const inferredAction = entityKind === "group" && selectedCmd.label === "Buat / ganti stimulus"
+      ? "replace_stimulus"
+      : entityKind === "group" && selectedCmd.label === "Tambah 1 soal sesuai stimulus"
+      ? "add_question"
+      : entityKind === "group" && selectedCmd.label === "Tambah N soal ke group"
+      ? "add_questions"
+      : selectedCmd.action;
+    void dispatch(finalPrompt, inferredAction);
   }
 
   const commands = COMMANDS_BY_KIND[entityKind];
@@ -575,7 +614,7 @@ Konstrain:
           )}
 
           <div className="border-t border-[var(--border)] bg-[var(--accent)]/20 px-3 py-1.5 text-[9.5px] text-[var(--muted-foreground)]">
-            Hasil akan muncul sebagai proposal di panel AI. Konfirmasi dengan &ldquo;ya&rdquo; di chat.
+            {entityKind === "question" || entityKind === "group" ? "Hasil muncul sebagai inline preview. Tidak masuk ke chatbot." : "Hasil akan muncul sebagai proposal di panel AI. Konfirmasi dengan “ya” di chat."}
           </div>
         </div>,
         document.body,

@@ -1,0 +1,70 @@
+{
+  "compiled": {
+    "params": {
+      "level": "sd-sma",
+      "subject": "matematika",
+      "phase": "d"
+    },
+    "phase": "d",
+    "pdfList": [
+      {
+        "pdf": "https://drive.google.com/open?id=1qmR4_mWRJ-oLg9LANo4wPSDbaGXgjRr_",
+        "tags": "",
+        "year": "2022",
+        "source": "Mitra PMM"
+      },
+      {
+        "pdf": "https://drive.google.com/file/d/1QoR97OvQfYwFpa1l90C_bs-8WVi1VEe9/view?usp=sharing",
+        "tags": "",
+        "year": "2022",
+        "source": "BSKAP"
+      },
+      {
+        "pdf": "https://drive.google.com/file/d/1PL-weYrlH9OHGBjYKGuSyS2QxUvcXzrj/view?usp=drive_link",
+        "tags": "",
+        "year": "2024",
+        "source": "BSKAP"
+      },
+      {
+        "pdf": "https://drive.google.com/file/d/1Bx2anITz8EEkRCiXhLQsUPyEsT4ACuCL/view?usp=drive_link",
+        "tags": "",
+        "year": "2024",
+        "source": "BSKAP"
+      },
+      {
+        "pdf": "https://drive.google.com/file/d/1WTBNUugCKrIsw273KVwhEyWKFy4PpoPt/view?usp=drive_link",
+        "tags": "",
+        "year": "2024",
+        "source": "BSKAP"
+      }
+    ],
+    "generalInfo": "Pada akhir fase D, peserta didik dapat menyelesaikan masalah kontekstual peserta didik dengan menggunakan konsep-konsep dan keterampilan matematika yang dipelajari pada fase ini. Mereka mampu mengoperasikan secara efisien bilangan bulat, bilangan rasional dan irasional, bilangan desimal, bilangan berpangkat bulat dan akar, bilangan dalam notasi ilmiah; melakukan pemfaktoran bilangan prima, menggunakan faktor skala, proporsi dan laju perubahan. Mereka dapat menyajikan dan menyelesaikan persamaan dan pertidaksamaan linier satu variabel dan sistem persamaan linier dengan dua variabel dengan beberapa cara, memahami dan menyajikan relasi dan fungsi. Mereka dapat menentukan luas permukaan dan volume bangun ruang (prisma, tabung, bola, limas dan kerucut) untuk menyelesaikan masalah yang terkait, menjelaskan pengaruh perubahan secara proporsional dari bangun datar dan bangun ruang terhadap ukuran panjang, luas, dan/atau volume. Mereka dapat membuat jaring-jaring bangun ruang (prisma,  tabung, limas dan kerucut) dan membuat bangun ruang tersebut dari jaring- jaringnya. Mereka dapat menggunakan sifat-sifat hubungan sudut terkait dengan  garis transversal, sifat kongruen dan kesebangunan pada segitiga dan segiempat. Mereka dapat menunjukkan kebenaran teorema Pythagoras dan menggunakannya. Mereka dapat melakukan transformasi geometri tunggal di bidang koordinat Kartesius. Mereka dapat membuat dan menginterpretasi diagram batang dan diagram lingkaran. Mereka dapat mengambil sampel yang mewakili suatu populasi, menggunakan mean, median, modus, range untuk menyelesaikan masalah; dan menginvestigasi dampak perubahan data terhadap pengukuran pusat. Mereka dapat menjelaskan dan menggunakan pengertian peluang, frekuensi relatif dan frekuensi harapan satu kejadian pada suatu percobaan sederhana.",
+    "elements": [
+      {
+        "name": "Bilangan",
+        "content": "Di akhir fase D, peserta didik dapat membaca, menulis, dan membandingkan bilangan bulat, bilangan rasional dan irasional, bilangan desimal, bilangan berpangkat bulat dan akar, bilangan dalam notasi ilmiah. Mereka dapat menerapkan operasi aritmetika pada bilangan real, dan memberikan estimasi/perkiraan dalam menyelesaikan masalah (termasuk berkaitan dengan literasi finansial). Peserta didik dapat menggunakan faktorisasi prima dan pengertian rasio (skala, proporsi, dan laju perubahan) dalam penyelesaian masalah. "
+      },
+      {
+        "name": "Aljabar",
+        "content": "Di akhir fase D peserta didik dapat mengenali, memprediksi dan menggeneralisasi pola dalam bentuk susunan benda dan bilangan. Mereka dapat menyatakan suatu situasi ke dalam bentuk aljabar. Mereka dapat menggunakan sifat-sifat operasi (komutatif, asosiatif, dan distributif) untuk menghasilkan bentuk aljabar yang ekuivalen.  Peserta didik dapat memahami relasi dan fungsi (domain, kodomain, range) dan menyajikannya dalam bentuk diagram panah, tabel, himpunan pasangan berurutan, dan grafik. Mereka dapat membedakan beberapa fungsi nonlinear dari fungsi linear secara grafik. Mereka dapat menyelesaikan persamaan dan pertidaksamaan linear satu variabel. Mereka dapat menyajikan, menganalisis, dan menyelesaikan masalah dengan menggunakan relasi, fungsi dan persamaan linear. Mereka dapat menyelesaikan sistem persaman linear dua variabel melalui beberapa cara untuk penyelesaian masalah. "
+      },
+      {
+        "name": "Pengukuran",
+        "content": "Di akhir fase D peserta didik dapat menjelaskan cara untuk menentukan luas lingkaran dan menyelesaikan masalah yang terkait. Mereka dapat menjelaskan cara untuk menentukan luas permukaan dan volume bangun ruang (prisma, tabung, bola, limas dan kerucut) dan menyelesaikan masalah yang terkait. Mereka dapat menjelaskan pengaruh perubahan secara proporsional dari bangun datar dan bangun ruang terhadap ukuran panjang, besar sudut, luas, dan/ atau volume. "
+      },
+      {
+        "name": "Geometri",
+        "content": "Di akhir fase D peserta didik dapat membuat jaring-jaring bangun ruang (prisma, tabung, limas dan kerucut) dan membuat bangun ruang tersebut dari jaring-jaringnya. \nPeserta didik dapat menggunakan hubungan antar-sudut yang terbentuk oleh dua garis yang berpotongan, dan oleh dua garis sejajar yang dipotong sebuah garis transversal untuk menyelesaikan masalah (termasuk menentukan jumlah besar sudut dalam sebuah segitiga, menentukan besar sudut yang belum diketahui pada sebuah segitiga). Mereka dapat menjelaskan sifat-sifat kekongruenan dan kesebangunan pada segitiga dan segiempat, dan menggunakannya untuk menyelesaikan masalah. Mereka dapat menunjukkan kebenaran teorema Pythagoras dan menggunakannya dalam menyelesaikan masalah (termasuk jarak antara dua titik pada bidang koordinat Kartesius). \nPeserta didik dapat melakukan transformasi tunggal (refleksi, translasi, rotasi, dan dilatasi) titik, garis, dan bangun datar pada bidang koordinat Kartesius dan menggunakannya untuk menyelesaikan masalah. "
+      },
+      {
+        "name": "Analisis Data dan Peluang",
+        "content": "Di akhir fase D, peserta didik dapat merumuskan pertanyaan, mengumpulkan, menyajikan, dan menganalisis data untuk menjawab pertanyaan. Mereka dapat menggunakan diagram batang dan diagram lingkaran untuk menyajikan dan menginterpretasi data. Mereka dapat mengambil sampel yang mewakili suatu populasi untuk mendapatkan data yang terkait dengan mereka dan lingkungan mereka. Mereka dapat menentukan dan menafsirkan rerata (mean), median, modus, dan jangkauan (range) dari data tersebut untuk menyelesaikan masalah (termasuk membandingkan suatu data terhadap kelompoknya, membandingkan dua kelompok data, memprediksi, membuat keputusan). Mereka dapat menginvestigasi kemungkinan adanya perubahan pengukuran pusat tersebut akibat perubahan data.\nPeserta didik dapat menjelaskan dan menggunakan pengertian peluang dan frekuensi relatif untuk menentukan frekuensi harapan satu kejadian pada suatu percobaan sederhana (semua hasil percobaan dapat muncul secara merata)."
+      },
+      {
+        "name": "Kalkulus",
+        "content": "-"
+      }
+    ]
+  },
+  "subject": "Matematika"
+}

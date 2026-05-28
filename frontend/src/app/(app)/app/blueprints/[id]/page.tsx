@@ -11,9 +11,14 @@ import {
   publishBlueprintTemplate,
   unpublishBlueprintTemplate,
   archiveBlueprintTemplate,
+  getCurriculumCPReference,
+  listCurriculumCPReferences,
+  listSubjects,
   type BlueprintTemplate,
   type BlueprintSlot,
   type SlotPayload,
+  type Subject,
+  type CurriculumCPReference,
 } from "@/lib/modules-api";
 import { PageShell } from "@/components/layout/page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,7 +38,8 @@ import {
   Lock,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { KisiKisiFields } from "@/components/blueprint/kisi-kisi-fields";
+import { MerdekaKisiKisiFields } from "@/components/blueprint/merdeka-kisi-kisi-fields";
+import { phaseForGradeLevel } from "@/lib/merdeka-phase";
 
 const QUESTION_TYPES = [
   { value: "multiple_choice", label: "Pilihan Ganda" },
@@ -43,18 +49,17 @@ const QUESTION_TYPES = [
 ];
 
 const emptySlotForm: SlotPayload & { points: number } = {
-  competencyCode: "",
-  competencyDescription: "",
-  materi: "",
-  indikator: "",
+  capaianPembelajaran: "",
+  elemenCp: "",
+  tujuanPembelajaran: "",
+  materiPokok: "",
+  kelas: "",
+  semester: "",
+  indikatorSoal: "",
   cognitiveLevel: "",
   difficulty: "",
   questionType: "multiple_choice",
   points: 1,
-  akmKonten: "",
-  akmKonteks: "",
-  akmProses: "",
-  akmLevel: undefined,
 };
 
 export default function BlueprintDetailPage({
@@ -69,6 +74,9 @@ export default function BlueprintDetailPage({
   const [template, setTemplate] = useState<BlueprintTemplate | null>(null);
   const [slots, setSlots] = useState<BlueprintSlot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [cpReferences, setCpReferences] = useState<CurriculumCPReference[]>([]);
+  const [selectedCPReferenceId, setSelectedCPReferenceId] = useState("");
 
   // Slot edit/create state
   const [slotForm, setSlotForm] = useState<typeof emptySlotForm>(emptySlotForm);
@@ -100,16 +108,27 @@ export default function BlueprintDetailPage({
 
   useEffect(() => {
     reload();
+    listSubjects({ status: "active" }).then((res) => { if (res.data) setSubjects(res.data.data); });
   }, [templateId]);
 
-  const isAKM = template?.blueprintType?.startsWith("akm_");
+  useEffect(() => {
+    if (!template) return;
+    const phase = phaseForGradeLevel(template.gradeOrPhase || "") || "";
+    listCurriculumCPReferences({
+      search: template.subjectCode || undefined,
+      phase: phase || undefined,
+    }).then((res) => { if (res.data) setCpReferences(res.data.data); });
+  }, [template]);
+
   const isLocked = template?.status !== "draft";
   const canEdit = !!template && template.status === "draft";
 
   function openCreate() {
     setEditingSlot(null);
+    setSelectedCPReferenceId("");
     setSlotForm({
       ...emptySlotForm,
+      kelas: template?.gradeOrPhase ?? "",
       questionType: "multiple_choice",
     });
     setSlotErrors({});
@@ -118,41 +137,80 @@ export default function BlueprintDetailPage({
 
   function openEdit(s: BlueprintSlot) {
     setEditingSlot(s);
+    setSelectedCPReferenceId("");
     setSlotForm({
-      competencyCode: s.competencyCode ?? "",
-      competencyDescription: s.competencyDescription ?? "",
-      materi: s.materi ?? "",
-      indikator: s.indikator ?? "",
+      capaianPembelajaran: s.capaianPembelajaran ?? "",
+      elemenCp: s.elemenCp ?? "",
+      tujuanPembelajaran: s.tujuanPembelajaran ?? "",
+      materiPokok: s.materiPokok ?? "",
+      kelas: s.kelas ?? "",
+      semester: s.semester ?? "",
+      indikatorSoal: s.indikatorSoal ?? "",
       cognitiveLevel: s.cognitiveLevel ?? "",
       difficulty: s.difficulty ?? "",
       questionType: s.questionType ?? "multiple_choice",
       points: s.points,
-      akmKonten: s.akmKonten ?? "",
-      akmKonteks: s.akmKonteks ?? "",
-      akmProses: s.akmProses ?? "",
-      akmLevel: s.akmLevel ?? undefined,
     });
     setSlotErrors({});
     setShowCreate(true);
   }
 
+  async function handleCPReferenceChange(referenceId: string) {
+    setSelectedCPReferenceId(referenceId);
+    if (!referenceId) return;
+    const res = await getCurriculumCPReference(referenceId);
+    if (res.error || !res.data) {
+      toast({ tone: "error", title: "CP gagal dimuat", description: res.error?.message || "Tidak bisa memuat CP." });
+      return;
+    }
+    const ref = res.data;
+    setCpReferences((prev) => prev.some((r) => r.id === ref.id) ? prev : [ref, ...prev]);
+    setSlotForm((form) => ({ ...form, capaianPembelajaran: ref.generalCp }));
+  }
+
+  async function handleCPElementChange(elementId: string) {
+    if (!elementId) {
+      setSlotForm((form) => ({ ...form, cpElementId: undefined, elemenCp: "" }));
+      return;
+    }
+    let ref = cpReferences.find((r) => r.elements?.some((el) => el.id === elementId));
+    if (!ref && selectedCPReferenceId) {
+      const res = await getCurriculumCPReference(selectedCPReferenceId);
+      if (res.data) ref = res.data;
+    }
+    const element = ref?.elements?.find((el) => el.id === elementId);
+    if (!element) return;
+    setSlotForm((form) => ({
+      ...form,
+      cpElementId: element.id,
+      elemenCp: element.name,
+      capaianPembelajaran: ref?.generalCp || form.capaianPembelajaran,
+    }));
+  }
+
   async function submitSlot(e: React.FormEvent) {
     e.preventDefault();
     setSlotErrors({});
+    const indicator = (slotForm.indikatorSoal || "").trim();
+    if (indicator && !indicator.toLowerCase().startsWith("disajikan")) {
+      setSlotErrors({ indikatorSoal: "Indikator Soal harus diawali 'Disajikan ...'." });
+      return;
+    }
     setSubmittingSlot(true);
     const payload: SlotPayload = {
-      competencyCode: slotForm.competencyCode || undefined,
-      competencyDescription: slotForm.competencyDescription || undefined,
-      materi: slotForm.materi || undefined,
-      indikator: slotForm.indikator || undefined,
+      cpElementId: slotForm.cpElementId || undefined,
+      capaianPembelajaran: slotForm.capaianPembelajaran || undefined,
+      elemenCp: slotForm.elemenCp || undefined,
+      tujuanPembelajaran: slotForm.tujuanPembelajaran || undefined,
+      materiPokok: slotForm.materiPokok || undefined,
+      kelas: slotForm.kelas || undefined,
+      semester: slotForm.semester || undefined,
+      indikatorSoal: slotForm.indikatorSoal || undefined,
+
       cognitiveLevel: slotForm.cognitiveLevel || undefined,
       difficulty: slotForm.difficulty || undefined,
       questionType: slotForm.questionType || undefined,
       points: typeof slotForm.points === "number" ? slotForm.points : 1,
-      akmKonten: slotForm.akmKonten || undefined,
-      akmKonteks: slotForm.akmKonteks || undefined,
-      akmProses: slotForm.akmProses || undefined,
-      akmLevel: slotForm.akmLevel,
     };
     const res = editingSlot
       ? await updateTemplateSlot(editingSlot.id, payload)
@@ -278,7 +336,7 @@ export default function BlueprintDetailPage({
     <>
       <PageShell
         title={template.title}
-        subtitle={`${template.curriculumCode.toUpperCase()} · ${template.blueprintType.replace("akm_", "AKM ")} · ${slots.length} slot${slots.length !== 1 ? "s" : ""} · ${template.totalPoints} pts`}
+        subtitle={`Kurikulum Merdeka · CP/TP · ${slots.length} slot${slots.length !== 1 ? "s" : ""} · ${template.totalPoints} pts`}
         back={{ href: "/app/blueprints", label: "Back to blueprints" }}
         actions={
           <>
@@ -343,11 +401,7 @@ export default function BlueprintDetailPage({
               strict coverage
             </span>
           )}
-          {template.competencyLabel && (
-            <span className="rounded-md bg-[var(--accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
-              {template.competencyLabel}
-            </span>
-          )}
+          <span className="rounded-md bg-[var(--accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">CP + Elemen CP + TP</span>
         </div>
 
         {template.description && (
@@ -394,12 +448,11 @@ export default function BlueprintDetailPage({
                 <thead className="bg-[var(--accent)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
                     <th className="w-10 px-3 py-2 text-left font-medium">#</th>
-                    <th className="px-3 py-2 text-left font-medium">{template.competencyLabel || "Kompetensi"}</th>
-                    <th className="px-3 py-2 text-left font-medium">Materi</th>
+                    <th className="px-3 py-2 text-left font-medium">Elemen CP</th>
+                    <th className="px-3 py-2 text-left font-medium">Materi Pokok</th>
                     <th className="px-3 py-2 text-left font-medium">Level</th>
                     <th className="px-3 py-2 text-left font-medium">Tingkat</th>
                     <th className="px-3 py-2 text-left font-medium">Tipe</th>
-                    {isAKM && <th className="px-3 py-2 text-left font-medium">AKM</th>}
                     <th className="w-16 px-3 py-2 text-right font-medium">Pts</th>
                     {canEdit && <th className="w-20 px-3 py-2 text-right font-medium">Action</th>}
                   </tr>
@@ -418,17 +471,17 @@ export default function BlueprintDetailPage({
                         {s.position + 1}
                       </td>
                       <td className="px-3 py-2.5 font-medium text-[var(--foreground)]">
-                        {s.competencyCode || (
+                        {s.elemenCp || (
                           <span className="text-[var(--muted-foreground)] italic">—</span>
                         )}
-                        {s.competencyDescription && (
+                        {(s.tujuanPembelajaran || s.capaianPembelajaran) && (
                           <p className="mt-0.5 text-[10px] font-normal text-[var(--muted-foreground)] line-clamp-1">
-                            {s.competencyDescription}
+                            {s.tujuanPembelajaran || s.capaianPembelajaran}
                           </p>
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-[var(--foreground)]">
-                        {s.materi || (
+                        {s.materiPokok || (
                           <span className="text-[var(--muted-foreground)] italic">—</span>
                         )}
                       </td>
@@ -450,13 +503,6 @@ export default function BlueprintDetailPage({
                             s.questionType
                           : "—"}
                       </td>
-                      {isAKM && (
-                        <td className="px-3 py-2.5 text-[10px] text-[var(--muted-foreground)]">
-                          {[s.akmKonten, s.akmKonteks, s.akmProses, s.akmLevel ? `L${s.akmLevel}` : ""]
-                            .filter(Boolean)
-                            .join(" · ") || "—"}
-                        </td>
-                      )}
                       <td className="px-3 py-2.5 text-right font-mono text-[var(--foreground)]">
                         {s.points}
                       </td>
@@ -485,7 +531,7 @@ export default function BlueprintDetailPage({
                 </tbody>
                 <tfoot className="bg-[var(--accent)] text-[11px]">
                   <tr>
-                    <td colSpan={isAKM ? 7 : 6} className="px-3 py-2 text-right font-medium text-[var(--muted-foreground)]">
+                    <td colSpan={6} className="px-3 py-2 text-right font-medium text-[var(--muted-foreground)]">
                       Total
                     </td>
                     <td className="px-3 py-2 text-right font-mono font-semibold text-[var(--foreground)]">
@@ -518,48 +564,41 @@ export default function BlueprintDetailPage({
       >
         <form onSubmit={submitSlot} className="space-y-3">
           {/* Shared kisi-kisi block (Phase 9.10) — same form is used
-              by the inline question accordion editor. competencyDescription
-              + questionType + points stay outside this block since they
-              are blueprint-only metadata, not part of the kisi-kisi axis. */}
-          <KisiKisiFields
-            isAkm={!!isAKM}
-            competency={slotForm.competencyCode ?? ""}
-            competencyDescription={slotForm.competencyDescription ?? ""}
-            materi={slotForm.materi ?? ""}
-            indikator={slotForm.indikator ?? ""}
-            cognitive={slotForm.cognitiveLevel ?? ""}
+              by the inline question accordion editor. questionType +
+              points stay outside this block since they are blueprint-only
+              metadata, not part of the kisi-kisi axis. */}
+          <MerdekaKisiKisiFields
+            cpReferenceId={selectedCPReferenceId}
+            cpReferenceOptions={cpReferences.map((ref) => ({
+              value: ref.id,
+              label: `${ref.subjectName} · Fase ${ref.phase.toUpperCase()} · ${ref.levelCode}`,
+            }))}
+            cpElementId={slotForm.cpElementId ?? ""}
+            cpElementOptions={(cpReferences.find((ref) => ref.id === selectedCPReferenceId)?.elements ?? []).map((el) => ({
+              value: el.id,
+              label: el.name,
+            }))}
+            capaianPembelajaran={slotForm.capaianPembelajaran ?? ""}
+            elemenCp={slotForm.elemenCp ?? ""}
+            tujuanPembelajaran={slotForm.tujuanPembelajaran ?? ""}
+            materiPokok={slotForm.materiPokok ?? ""}
+            kelas={slotForm.kelas ?? ""}
+            semester={slotForm.semester ?? ""}
+            indikatorSoal={slotForm.indikatorSoal ?? ""}
+            cognitiveLevel={slotForm.cognitiveLevel ?? ""}
             difficulty={slotForm.difficulty ?? ""}
-            akmKonten={slotForm.akmKonten ?? ""}
-            akmKonteks={slotForm.akmKonteks ?? ""}
-            akmProses={slotForm.akmProses ?? ""}
-            akmLevel={
-              slotForm.akmLevel != null ? String(slotForm.akmLevel) : ""
-            }
-            onCompetency={(v) =>
-              setSlotForm({ ...slotForm, competencyCode: v })
-            }
-            onCompetencyDescription={(v) =>
-              setSlotForm({ ...slotForm, competencyDescription: v })
-            }
-            onMateri={(v) => setSlotForm({ ...slotForm, materi: v })}
-            onIndikator={(v) => setSlotForm({ ...slotForm, indikator: v })}
-            onCognitive={(v) =>
-              setSlotForm({ ...slotForm, cognitiveLevel: v })
-            }
-            onDifficulty={(v) =>
-              setSlotForm({ ...slotForm, difficulty: v })
-            }
-            onAkmKonten={(v) => setSlotForm({ ...slotForm, akmKonten: v })}
-            onAkmKonteks={(v) =>
-              setSlotForm({ ...slotForm, akmKonteks: v })
-            }
-            onAkmProses={(v) => setSlotForm({ ...slotForm, akmProses: v })}
-            onAkmLevel={(v) =>
-              setSlotForm({
-                ...slotForm,
-                akmLevel: v ? Number(v) : undefined,
-              })
-            }
+            errors={slotErrors}
+            onCPReferenceId={handleCPReferenceChange}
+            onCPElementId={handleCPElementChange}
+            onCapaianPembelajaran={(v) => setSlotForm({ ...slotForm, capaianPembelajaran: v })}
+            onElemenCp={(v) => setSlotForm({ ...slotForm, elemenCp: v })}
+            onTujuanPembelajaran={(v) => setSlotForm({ ...slotForm, tujuanPembelajaran: v })}
+            onMateriPokok={(v) => setSlotForm({ ...slotForm, materiPokok: v })}
+            onKelas={(v) => setSlotForm({ ...slotForm, kelas: v })}
+            onSemester={(v) => setSlotForm({ ...slotForm, semester: v })}
+            onIndikatorSoal={(v) => setSlotForm({ ...slotForm, indikatorSoal: v })}
+            onCognitiveLevel={(v) => setSlotForm({ ...slotForm, cognitiveLevel: v })}
+            onDifficulty={(v) => setSlotForm({ ...slotForm, difficulty: v })}
           />
           <div className="grid grid-cols-2 gap-2">
             <SelectField

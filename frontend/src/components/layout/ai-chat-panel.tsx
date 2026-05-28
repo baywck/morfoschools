@@ -6,17 +6,35 @@ import { Bot, Loader2, SendHorizontal, Sparkles, X, GraduationCap, Plus, Papercl
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { listAIModels } from "@/lib/modules-api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
+type AgentWorkflowResult = {
+  data?: {
+    redirectUrl?: string;
+    examId?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+function redirectUrlFromAgentResult(result: AgentWorkflowResult | undefined): string | null {
+  const redirectUrl = result?.data?.redirectUrl;
+  return typeof redirectUrl === "string" && redirectUrl.startsWith("/app/") ? redirectUrl : null;
+}
 
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   proposal?: {
-    proposalId: string;
-    toolName: string;
-    confirmationText: string;
-    expiresAt: string;
+    id?: string;
+    proposalId?: string;
+    workflow?: string;
+    toolName?: string;
+    preview?: string;
+    confirmationText?: string;
+    expiresAt?: string;
   };
   proposalStatus?: "pending" | "confirmed" | "cancelled";
 };
@@ -31,15 +49,14 @@ interface Model {
   badge?: string;
 }
 
-const models: Model[] = [
+const fallbackModels: Model[] = [
   { id: "morfoschools", name: "Morfoschools", description: "Default school AI", icon: <Zap className="h-3.5 w-3.5 text-[var(--brand)]" />, badge: "Default" },
-  { id: "gpt-4o", name: "GPT-4o", description: "OpenAI flagship", icon: <Sparkles className="h-3.5 w-3.5 text-[var(--success)]" /> },
-  { id: "claude", name: "Claude", description: "Anthropic", icon: <Brain className="h-3.5 w-3.5 text-purple-400" /> },
 ];
 
 function ModelSelector() {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(models[0]);
+  const [models, setModels] = useState<Model[]>(fallbackModels);
+  const [selected, setSelected] = useState(fallbackModels[0]);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +65,29 @@ function ModelSelector() {
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadModels() {
+      const res = await listAIModels();
+      if (cancelled || res.error || !res.data?.models?.length) return;
+      const next = res.data.models.map((model, index) => ({
+        id: model.id,
+        name: model.id,
+        description: `${res.data!.scope} provider`,
+        icon: index === 0 ? <Zap className="h-3.5 w-3.5 text-[var(--brand)]" /> : <Sparkles className="h-3.5 w-3.5 text-[var(--success)]" />,
+        badge: model.id === res.data!.defaultModel ? "Default" : undefined,
+      }));
+      setModels(next);
+      setSelected(next.find((model) => model.id === res.data!.defaultModel) || next[0]);
+    }
+    loadModels();
+    window.addEventListener("morfoschools:ai-settings-changed", loadModels);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("morfoschools:ai-settings-changed", loadModels);
+    };
   }, []);
 
   return (
@@ -181,7 +221,7 @@ function renderMessageContent(content: string) {
     } else {
       flushList();
       if (line.trim() === "") {
-        elements.push(<div key={`br-${i}`} className="h-2" />);
+        elements.push(<div key={`br-${i}`} className="h-3" />);
       } else {
         elements.push(<p key={`p-${i}`}>{renderInline(line)}</p>);
       }
@@ -276,7 +316,7 @@ function parseQuestionProposalBlock(block: string) {
 
 function QuestionProposalCard({ block, open, onToggle }: { block: string; open: boolean; onToggle: () => void }) {
   const q = React.useMemo(() => parseQuestionProposalBlock(block), [block]);
-  const previewStem = q.stem || "Detail soal";
+  const previewStem = (q.stem || "Detail soal").replace(/\\n/g, "\n");
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--shell-input-border)] bg-[var(--shell-elevated,var(--card))]/70 shadow-sm">
@@ -296,7 +336,7 @@ function QuestionProposalCard({ block, open, onToggle }: { block: string; open: 
             {q.points && <span className="rounded-full bg-[var(--brand)]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[var(--brand)]">{q.points}</span>}
             {q.warnings.length > 0 && <span className="rounded-full bg-[var(--warning)]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[var(--warning)]">{q.warnings.length} warning</span>}
           </span>
-          <span className="block max-h-12 overflow-hidden text-[11px] font-medium leading-relaxed text-[var(--shell-foreground)]">
+          <span className="block max-h-20 overflow-hidden whitespace-pre-line break-words text-[11px] font-medium leading-relaxed text-[var(--shell-foreground)]">
             {previewStem}
           </span>
         </span>
@@ -305,7 +345,7 @@ function QuestionProposalCard({ block, open, onToggle }: { block: string; open: 
 
       {open && (
         <div className="space-y-2 border-t border-[var(--shell-input-border)] px-3 py-2.5">
-          <div className="rounded-xl bg-[var(--shell-input-bg)]/70 p-2.5 text-[11px] leading-relaxed text-[var(--shell-foreground)]">
+          <div className="max-h-72 overflow-y-auto whitespace-pre-line break-words rounded-xl bg-[var(--shell-input-bg)]/70 p-3 text-[11px] leading-relaxed text-[var(--shell-foreground)]">
             {previewStem}
           </div>
           {q.options.length > 0 && (
@@ -314,14 +354,14 @@ function QuestionProposalCard({ block, open, onToggle }: { block: string; open: 
                 <div
                   key={opt.label}
                   className={cn(
-                    "flex gap-2 rounded-xl border px-2.5 py-2 text-[11px] leading-relaxed",
+                    "flex gap-2 rounded-xl border px-2.5 py-2 text-[11px] leading-relaxed break-words",
                     opt.correct
                       ? "border-[var(--success)]/40 bg-[var(--success)]/10 text-[var(--shell-foreground)]"
                       : "border-[var(--shell-input-border)] bg-[var(--shell-input-bg)]/45 text-[var(--shell-muted)]"
                   )}
                 >
                   <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold", opt.correct ? "bg-[var(--success)] text-white" : "bg-[var(--shell-active)] text-[var(--shell-foreground)]")}>{opt.label}</span>
-                  <span className="min-w-0 flex-1">{opt.text || <span className="text-[var(--warning)]">Opsi kosong</span>}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-line">{opt.text.replace(/\\n/g, "\n") || <span className="text-[var(--warning)]">Opsi kosong</span>}</span>
                   {opt.correct && <span className="shrink-0 text-[var(--success)]">✓</span>}
                 </div>
               ))}
@@ -342,13 +382,14 @@ function QuestionProposalCard({ block, open, onToggle }: { block: string; open: 
   );
 }
 
-function ProposalPreview({ text }: { text: string }) {
-  const { header, blocks } = React.useMemo(() => splitProposalBlocks(text), [text]);
+function ProposalPreview({ text }: { text?: string }) {
+  const safeText = text ?? "";
+  const { header, blocks } = React.useMemo(() => splitProposalBlocks(safeText), [safeText]);
   const [expanded, setExpanded] = React.useState<Record<number, boolean>>({});
   const [allOpen, setAllOpen] = React.useState(false);
 
   if (blocks.length < 3) {
-    return <>{renderMessageContent(text)}</>;
+    return <>{renderMessageContent(safeText)}</>;
   }
 
   const toggleAll = () => {
@@ -480,23 +521,25 @@ const MessageBubble = memo(function MessageBubble({
           ? "rounded-tr-md bg-[var(--brand)] text-white"
           : "rounded-tl-md bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[var(--shell-foreground)]"
       )}>
-        <div className="whitespace-pre-wrap [&_strong]:font-semibold [&_em]:italic">
-          {renderMessageContent(msg.content)}
-        </div>
+        {!(msg.proposal && msg.proposalStatus === "pending") && (
+          <div className="whitespace-pre-wrap [&_strong]:font-semibold [&_em]:italic">
+            {renderMessageContent(msg.content)}
+          </div>
+        )}
         {msg.proposal && msg.proposalStatus === "pending" && (
           <div className="mt-2.5 pt-2.5 border-t border-[var(--shell-input-border)]">
             <div className="text-[11px] leading-relaxed text-[var(--shell-foreground)] mb-2.5 [&_strong]:font-semibold [&_em]:italic [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--brand)]/40 [&_blockquote]:pl-2 [&_blockquote]:my-1 [&_blockquote]:text-[var(--shell-muted)] space-y-1">
-              <ProposalPreview text={msg.proposal.confirmationText} />
+              <ProposalPreview text={msg.proposal.confirmationText ?? msg.proposal.preview ?? msg.content} />
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => onConfirm(msg.proposal!.proposalId, index)}
+                onClick={() => onConfirm((msg.proposal!.proposalId ?? msg.proposal!.id)!, index)}
                 className="flex-1 h-7 rounded-lg bg-[var(--brand)] text-[11px] font-semibold text-white hover:opacity-90 active:scale-[0.97] transition-all"
               >
                 Konfirmasi
               </button>
               <button
-                onClick={() => onCancel(msg.proposal!.proposalId, index)}
+                onClick={() => onCancel((msg.proposal!.proposalId ?? msg.proposal!.id)!, index)}
                 className="flex-1 h-7 rounded-lg bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[11px] font-medium text-[var(--shell-muted)] hover:text-[var(--shell-foreground)] transition-colors"
               >
                 Batal
@@ -719,22 +762,35 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
       const csrfMatch = document.cookie.match(/csrf_token=([^;]+)/);
       const csrfToken = csrfMatch ? csrfMatch[1] : "";
 
-      const response = await fetch(`${API_BASE}/api/v1/ai/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          sessionId: sessionId || undefined,
-          message: trimmed,
-          shadow: {
-            route: pathname,
-            activeEntities: parseActiveEntities(pathname),
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 120_000);
+      let response: Response;
+      try {
+        response = await fetch(`${API_BASE}/api/v1/ai/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
           },
-        }),
-      });
+          credentials: "include",
+          signal: controller.signal,
+          body: JSON.stringify({
+            sessionId: sessionId || undefined,
+            message: trimmed,
+            shadow: {
+              route: pathname,
+              activeEntities: parseActiveEntities(pathname),
+            },
+          }),
+        });
+      } catch (err) {
+        const msg = err instanceof DOMException && err.name === "AbortError"
+          ? "AI agent terlalu lama merespons. Coba lagi dengan permintaan lebih kecil atau ulangi setelah beberapa detik."
+          : `Tidak bisa terhubung ke backend AI (${API_BASE}). Pastikan backend berjalan dan refresh halaman.`;
+        throw new Error(msg);
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
 
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.message?.content) {
@@ -760,7 +816,12 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
         // If the response indicates a successful mutation (no proposal = direct execution),
         // trigger data refresh so the app shell updates
         if (data.mutated) {
-          router.refresh();
+          const redirectUrl = redirectUrlFromAgentResult(data.result);
+          if (redirectUrl && redirectUrl !== pathname) {
+            router.push(redirectUrl);
+          } else {
+            router.refresh();
+          }
           window.dispatchEvent(new Event("morfoschools:data-changed"));
         }
       } else {
@@ -768,7 +829,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
         setMessages((curr) => [...curr, { role: "assistant", content, proposal: proposals[0], proposalStatus: "pending" }]);
         // Additional proposals as separate messages
         for (let i = 1; i < proposals.length; i++) {
-          setMessages((curr) => [...curr, { role: "assistant", content: proposals[i].confirmationText, proposal: proposals[i], proposalStatus: "pending" }]);
+          setMessages((curr) => [...curr, { role: "assistant", content: proposals[i].confirmationText ?? proposals[i].preview ?? content, proposal: proposals[i], proposalStatus: "pending" }]);
         }
       }
     } catch (err) {
@@ -801,7 +862,12 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
       setMessages((curr) => curr.map((m, i) => i === msgIndex ? { ...m, proposalStatus: "confirmed" as const } : m));
       const resultMsg = data?.result?.message || "Aksi berhasil dieksekusi.";
       setMessages((curr) => [...curr, { role: "assistant", content: `✅ ${resultMsg}` }]);
-      router.refresh();
+      const redirectUrl = redirectUrlFromAgentResult(data?.result);
+      if (redirectUrl && redirectUrl !== pathname) {
+        router.push(redirectUrl);
+      } else {
+        router.refresh();
+      }
       window.dispatchEvent(new Event("morfoschools:data-changed"));
     } catch {
       setError("Gagal menghubungi server.");

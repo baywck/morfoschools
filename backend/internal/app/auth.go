@@ -220,6 +220,24 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var effectiveTenant any
+	if auth.EffectiveTenantID != nil {
+		var tenant struct {
+			ID                        string   `json:"id"`
+			Name                      string   `json:"name"`
+			Code                      string   `json:"code"`
+			LogoURL                   *string  `json:"logoUrl"`
+			SchoolType                string   `json:"schoolType"`
+			EnabledPhases             []string `json:"enabledPhases"`
+			IncludeVocationalSubjects bool     `json:"includeVocationalSubjects"`
+		}
+		var enabledPhases string
+		if err := a.db.QueryRowContext(r.Context(), `SELECT id, name, code, logo_url, school_type, array_to_string(enabled_phases, ','), include_vocational_subjects FROM tenants WHERE id = $1`, *auth.EffectiveTenantID).Scan(&tenant.ID, &tenant.Name, &tenant.Code, &tenant.LogoURL, &tenant.SchoolType, &enabledPhases, &tenant.IncludeVocationalSubjects); err == nil {
+			tenant.EnabledPhases = parseDBTextArray(enabledPhases)
+			effectiveTenant = tenant
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]any{
 			"id":              auth.UserID,
@@ -228,6 +246,7 @@ func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 			"isPlatformAdmin": auth.IsPlatformAdmin,
 		},
 		"effectiveTenantId": auth.EffectiveTenantID,
+		"effectiveTenant":   effectiveTenant,
 		"roles":             auth.Roles,
 		"permissions":       auth.Permissions,
 	})
@@ -390,7 +409,7 @@ func isPublicPath(path string) bool {
 			return true
 		}
 	}
-	return strings.HasPrefix(path, "/assets/")
+	return strings.HasPrefix(path, "/assets/") || strings.HasPrefix(path, "/uploads/")
 }
 
 func generateSessionToken() string {

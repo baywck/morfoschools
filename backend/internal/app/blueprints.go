@@ -31,6 +31,7 @@ func (a *App) registerBlueprintTemplateRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/v1/blueprint-templates/{id}/unpublish", a.handleUnpublishBlueprintTemplate)
 	mux.HandleFunc("PATCH /api/v1/blueprint-templates/{id}/archive", a.handleArchiveBlueprintTemplate)
 	mux.HandleFunc("PATCH /api/v1/blueprint-templates/{id}/restore", a.handleRestoreBlueprintTemplate)
+	mux.HandleFunc("DELETE /api/v1/blueprint-templates/{id}", a.handleHardDeleteBlueprintTemplate)
 }
 
 type blueprintTemplateRow struct {
@@ -67,7 +68,7 @@ func (a *App) handleListBlueprintTemplates(w http.ResponseWriter, r *http.Reques
 	p := httpx.ParsePagination(r)
 	search := httpx.QueryString(r, "search", "")
 	status := httpx.QueryString(r, "status", "")
-	curriculum := httpx.QueryString(r, "curriculum", "")
+	curriculum := httpx.QueryString(r, "curriculum", "merdeka")
 	bptype := httpx.QueryString(r, "type", "")
 
 	var (
@@ -122,7 +123,7 @@ func (a *App) handleListBlueprintTemplates(w http.ResponseWriter, r *http.Reques
 		  FROM blueprint_templates t
 		  JOIN curricula c ON c.id = t.curriculum_id
 		  LEFT JOIN users u ON u.id = t.owner_user_id`+whereClause+
-			` ORDER BY t.updated_at DESC LIMIT `+limitArg+` OFFSET `+offsetArg, args...,
+		` ORDER BY t.updated_at DESC LIMIT `+limitArg+` OFFSET `+offsetArg, args...,
 	)
 	if err != nil {
 		a.logger.Error("list blueprint templates failed", "error", err)
@@ -249,36 +250,32 @@ func (a *App) handleCreateBlueprintTemplate(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req struct {
-		Title          string  `json:"title"`
-		Description    string  `json:"description"`
-		CurriculumCode string  `json:"curriculumCode"` // 'k13' | 'merdeka' | 'akm_*'
-		SubjectCode    string  `json:"subjectCode"`
-		GradeOrPhase   string  `json:"gradeOrPhase"`
-		BlueprintType  string  `json:"blueprintType"`  // 'reguler' | 'akm_literasi' | 'akm_numerasi'
-		StrictCoverage *bool   `json:"strictCoverage"`
+		Title          string `json:"title"`
+		Description    string `json:"description"`
+		CurriculumCode string `json:"curriculumCode"` // Merdeka-only in current product flow.
+		SubjectCode    string `json:"subjectCode"`
+		GradeOrPhase   string `json:"gradeOrPhase"`
+		BlueprintType  string `json:"blueprintType"` // kept as reguler for Merdeka kisi-kisi
+		StrictCoverage *bool  `json:"strictCoverage"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid body", r)
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
-	req.CurriculumCode = strings.TrimSpace(req.CurriculumCode)
-	if req.BlueprintType == "" {
-		req.BlueprintType = "reguler"
-	}
+	req.CurriculumCode = "merdeka"
+	req.BlueprintType = "reguler"
 
 	fields := map[string]string{}
 	if req.Title == "" {
 		fields["title"] = "Title is required"
 	}
-	if req.CurriculumCode == "" {
-		fields["curriculumCode"] = "curriculumCode is required (k13/merdeka/akm_numerasi/akm_literasi)"
+	for key, message := range a.validateTenantPhaseValue(r.Context(), tenantID, "gradeOrPhase", req.GradeOrPhase) {
+		fields[key] = message
 	}
-	if req.BlueprintType != "reguler" &&
-		req.BlueprintType != "akm_literasi" &&
-		req.BlueprintType != "akm_numerasi" {
-		fields["blueprintType"] = "blueprintType must be reguler/akm_literasi/akm_numerasi"
-	}
+	// Blueprints are now finalized around Kurikulum Merdeka only.
+	// Older K13/AKM rows remain readable in the database for compatibility,
+	// but new templates always use merdeka + reguler.
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
 		return
@@ -295,12 +292,7 @@ func (a *App) handleCreateBlueprintTemplate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// AKM blueprints default to strict_coverage = true unless caller
-	// explicitly says otherwise. Reguler defaults to false.
 	strict := false
-	if strings.HasPrefix(req.BlueprintType, "akm_") {
-		strict = true
-	}
 	if req.StrictCoverage != nil {
 		strict = *req.StrictCoverage
 	}
@@ -355,6 +347,12 @@ func (a *App) handleUpdateBlueprintTemplate(w http.ResponseWriter, r *http.Reque
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid body", r)
 		return
+	}
+	if req.GradeOrPhase != nil {
+		if fields := a.validateTenantPhaseValue(r.Context(), tenantID, "gradeOrPhase", *req.GradeOrPhase); len(fields) > 0 {
+			writeValidationError(w, fields, r)
+			return
+		}
 	}
 	parts := []string{"updated_at = now()", "version = version + 1"}
 	args := []any{}
@@ -435,6 +433,41 @@ func (a *App) handleArchiveBlueprintTemplate(w http.ResponseWriter, r *http.Requ
 func (a *App) handleRestoreBlueprintTemplate(w http.ResponseWriter, r *http.Request) {
 	a.transitionBlueprintTemplate(w, r, "draft",
 		"archived", "Template is not archived", "restore")
+}
+
+func (a *App) handleHardDeleteBlueprintTemplate(w http.ResponseWriter, r *http.Request) {
+	if !a.RequirePermission(w, r, "blueprints:write") {
+		return
+	}
+	id := r.PathValue("id")
+	if !a.requireBlueprintAccess(w, r, id, ActionDelete) {
+		return
+	}
+	if !a.RequireCSRF(w, r) {
+		return
+	}
+	tenantID := a.RequireEffectiveTenant(w, r)
+	if tenantID == "" {
+		return
+	}
+
+	res, err := a.db.ExecContext(r.Context(),
+		`DELETE FROM blueprint_templates WHERE id = $1 AND tenant_id = $2`,
+		id, tenantID,
+	)
+	if err != nil {
+		a.logger.Error("hard delete blueprint template failed", "error", err, "templateId", id)
+		writeErrorJSON(w, http.StatusInternalServerError, "delete_failed", "Could not permanently delete blueprint", r)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Template not found", r)
+		return
+	}
+	auth := AuthFromContext(r.Context())
+	a.audit(r.Context(), &tenantID, auth.UserID,
+		"blueprint_templates.hard_delete", "blueprint_template", id, r)
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": "deleted"})
 }
 
 // transitionBlueprintTemplate is a small DRY helper for status-change

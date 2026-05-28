@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"morfoschools/backend/internal/platform/httpx"
 )
@@ -12,6 +13,7 @@ func (a *App) registerTenantRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/tenants", a.handleListTenants)
 	mux.HandleFunc("POST /api/v1/tenants", a.handleCreateTenant)
 	mux.HandleFunc("PATCH /api/v1/tenants/{id}", a.handleUpdateTenant)
+	mux.HandleFunc("POST /api/v1/tenants/{id}/logo", a.handleUploadTenantLogo)
 	mux.HandleFunc("PATCH /api/v1/tenants/{id}/archive", a.handleArchiveTenant)
 }
 
@@ -50,7 +52,7 @@ func (a *App) handleListTenants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Query
-	query := `SELECT id, name, code, status, logo_url, created_at FROM tenants WHERE 1=1`
+	query := `SELECT id, name, code, status, logo_url, school_type, array_to_string(enabled_phases, ',') AS enabled_phases, include_vocational_subjects, created_at FROM tenants WHERE 1=1`
 	args := []any{}
 	argIdx = 1
 
@@ -77,21 +79,26 @@ func (a *App) handleListTenants(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type TenantRow struct {
-		ID        string  `json:"id"`
-		Name      string  `json:"name"`
-		Code      string  `json:"code"`
-		Status    string  `json:"status"`
-		LogoURL   *string `json:"logoUrl"`
-		CreatedAt string  `json:"createdAt"`
+		ID                        string   `json:"id"`
+		Name                      string   `json:"name"`
+		Code                      string   `json:"code"`
+		Status                    string   `json:"status"`
+		LogoURL                   *string  `json:"logoUrl"`
+		SchoolType                string   `json:"schoolType"`
+		EnabledPhases             []string `json:"enabledPhases"`
+		IncludeVocationalSubjects bool     `json:"includeVocationalSubjects"`
+		CreatedAt                 string   `json:"createdAt"`
 	}
 
 	var tenants []TenantRow
 	for rows.Next() {
 		var t TenantRow
-		if err := rows.Scan(&t.ID, &t.Name, &t.Code, &t.Status, &t.LogoURL, &t.CreatedAt); err != nil {
+		var enabledPhases string
+		if err := rows.Scan(&t.ID, &t.Name, &t.Code, &t.Status, &t.LogoURL, &t.SchoolType, &enabledPhases, &t.IncludeVocationalSubjects, &t.CreatedAt); err != nil {
 			a.logger.Error("scan tenant failed", "error", err)
 			continue
 		}
+		t.EnabledPhases = parseDBTextArray(enabledPhases)
 		tenants = append(tenants, t)
 	}
 
@@ -109,8 +116,11 @@ func (a *App) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name string `json:"name"`
-		Code string `json:"code"`
+		Name                      string   `json:"name"`
+		Code                      string   `json:"code"`
+		SchoolType                string   `json:"schoolType"`
+		EnabledPhases             []string `json:"enabledPhases"`
+		IncludeVocationalSubjects *bool    `json:"includeVocationalSubjects"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid request body", r)
@@ -126,6 +136,13 @@ func (a *App) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Code == "" {
 		fields["code"] = "Code is required"
+	}
+	if req.SchoolType == "" {
+		req.SchoolType = "sma"
+	}
+	profile, errFields := normalizeTenantEducationProfile(req.SchoolType, req.EnabledPhases, req.IncludeVocationalSubjects)
+	for k, v := range errFields {
+		fields[k] = v
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
@@ -144,8 +161,8 @@ func (a *App) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	auth := AuthFromContext(r.Context())
 	var tenantID string
 	err := a.db.QueryRowContext(r.Context(),
-		`INSERT INTO tenants (name, code, status) VALUES ($1, $2, 'active') RETURNING id`,
-		req.Name, req.Code,
+		`INSERT INTO tenants (name, code, status, school_type, enabled_phases, include_vocational_subjects) VALUES ($1, $2, 'active', $3, $4, $5) RETURNING id`,
+		req.Name, req.Code, profile.SchoolType, profile.EnabledPhases, profile.IncludeVocationalSubjects,
 	).Scan(&tenantID)
 	if err != nil {
 		a.logger.Error("insert tenant failed", "error", err)
@@ -181,10 +198,13 @@ func (a *App) handleCreateTenant(w http.ResponseWriter, r *http.Request) {
 	a.audit(r.Context(), &tenantID, auth.UserID, "tenants.create", "tenant", tenantID, r)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":     tenantID,
-		"name":   req.Name,
-		"code":   req.Code,
-		"status": "active",
+		"id":                        tenantID,
+		"name":                      req.Name,
+		"code":                      req.Code,
+		"status":                    "active",
+		"schoolType":                profile.SchoolType,
+		"enabledPhases":             profile.EnabledPhases,
+		"includeVocationalSubjects": profile.IncludeVocationalSubjects,
 	})
 }
 
@@ -213,8 +233,11 @@ func (a *App) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name   *string `json:"name"`
-		Status *string `json:"status"`
+		Name                      *string  `json:"name"`
+		Status                    *string  `json:"status"`
+		SchoolType                *string  `json:"schoolType"`
+		EnabledPhases             []string `json:"enabledPhases"`
+		IncludeVocationalSubjects *bool    `json:"includeVocationalSubjects"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid request body", r)
@@ -237,21 +260,115 @@ func (a *App) handleUpdateTenant(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.SchoolType != nil || req.EnabledPhases != nil || req.IncludeVocationalSubjects != nil {
+		current, err := a.loadTenantEducationProfile(r.Context(), tenantID)
+		if err != nil {
+			a.logger.Error("load tenant education profile failed", "error", err)
+			writeErrorJSON(w, http.StatusInternalServerError, "update_failed", "Could not update tenant", r)
+			return
+		}
+		schoolType := current.SchoolType
+		if req.SchoolType != nil {
+			schoolType = *req.SchoolType
+		}
+		phases := current.EnabledPhases
+		if req.EnabledPhases != nil {
+			phases = req.EnabledPhases
+		}
+		includeVocational := current.IncludeVocationalSubjects
+		if req.IncludeVocationalSubjects != nil {
+			includeVocational = *req.IncludeVocationalSubjects
+		}
+		profile, fields := normalizeTenantEducationProfile(schoolType, phases, &includeVocational)
+		if len(fields) > 0 {
+			writeValidationError(w, fields, r)
+			return
+		}
+		_, err = a.db.ExecContext(r.Context(), `UPDATE tenants SET school_type = $1, enabled_phases = $2, include_vocational_subjects = $3, updated_at = now() WHERE id = $4`, profile.SchoolType, profile.EnabledPhases, profile.IncludeVocationalSubjects, tenantID)
+		if err != nil {
+			a.logger.Error("update tenant education profile failed", "error", err)
+			writeErrorJSON(w, http.StatusInternalServerError, "update_failed", "Could not update tenant", r)
+			return
+		}
+	}
 
 	// Audit
 	auth := AuthFromContext(r.Context())
 	a.audit(r.Context(), &tenantID, auth.UserID, "tenants.update", "tenant", tenantID, r)
 
 	// Return updated
-	var name, code, status string
-	_ = a.db.QueryRowContext(r.Context(), `SELECT name, code, status FROM tenants WHERE id = $1`, tenantID).Scan(&name, &code, &status)
+	var name, code, status, schoolType string
+	var enabledPhasesRaw string
+	var includeVocational bool
+	var logoURL *string
+	_ = a.db.QueryRowContext(r.Context(), `SELECT name, code, status, logo_url, school_type, array_to_string(enabled_phases, ','), include_vocational_subjects FROM tenants WHERE id = $1`, tenantID).Scan(&name, &code, &status, &logoURL, &schoolType, &enabledPhasesRaw, &includeVocational)
+	enabledPhases := parseDBTextArray(enabledPhasesRaw)
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":     tenantID,
-		"name":   name,
-		"code":   code,
-		"status": status,
+		"id":                        tenantID,
+		"name":                      name,
+		"code":                      code,
+		"status":                    status,
+		"logoUrl":                   logoURL,
+		"schoolType":                schoolType,
+		"enabledPhases":             enabledPhases,
+		"includeVocationalSubjects": includeVocational,
 	})
+}
+
+func (a *App) handleUploadTenantLogo(w http.ResponseWriter, r *http.Request) {
+	if !a.RequirePermission(w, r, "tenants:write") {
+		return
+	}
+	if !a.RequireCSRF(w, r) {
+		return
+	}
+	tenantID := r.PathValue("id")
+	if tenantID == "" {
+		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Tenant ID is required", r)
+		return
+	}
+	var tenantName string
+	err := a.db.QueryRowContext(r.Context(), `SELECT name FROM tenants WHERE id = $1`, tenantID).Scan(&tenantName)
+	if err != nil {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "Tenant not found", r)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+	if err := r.ParseMultipartForm(2 << 20); err != nil {
+		writeValidationError(w, map[string]string{"logo": "Logo maksimal 2MB"}, r)
+		return
+	}
+	file, header, err := r.FormFile("logo")
+	if err != nil {
+		writeValidationError(w, map[string]string{"logo": "Logo file is required"}, r)
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if !allowedLogoContentType(contentType) {
+		writeValidationError(w, map[string]string{"logo": "Logo harus berupa PNG, JPG, WEBP, GIF, atau SVG"}, r)
+		return
+	}
+	key := tenantLogoObjectKey(tenantName, header.Filename, contentType)
+	logoURL, err := a.uploadTenantLogo(r.Context(), key, contentType, file)
+	if err != nil {
+		a.logger.Error("upload tenant logo failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "upload_failed", "Could not upload logo", r)
+		return
+	}
+	logoURL = logoURL + "?v=" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	_, err = a.db.ExecContext(r.Context(), `UPDATE tenants SET logo_url = $1, updated_at = now() WHERE id = $2`, logoURL, tenantID)
+	if err != nil {
+		a.logger.Error("save tenant logo failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "update_failed", "Could not save logo", r)
+		return
+	}
+	auth := AuthFromContext(r.Context())
+	a.audit(r.Context(), &tenantID, auth.UserID, "tenants.logo_upload", "tenant", tenantID, r)
+	writeJSON(w, http.StatusOK, map[string]any{"id": tenantID, "logoUrl": logoURL})
 }
 
 // --- Archive Tenant ---

@@ -130,11 +130,11 @@ func (a *App) handleCreateTeacherFull(w http.ResponseWriter, r *http.Request) {
 	a.audit(r.Context(), &tenantID, auth.UserID, "teachers.create_full", "teacher", teacherID, r)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":       teacherID,
-		"userId":   userID,
-		"email":    req.Email,
+		"id":          teacherID,
+		"userId":      userID,
+		"email":       req.Email,
 		"displayName": req.DisplayName,
-		"status":   "active",
+		"status":      "active",
 	})
 }
 
@@ -235,11 +235,11 @@ func (a *App) handleCreateStudentFull(w http.ResponseWriter, r *http.Request) {
 	a.audit(r.Context(), &tenantID, auth.UserID, "students.create_full", "student", studentID, r)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":       studentID,
-		"userId":   userID,
-		"email":    req.Email,
+		"id":          studentID,
+		"userId":      userID,
+		"email":       req.Email,
 		"displayName": req.DisplayName,
-		"status":   "active",
+		"status":      "active",
 	})
 }
 
@@ -340,10 +340,10 @@ func (a *App) handleCreateStaffFull(w http.ResponseWriter, r *http.Request) {
 	a.audit(r.Context(), &tenantID, auth.UserID, "staff.create_full", "staff", staffID, r)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":       staffID,
-		"userId":   userID,
-		"email":    req.Email,
+		"id":          staffID,
+		"userId":      userID,
+		"email":       req.Email,
 		"displayName": req.DisplayName,
-		"status":   "active",
+		"status":      "active",
 	})
 }

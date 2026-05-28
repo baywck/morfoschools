@@ -48,6 +48,7 @@ Canonical vocabulary. All code, UI labels, and docs must use these terms consist
 | **Master Admin** | Platform-level. Kelola semua tenant. Tidak punya default tenant. |
 | **School Admin** | Admin satu tenant/sekolah. |
 | **Academic Admin** | Operasional akademik (kelas, mapel, jadwal). |
+| **Tenant Education Profile** | Profil jenjang tenant yang menentukan school type, enabled phases, dan apakah subject vokasi/SMK ikut aktif. |
 | **Teacher** | Buat course, kelola exam, grading. |
 | **Student** | Akses program, ikut exam, lihat progress. |
 | **Staff** | Operasional terbatas. |

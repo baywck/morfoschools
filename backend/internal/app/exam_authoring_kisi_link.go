@@ -24,8 +24,10 @@ func ensureQuestionKisiKisiLink(ctx context.Context, tx *sql.Tx, tenantID string
 		INSERT INTO exam_blueprint_slots (
 		    exam_blueprint_id, position,
 		    competency_code, competency_description, materi, indikator,
-		    cognitive_level, difficulty, question_type, points
-		) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10)
+		    cognitive_level, difficulty, question_type, points,
+		    capaian_pembelajaran, elemen_cp, materi_pokok, indikator_soal
+		) VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,
+		          NULLIF($4,''),NULLIF($3,''),NULLIF($5,''),NULLIF($6,''))
 		RETURNING id::text`,
 		blueprintID, position, item.CompetencyCode, item.CompetencyDescription, item.Materi, item.Indikator,
 		item.CognitiveLevel, item.Difficulty, item.QuestionType, item.points,

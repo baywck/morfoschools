@@ -28,11 +28,11 @@ import (
 // exam_questions.content untouched.
 
 var (
-	htmlTagRe   = regexp.MustCompile(`<[^>]+>`)
-	mathBlockRe = regexp.MustCompile(`\$\$[^$]+\$\$`)
+	htmlTagRe    = regexp.MustCompile(`<[^>]+>`)
+	mathBlockRe  = regexp.MustCompile(`\$\$[^$]+\$\$`)
 	mathInlineRe = regexp.MustCompile(`\$[^$\n]+\$`)
-	wsRe        = regexp.MustCompile(`\s+`)
-	punctRe     = regexp.MustCompile(`[\p{P}\p{S}]+`)
+	wsRe         = regexp.MustCompile(`\s+`)
+	punctRe      = regexp.MustCompile(`[\p{P}\p{S}]+`)
 )
 
 // Politeness prefixes that frequently appear at the start of question
