@@ -7,7 +7,8 @@ import (
 )
 
 func (a *App) callBlueprintSlotsLLMJSON(ctx context.Context, provider resolvedAIProvider, prompt, userMessage string) (string, error) {
-	resp, err := a.callLLMWithProvider(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}})
+	extra := map[string]any{"response_format": map[string]string{"type": "json_object"}}
+	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}}, 0.2, 4000, extra)
 	if err != nil {
 		return "", err
 	}

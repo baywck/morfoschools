@@ -495,6 +495,10 @@ func fetchAIModels(ctx context.Context, baseURL, apiKey string) ([]aiModelInfo, 
 }
 
 func (a *App) callLLMWithProvider(ctx context.Context, provider resolvedAIProvider, messages []llmMessage) (*llmResponse, error) {
+	return a.callLLMWithProviderOptions(ctx, provider, messages, 0.4, 1200, nil)
+}
+
+func (a *App) callLLMWithProviderOptions(ctx context.Context, provider resolvedAIProvider, messages []llmMessage, temperature float64, maxTokens int, extra map[string]any) (*llmResponse, error) {
 	model := provider.DefaultModel
 	if model == "" && len(provider.Models) > 0 {
 		model = provider.Models[0].ID
@@ -502,7 +506,13 @@ func (a *App) callLLMWithProvider(ctx context.Context, provider resolvedAIProvid
 	if model == "" {
 		model = "MORFOSCHOOLS"
 	}
-	body := map[string]any{"model": model, "messages": messages, "temperature": 0.4, "max_tokens": 1200}
+	if maxTokens <= 0 {
+		maxTokens = 1200
+	}
+	body := map[string]any{"model": model, "messages": messages, "temperature": temperature, "max_tokens": maxTokens}
+	for k, v := range extra {
+		body[k] = v
+	}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
