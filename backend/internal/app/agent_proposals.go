@@ -114,6 +114,14 @@ func (a *App) tryConfirmLatestAgentProposalFromChat(w http.ResponseWriter, r *ht
 		writeErrorJSON(w, http.StatusGone, "expired", "This proposal has expired", r)
 		return true
 	}
+	if fields := a.validateAgentProposalBeforeConfirm(r.Context(), tenantID, userID, agentWorkflow(workflow), args); len(fields) > 0 {
+		content := buildAgentProposalValidationMessage(fields)
+		b, _ := json.Marshal(map[string]any{"fields": fields})
+		_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_proposals SET status='failed', error=$2, result=$3 WHERE id=$1`, proposalID, "validation failed", b)
+		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false, "validation": fields})
+		return true
+	}
 	result, err := a.executeAgentWorkflow(r.Context(), tenantID, userID, agentWorkflow(workflow), args)
 	if err != nil {
 		b, _ := json.Marshal(map[string]any{"error": err.Error()})
