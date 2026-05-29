@@ -164,7 +164,8 @@ func (a *App) generateBlueprintSlotEditDraft(ctx context.Context, tenantID, user
 	}
 	beforeJSON, _ := json.Marshal(before)
 	prompt := `Anda mengubah SATU slot kisi-kisi Kurikulum Merdeka. Jangan hapus slot. Jangan membuat soal. Revisi hanya field slot.
-Wajib patuh: tanpa KD/SK; CP, Elemen CP, TP, Materi, Level, Indikator. TP minimal Audience 'Peserta didik' + satu Behavior KKO sesuai level; Condition/Degree dianjurkan. Indikator wajib diawali/berisi stimulus: 'Disajikan ... peserta didik dapat ...'. KKO TP, level, dan indikator harus selaras.
+Wajib patuh: tanpa KD/SK; CP, Elemen CP, TP, Materi, Level, Indikator. TP minimal lengkap ABCD: Audience = "Peserta didik"; Behavior = KKO + kompetensi; Condition = konteks/kondisi belajar; Degree = tingkat keberhasilan. Indikator wajib diawali/berisi stimulus: 'Disajikan ... peserta didik dapat ...'. KKO TP, level, dan indikator harus selaras.
+Jika instruksi user umum seperti "perbaiki kisi-kisi", lakukan minimal satu peningkatan bermakna pada tujuanPembelajaran dan/atau indikatorSoal agar lebih spesifik, ABCD, terukur, dan selaras level kognitif. Jangan mengembalikan slot identik.
 Kembalikan JSON object valid saja. Boleh root {"slot":{...}} atau langsung field di root. Field: capaianPembelajaran, elemenCp, tujuanPembelajaran, materiPokok, kelas, semester, cognitiveLevel, difficulty, indikatorSoal, questionType, points. WAJIB sertakan SEMUA field di atas dengan nilai final (yang berubah maupun yang dipertahankan), bukan hanya yang berubah.`
 	user := fmt.Sprintf("SlotID: %s\nSlot saat ini JSON:\n%s\n\nInstruksi user:\n%s", slotID, string(beforeJSON), instruction)
 	content, err := a.callBlueprintSlotEditLLMJSON(ctx, provider, prompt, user)
@@ -175,7 +176,7 @@ Kembalikan JSON object valid saja. Boleh root {"slot":{...}} atau langsung field
 	var wrapped struct {
 		Slot *slotPayload `json:"slot"`
 	}
-	if err := json.Unmarshal([]byte(content), &wrapped); err == nil && wrapped.Slot != nil {
+	if err := json.Unmarshal([]byte(content), &wrapped); err == nil && wrapped.Slot != nil && slotPayloadHasEditableValue(*wrapped.Slot) {
 		return *wrapped.Slot, nil
 	}
 	var flat slotPayload
@@ -184,6 +185,10 @@ Kembalikan JSON object valid saja. Boleh root {"slot":{...}} atau langsung field
 		return slotPayload{}, err
 	}
 	return flat, nil
+}
+
+func slotPayloadHasEditableValue(p slotPayload) bool {
+	return p.CapaianPembelajaran != nil || p.ElemenCP != nil || p.TujuanPembelajaran != nil || p.MateriPokok != nil || p.Kelas != nil || p.Semester != nil || p.CognitiveLevel != nil || p.Difficulty != nil || p.IndikatorSoal != nil || p.QuestionType != nil || p.Points != nil
 }
 
 func (a *App) callBlueprintSlotEditLLMJSON(ctx context.Context, provider resolvedAIProvider, prompt, userMessage string) (string, error) {

@@ -566,7 +566,8 @@ function KisiKisiManagerPanel({
     try {
       const res = await aiEditExamBlueprintSlot(aiTarget.id, aiInstruction.trim());
       if (res.error) {
-        toast({ tone: "error", title: "AI gagal membuat perubahan", description: res.error.message });
+        const fieldMessage = res.error.fields ? Object.values(res.error.fields).filter(Boolean).join(" ") : "";
+        toast({ tone: "error", title: "AI gagal membuat perubahan", description: fieldMessage || res.error.message });
         return;
       }
       setAiProposal(res.data ?? null);
