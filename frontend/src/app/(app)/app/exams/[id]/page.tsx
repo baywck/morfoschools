@@ -617,7 +617,7 @@ function KisiKisiManagerPanel({
               </div>
             </div>
           </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] print:border-black print:shadow-none">
+          <div className="hidden rounded-xl border border-[var(--border)] bg-[var(--card)] print:block print:border-black print:shadow-none md:block">
             <div className="overflow-x-auto md:overflow-x-visible">
               <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-[var(--muted)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -662,6 +662,31 @@ function KisiKisiManagerPanel({
                 </tbody>
               </table>
             </div>
+          </div>
+          <div className="space-y-3 md:hidden">
+            {slots.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--accent)] p-6 text-center text-[12px] text-[var(--muted-foreground)]">Belum ada slot kisi-kisi.</div>
+            ) : slots.map((slot) => (
+              <div key={slot.id} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {slot.question ? <QuestionNumberBadge questionNumber={Math.max(1, (slot.question.sortOrder ?? 0) + 1)} content={slot.question.content} /> : <span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">Belum ada soal</span>}
+                      <span className="rounded-md bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted-foreground)]">{slot.cognitiveLevel || "-"}</span>
+                      <span className="rounded-md bg-[var(--brand-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand)]">{questionTypeLabel(slot.questionType)}</span>
+                    </div>
+                    <p className="mt-2 text-[13px] font-bold text-[var(--foreground)]">{slot.elemenCp || "Elemen belum diisi"}</p>
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[var(--muted-foreground)]">{slot.materiPokok || "Materi belum diisi"}</p>
+                  </div>
+                  {canWrite && <RowActions actions={[{ label: "Edit", icon: <Pencil size={13} />, onClick: () => openEditSlot(slot) }, { label: "Hapus", icon: <Trash2 size={13} />, variant: "danger", onClick: () => setDeleteTarget(slot) }]} />}
+                </div>
+                <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
+                  <MobileKisiField label="TP" value={slot.tujuanPembelajaran} />
+                  <MobileKisiField label="Indikator" value={slot.indikatorSoal} />
+                  <MobileKisiField label="CP" value={slot.capaianPembelajaran} clamp />
+                </div>
+              </div>
+            ))}
           </div>
           <div className="space-y-2"><h3 className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">Soal belum terhubung</h3>{unlinked.length === 0 ? <p className="rounded-xl border border-[var(--border)] bg-[var(--success-soft)] p-4 text-[12px] font-medium text-[var(--success)]">Semua soal sudah terhubung ke kisi-kisi.</p> : unlinked.map((q) => <div key={q.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-semibold text-[var(--muted-foreground)]">{questionTypeLabel(q.questionType)} · {q.points} pts</p><span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">unlinked</span></div><div className="mt-2"><RenderedContent html={q.content} className="text-[12px]" /></div></div>)}</div>
           <RightPullSheet
@@ -720,6 +745,15 @@ function KisiKisiManagerPanel({
   );
 }
 
+
+function MobileKisiField({ label, value, clamp }: { label: string; value?: string | null; clamp?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">{label}</p>
+      <p className={cn("mt-0.5 break-words text-[12px] leading-relaxed text-[var(--foreground)]", clamp && "line-clamp-3")}>{value || "-"}</p>
+    </div>
+  );
+}
 
 function CurriculumContextNotice({ context }: { context: ExamCurriculumContext | null }) {
   if (!context) {
