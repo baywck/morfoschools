@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+type blueprintSlotsLLMOutput struct {
+	Topic string                    `json:"topic"`
+	Slots []agentBlueprintSlotDraft `json:"slots"`
+}
+
 func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID string, req aiChatRequest, lower string) (agentCreateBlueprintSlotsArgs, error) {
 	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
 	count := requestedBlueprintSlotCount(lower)
