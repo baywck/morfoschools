@@ -23,6 +23,10 @@ function formatSegment(segment: string) {
     .join(" ");
 }
 
+function truncateMobileBreadcrumb(label: string) {
+  return label.length > 12 ? `${label.slice(0, 12)}...` : label;
+}
+
 interface TopbarProps {
   onToggleAiChat?: () => void;
   aiChatOpen?: boolean;
@@ -80,10 +84,10 @@ export function Topbar({ onToggleAiChat, aiChatOpen }: TopbarProps) {
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
                   {index === displaySegments.length - 1 ? (
-                    <BreadcrumbPage>{formatSegment(segment)}</BreadcrumbPage>
+                    <BreadcrumbPage title={formatSegment(segment)}><span className="md:hidden">{truncateMobileBreadcrumb(formatSegment(segment))}</span><span className="hidden md:inline">{formatSegment(segment)}</span></BreadcrumbPage>
                   ) : (
-                    <BreadcrumbLink href={`/app/${displaySegments.slice(0, index + 1).join("/")}`}>
-                      {formatSegment(segment)}
+                    <BreadcrumbLink href={`/app/${displaySegments.slice(0, index + 1).join("/")}`} title={formatSegment(segment)}>
+                      <span className="md:hidden">{truncateMobileBreadcrumb(formatSegment(segment))}</span><span className="hidden md:inline">{formatSegment(segment)}</span>
                     </BreadcrumbLink>
                   )}
                 </BreadcrumbItem>
