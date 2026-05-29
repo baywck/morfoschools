@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useId, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-provider";
 import { useToast } from "@/components/ui/toast";
@@ -527,19 +527,19 @@ function KisiKisiManagerPanel({
               </div>
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] print:border-black print:shadow-none">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] print:border-black print:shadow-none">
             <div className="overflow-x-auto">
               <table className="min-w-[980px] w-full border-collapse text-left text-[11px]">
                 <thead className="bg-[var(--muted)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
                     <th className="w-12 border-b border-[var(--border)] px-2 py-2 text-center">No</th>
+                    <th className="w-16 border-b border-[var(--border)] px-2 py-2 text-center">Soal</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">CP / Elemen</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Tujuan Pembelajaran</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Materi</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Indikator Soal</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Bentuk</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Level</th>
-                    <th className="border-b border-[var(--border)] px-2 py-2 text-center">Soal</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -548,15 +548,15 @@ function KisiKisiManagerPanel({
                   ) : slots.map((slot) => (
                     <tr key={slot.id} className="align-top odd:bg-[var(--background)] even:bg-[var(--accent)]/40">
                       <td className="border-t border-[var(--border)] px-2 py-2 text-center font-semibold text-[var(--foreground)]">{slot.position}</td>
+                      <td className="border-t border-[var(--border)] px-2 py-2 text-center">
+                        {slot.question ? <QuestionNumberBadge questionNumber={Math.max(1, (slot.question.sortOrder ?? 0) + 1)} content={slot.question.content} /> : <span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">-</span>}
+                      </td>
                       <td className="border-t border-[var(--border)] px-2 py-2"><p className="font-semibold text-[var(--foreground)]">{slot.elemenCp || "-"}</p><p className="mt-1 line-clamp-3 text-[var(--muted-foreground)]">{slot.capaianPembelajaran || "-"}</p></td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.tujuanPembelajaran || "-"}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.materiPokok || "-"}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.indikatorSoal || "-"}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--muted-foreground)]">{questionTypeLabel(slot.questionType)}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--muted-foreground)]">{slot.cognitiveLevel || "-"}</td>
-                      <td className="border-t border-[var(--border)] px-2 py-2 text-center">
-                        {slot.question ? <QuestionNumberBadge questionNumber={slot.question.sortOrder || slot.position} content={slot.question.content} /> : <span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">-</span>}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -585,11 +585,24 @@ function KisiActionButton({ icon, label, onClick }: { icon: React.ReactNode; lab
 }
 
 function QuestionNumberBadge({ questionNumber, content }: { questionNumber: number; content: string }) {
+  const tooltipId = useId();
+
   return (
-    <span className="group relative inline-flex">
-      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--brand-soft)] px-2 text-[11px] font-bold text-[var(--brand)]">{questionNumber}</span>
-      <span className="pointer-events-none fixed left-1/2 top-24 z-[80] hidden w-[min(520px,calc(100vw-32px))] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--popover)] p-3 text-left shadow-xl group-hover:block">
-        <RenderedContent html={content} className="max-h-[60vh] overflow-auto text-[12px] text-[var(--foreground)]" />
+    <span className="group relative inline-flex overflow-visible">
+      <button
+        type="button"
+        aria-describedby={tooltipId}
+        className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--brand-soft)] px-2 text-[11px] font-bold text-[var(--brand)] transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+      >
+        {questionNumber}
+      </button>
+      <span
+        id={tooltipId}
+        role="tooltip"
+        className="pointer-events-none absolute left-full top-1/2 z-[100] ml-2 hidden w-[min(420px,calc(100vw-48px))] -translate-y-1/2 rounded-xl border border-[var(--border)] bg-[var(--popover)] p-3 text-left shadow-2xl group-hover:block group-focus-within:block"
+      >
+        <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-[var(--border)] bg-[var(--popover)]" />
+        <RenderedContent html={content} className="relative max-h-64 overflow-auto text-[12px] text-[var(--foreground)]" />
       </span>
     </span>
   );
