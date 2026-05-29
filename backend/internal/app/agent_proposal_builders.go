@@ -14,6 +14,9 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 		writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat proposal kisi-kisi. Coba ulang sebentar lagi atau beri topik lebih spesifik.", r)
 		return true
 	}
+	if r.Context().Err() != nil {
+		return true
+	}
 	if fields := a.validateAgentCreateBlueprintSlotsArgs(r.Context(), tenantID, userID, args); len(fields) > 0 {
 		badSlots := 0
 		for k := range fields {
@@ -27,8 +30,14 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 		} else {
 			content = buildAgentProposalValidationMessage(fields)
 		}
+		if r.Context().Err() != nil {
+			return true
+		}
 		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false, "validation": fields})
+		return true
+	}
+	if r.Context().Err() != nil {
 		return true
 	}
 	cleanArgs, _ := json.Marshal(args)

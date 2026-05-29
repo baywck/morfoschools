@@ -14,6 +14,23 @@ func isBlueprintPageRequest(req aiChatRequest) bool {
 // "langsung buatkan 10 sekaligus"). It deliberately requires an imperative
 // creation verb so planning phrases like "aku berencana membuat 10 soal" or
 // "aku ingin membuat kisi-kisi" do NOT match.
+func isBlueprintSlotPlanningQuestion(lower string) bool {
+	lower = strings.ToLower(strings.TrimSpace(lower))
+	if !(strings.Contains(lower, "kisi-kisi") || strings.Contains(lower, "kisi kisi") || strings.Contains(lower, "slot")) {
+		return false
+	}
+	markers := []string{
+		"aku ingin", "saya ingin", "aku mau", "saya mau", "aku berencana", "saya berencana",
+		"dapatkah", "bisakah", "bisa bantu", "bantu aku", "mohon bantu", "bagaimana", "gimana", "apakah",
+	}
+	for _, m := range markers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
 func isBlueprintSlotCreateCommand(lower string) bool {
 	lower = strings.ToLower(strings.TrimSpace(lower))
 	// Planning / intention phrasing must never be treated as a command.

@@ -2,6 +2,24 @@ package app
 
 import "testing"
 
+func TestIsBlueprintSlotPlanningQuestion(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"aku ingin menambah 10 slot kisi-kisi lagi, dapatkah kamu membantuku?", true},
+		{"apakah 5 slot itu distribusinya sudah baik?", true},
+		{"bagaimana rencana 35 kisi-kisi lagi?", true},
+		{"buatkan proposal 5 slot", false},
+		{"langsung buatkan 10 slot", false},
+	}
+	for _, c := range cases {
+		if got := isBlueprintSlotPlanningQuestion(c.msg); got != c.want {
+			t.Errorf("isBlueprintSlotPlanningQuestion(%q) = %v, want %v", c.msg, got, c.want)
+		}
+	}
+}
+
 func TestIsBlueprintSlotCreateCommand(t *testing.T) {
 	cases := []struct {
 		msg  string
