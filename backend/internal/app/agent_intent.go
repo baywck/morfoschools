@@ -25,9 +25,9 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 		return true
 	}
 	if isBlueprintPageRequest(req) && classifyShortReply(lower) == "affirm" {
-		if previousDraft, ok := a.lastAssistantBlueprintProposalPrompt(r.Context(), sessionID); ok {
-			req.Message = previousDraft + "\n\nUser menyetujui draft di atas. Buatkan proposal 5 slot berdasarkan draft tersebut."
-			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "affirmed previous blueprint proposal next action"})
+		if previousDraft, ok := a.lastAssistantBlueprintDraft(r.Context(), sessionID); ok {
+			req.Message = "Buatkan proposal 5 slot berdasarkan draft yang sudah disetujui user berikut. Pertahankan isi draft, jangan lanjut ke slot lain.\n\n" + previousDraft
+			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "affirmed previous blueprint draft"})
 		}
 	}
 	// Soft intent / help-seeking language ("aku ingin..., dapatkah kamu

@@ -6,6 +6,15 @@ import (
 )
 
 func (a *App) lastAssistantBlueprintProposalPrompt(ctx context.Context, sessionID string) (string, bool) {
+	content, ok := a.lastAssistantBlueprintDraft(ctx, sessionID)
+	if !ok {
+		return "", false
+	}
+	lower := strings.ToLower(content)
+	return content, strings.Contains(lower, "buatkan proposal")
+}
+
+func (a *App) lastAssistantBlueprintDraft(ctx context.Context, sessionID string) (string, bool) {
 	var content string
 	err := a.db.QueryRowContext(ctx, `
 		SELECT content
@@ -18,9 +27,9 @@ func (a *App) lastAssistantBlueprintProposalPrompt(ctx context.Context, sessionI
 		return "", false
 	}
 	lower := strings.ToLower(content)
-	ok := (strings.Contains(lower, "kisi-kisi") || strings.Contains(lower, "kisi kisi") || strings.Contains(lower, "blueprint")) &&
-		strings.Contains(lower, "buatkan proposal")
-	return content, ok
+	hasBlueprintTerms := strings.Contains(lower, "kisi-kisi") || strings.Contains(lower, "kisi kisi") || strings.Contains(lower, "blueprint") || strings.Contains(lower, "elemen:")
+	hasSlotShape := strings.Contains(lower, "elemen:") && strings.Contains(lower, "tp:") && strings.Contains(lower, "indikator:")
+	return content, hasBlueprintTerms && hasSlotShape
 }
 
 func (a *App) lastAssistantAskedForBlueprintProposal(ctx context.Context, sessionID string) bool {
