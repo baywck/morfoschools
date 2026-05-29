@@ -86,7 +86,6 @@ func (a *App) handleAIEditExamBlueprintSlot(w http.ResponseWriter, r *http.Reque
 	}
 	diff := buildBlueprintSlotAIDiff(before, merged)
 	if len(diff) == 0 {
-		a.logger.Info("AI slot edit produced no diff", "slotId", slotID, "instruction", req.Instruction)
 		writeValidationError(w, map[string]string{"instruction": "AI tidak menghasilkan perubahan bermakna. Coba instruksi lebih spesifik (mis. sebutkan field dan target perubahan)."}, r)
 		return
 	}

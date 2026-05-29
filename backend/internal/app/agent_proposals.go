@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -96,12 +97,13 @@ func (a *App) tryConfirmLatestAgentProposalFromChat(w http.ResponseWriter, r *ht
 	var proposalID, workflow string
 	var args json.RawMessage
 	var expiresAt time.Time
+	var createdAt time.Time
 	err := a.db.QueryRowContext(r.Context(), `
-		SELECT id::text, workflow, args, expires_at
+		SELECT id::text, workflow, args, expires_at, created_at
 		  FROM agent_proposals
 		 WHERE tenant_id=$1 AND user_id=$2 AND session_id=$3 AND status='pending'
 		 ORDER BY created_at DESC
-		 LIMIT 1`, tenantID, userID, sessionID).Scan(&proposalID, &workflow, &args, &expiresAt)
+		 LIMIT 1`, tenantID, userID, sessionID).Scan(&proposalID, &workflow, &args, &expiresAt, &createdAt)
 	if err == sql.ErrNoRows {
 		return false
 	}
@@ -131,13 +133,59 @@ func (a *App) tryConfirmLatestAgentProposalFromChat(w http.ResponseWriter, r *ht
 	}
 	resultJSON, _ := json.Marshal(result)
 	_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_proposals SET status='confirmed', confirmed_at=now(), result=$2 WHERE id=$1`, proposalID, resultJSON)
+	content := summarizeAgentProposalResult(result)
+	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+	writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": true, "result": result})
+	return true
+}
+
+// summarizeAgentProposalResult builds an honest confirmation message based on
+// the concrete counts the workflow returned, so the chat can never claim a
+// generic success when nothing was actually written.
+func summarizeAgentProposalResult(result agentWorkflowResult) string {
+	switch result.Workflow {
+	case agentWorkflowCreateBlueprintSlots:
+		n := intFromAny(result.Data["createdSlots"])
+		if n <= 0 {
+			return "⚠️ Tidak ada slot kisi-kisi yang dibuat. Proposal tidak berisi slot valid."
+		}
+		return fmt.Sprintf("✅ %d slot kisi-kisi berhasil dibuat.", n)
+	case agentWorkflowEditBlueprintSlot:
+		return "✅ Slot kisi-kisi berhasil diperbarui."
+	case agentWorkflowEditBlueprintSlots:
+		n := intFromAny(result.Data["updatedSlots"])
+		if n <= 0 {
+			return "⚠️ Tidak ada slot yang diperbarui."
+		}
+		return fmt.Sprintf("✅ %d slot kisi-kisi berhasil diperbarui.", n)
+	case agentWorkflowCreateExam:
+		content := "✅ Exam berhasil dibuat."
+		if examID, ok := result.Data["examId"].(string); ok && examID != "" {
+			content += "\n\nExam ID: " + examID
+		}
+		return content
+	case agentWorkflowCreateExamSection:
+		return "✅ Bagian/section exam berhasil dibuat."
+	case agentWorkflowEditExam:
+		return "✅ Detail exam berhasil diperbarui."
+	}
 	content := "✅ Proposal dikonfirmasi dan berhasil disimpan."
 	if examID, ok := result.Data["examId"].(string); ok && examID != "" {
 		content += "\n\nExam ID: " + examID
 	}
-	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
-	writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": true, "result": result})
-	return true
+	return content
+}
+
+func intFromAny(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	}
+	return 0
 }
 
 func (a *App) handleAgentCancel(w http.ResponseWriter, r *http.Request) {
