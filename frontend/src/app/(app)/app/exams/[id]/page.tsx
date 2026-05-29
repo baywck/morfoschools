@@ -326,30 +326,13 @@ export default function ExamDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Settings2 size={17} /></div>
-              <div>
-                <h2 className="text-[14px] font-bold text-[var(--foreground)]">Authoring Workspace</h2>
-                <p className="text-[11px] text-[var(--muted-foreground)]">Atur setup{hasSubject ? ", kisi-kisi," : " dan"} questions dari satu workspace.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-medium text-[var(--muted-foreground)]">
-              <span className="rounded-md bg-[var(--muted)] px-2 py-1">{exam.questionCount} soal</span>
-              <span className="rounded-md bg-[var(--muted)] px-2 py-1">{exam.totalPoints} pts</span>
-            </div>
-          </div>
+        <div className="mb-4 flex items-center gap-1 rounded-xl bg-[var(--muted)] p-1">
+          <WorkspaceTabButton active={visibleTab === "setup"} icon={<Settings2 size={14} />} label="Setup" onClick={() => setTab("setup")} />
+          {hasSubject && <WorkspaceTabButton active={visibleTab === "kisi-kisi"} icon={<ClipboardList size={14} />} label="Kisi-Kisi" onClick={() => setTab("kisi-kisi")} />}
+          <WorkspaceTabButton active={visibleTab === "questions"} icon={<FileQuestion size={14} />} label="Questions" onClick={() => setTab("questions")} />
+        </div>
 
-          <div className="border-b border-[var(--border)] px-3 py-3">
-            <div className="flex items-center gap-1 rounded-xl bg-[var(--muted)] p-1">
-              <WorkspaceTabButton active={visibleTab === "setup"} icon={<Settings2 size={14} />} label="Setup" onClick={() => setTab("setup")} />
-              {hasSubject && <WorkspaceTabButton active={visibleTab === "kisi-kisi"} icon={<ClipboardList size={14} />} label="Kisi-Kisi" onClick={() => setTab("kisi-kisi")} />}
-              <WorkspaceTabButton active={visibleTab === "questions"} icon={<FileQuestion size={14} />} label="Questions" onClick={() => setTab("questions")} />
-            </div>
-          </div>
-
-          <div className="p-3 md:p-4">
+        <div>
             {visibleTab === "setup" && (
               <SetupPanel
                 exam={exam}
@@ -392,7 +375,6 @@ export default function ExamDetailPage({ params }: PageProps) {
                 onChanged={reload}
               />
             )}
-          </div>
         </div>
       </PageShell>
 
@@ -697,7 +679,7 @@ function KisiKisiManagerPanel({
               </div>
             ))}
           </div>
-          <div className="space-y-2"><h3 className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">Soal belum terhubung</h3>{unlinked.length === 0 ? <p className="rounded-xl border border-[var(--border)] bg-[var(--success-soft)] p-4 text-[12px] font-medium text-[var(--success)]">Semua soal sudah terhubung ke kisi-kisi.</p> : unlinked.map((q) => <div key={q.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-semibold text-[var(--muted-foreground)]">{questionTypeLabel(q.questionType)} · {q.points} pts</p><span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">unlinked</span></div><div className="mt-2"><RenderedContent html={q.content} className="text-[12px]" /></div></div>)}</div>
+
           <RightPullSheet
             open={!!editingSlot}
             title="Edit slot kisi-kisi"
