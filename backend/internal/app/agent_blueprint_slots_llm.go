@@ -21,6 +21,9 @@ func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID 
 		warnings = append(warnings, "CP resmi belum siap; kisi-kisi wajib diverifikasi manual sebelum dipakai.")
 	}
 	prompt := a.blueprintSlotPrompt(req.Message, count, ctxResp)
+	if strings.Contains(strings.ToLower(req.Message), "simpan") {
+		prompt += " User meminta menyimpan draft dari percakapan sebelumnya. Ekstrak/rekonstruksi slot dari konteks percakapan terbaru jika tersedia; jangan membuat topik baru yang tidak sesuai draft sebelumnya."
+	}
 	provider, err := a.resolveAIProvider(ctx, &AuthContext{UserID: userID, EffectiveTenantID: &tenantID}, tenantID)
 	if err != nil {
 		return agentCreateBlueprintSlotsArgs{}, err

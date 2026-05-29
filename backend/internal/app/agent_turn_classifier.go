@@ -50,7 +50,7 @@ func (a *App) agentTurnClassifierPrompt(ctx context.Context, tenantID, sessionID
 	b.WriteString("Mode valid: discussion, planning, clarification, proposal_request, unsupported. ")
 	b.WriteString("Workflow valid saat proposal_request: create_exam, edit_exam, create_exam_section, create_blueprint_slots. ")
 	b.WriteString("Aturan penting: planning/diskusi kisi-kisi bukan proposal. Kalimat seperti 'aku ingin membuat kisi-kisi', 'aku berencana membuat 50 soal', 'bantu aku membuat kisi-kisi', 'ayo diskusi kisi-kisi' => planning/clarification, workflow kosong. ")
-	b.WriteString("Proposal_request hanya jika user eksplisit meminta dibuatkan/disusun/generate/disimpan/ajukan proposal sekarang, atau lanjutan konteks yang jelas seperti 'mari kita buat 5 dulu' setelah membahas kisi-kisi. ")
+	b.WriteString("Proposal_request hanya jika user eksplisit meminta dibuatkan/disusun/generate/disimpan/ajukan proposal sekarang, atau lanjutan konteks yang jelas seperti 'mari kita buat 5 dulu' setelah membahas kisi-kisi. Kata 'simpan', 'save', 'ok simpan', 'simpan dulu' setelah assistant memberi draft kisi-kisi/soal berarti proposal_request untuk menyimpan draft tersebut, bukan discussion. ")
 	b.WriteString("Angka jumlah soal dalam kalimat rencana tidak cukup untuk proposal. Jumlah menjadi proposal hanya jika ada perintah eksekusi sekarang. ")
 	b.WriteString("Jika user minta delete/hapus exam, mode unsupported. ")
 	b.WriteString("Output shape: {\"mode\":\"discussion|planning|clarification|proposal_request|unsupported\",\"workflow\":\"\",\"args\":{},\"confidence\":0.0,\"reason\":\"...\",\"needsClarification\":false}. ")

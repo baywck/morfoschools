@@ -34,6 +34,9 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 		}
 	} else if classification.Mode != "proposal_request" {
 		return false
+	} else if agentWorkflow(classification.Workflow) == "" && isBlueprintPageRequest(req) {
+		classification.Workflow = string(agentWorkflowCreateBlueprintSlots)
+		return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, classification)
 	} else if agentWorkflow(classification.Workflow) == agentWorkflowCreateBlueprintSlots {
 		return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, classification)
 	} else if classification.Args != nil && string(classification.Args) != "{}" {
