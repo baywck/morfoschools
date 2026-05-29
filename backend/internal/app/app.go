@@ -85,6 +85,7 @@ func (a *App) Handler() http.Handler {
 	// Academic
 	a.registerSubjectRoutes(mux)
 	a.registerCurriculumCPRoutes(mux)
+	a.registerExamCurriculumContextRoutes(mux)
 	a.registerClassSectionRoutes(mux)
 	a.registerTeacherSubjectRoutes(mux)
 	a.registerAcademicYearRoutes(mux)

@@ -10,10 +10,12 @@ import {
   updateExam,
   updateExamKisiKisi,
   getExamBlueprint,
+  getExamCurriculumContext,
   getSlotsWithQuestions,
   listSubjects,
   type Exam,
   type ExamBlueprint,
+  type ExamCurriculumContext,
   type SlotsWithQuestionsResponse,
   type Subject,
 } from "@/lib/modules-api";
@@ -34,6 +36,7 @@ import {
   ClipboardList,
   ClipboardPaste,
   FileQuestion,
+  Info,
   Printer,
   Save,
   Send,
@@ -94,6 +97,7 @@ export default function ExamDetailPage({ params }: PageProps) {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [blueprint, setBlueprint] = useState<ExamBlueprint | null>(null);
   const [slotsData, setSlotsData] = useState<SlotsWithQuestionsResponse | null>(null);
+  const [curriculumContext, setCurriculumContext] = useState<ExamCurriculumContext | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [showShare, setShowShare] = useState(false);
@@ -158,10 +162,15 @@ export default function ExamDetailPage({ params }: PageProps) {
       setExam(examRes.data);
       syncForms(examRes.data);
       if (examRes.data.usesKisiKisi) {
-        const slotsRes = await getSlotsWithQuestions(examId);
+        const [slotsRes, curriculumRes] = await Promise.all([
+          getSlotsWithQuestions(examId),
+          getExamCurriculumContext(examId),
+        ]);
         setSlotsData(slotsRes.data ?? null);
+        setCurriculumContext(curriculumRes.data ?? null);
       } else {
         setSlotsData(null);
+        setCurriculumContext(null);
       }
     }
     if (bpRes.data) setBlueprint(bpRes.data.blueprint);
@@ -360,6 +369,7 @@ export default function ExamDetailPage({ params }: PageProps) {
                 exam={exam}
                 blueprint={blueprint}
                 slotsData={slotsData}
+                curriculumContext={curriculumContext}
                 canWrite={canWrite}
                 togglingKisi={togglingKisi}
                 onToggleKisiKisi={handleKisiKisiToggle}
@@ -464,6 +474,7 @@ function KisiKisiManagerPanel({
   exam,
   blueprint,
   slotsData,
+  curriculumContext,
   canWrite,
   togglingKisi,
   onToggleKisiKisi,
@@ -475,6 +486,7 @@ function KisiKisiManagerPanel({
   exam: Exam;
   blueprint: ExamBlueprint | null;
   slotsData: SlotsWithQuestionsResponse | null;
+  curriculumContext: ExamCurriculumContext | null;
   canWrite: boolean;
   togglingKisi: boolean;
   onToggleKisiKisi: (enabled: boolean) => void;
@@ -492,6 +504,7 @@ function KisiKisiManagerPanel({
     <div className="space-y-4">
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
         <PanelHeader icon={<Sparkles size={15} />} title="Kisi-kisi" subtitle="Aktifkan blueprint agar soal bisa dipetakan ke indikator dan coverage." />
+        {exam.usesKisiKisi && <CurriculumContextNotice context={curriculumContext} />}
         <div className="mt-3 flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--accent)] px-3 py-2">
           <div><p className="text-[12px] font-semibold text-[var(--foreground)]">Use Kisi-Kisi / Blueprint</p><p className="text-[11px] text-[var(--muted-foreground)]">Jika dimatikan, data lama tidak dihapus; hanya disembunyikan dari authoring.</p></div>
           <div className="flex items-center gap-2">
@@ -570,6 +583,38 @@ function KisiKisiManagerPanel({
   );
 }
 
+
+function CurriculumContextNotice({ context }: { context: ExamCurriculumContext | null }) {
+  if (!context) {
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--accent)] px-3 py-2 text-[11px] text-[var(--muted-foreground)]">
+        <Info size={13} className="mt-0.5 shrink-0" />
+        Memuat CP Kurikulum Merdeka...
+      </div>
+    );
+  }
+  if (context.status === "ready") {
+    return (
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--success)]/20 bg-[var(--success-soft)] px-3 py-2 text-[11px] text-[var(--success)]">
+        <Info size={13} className="mt-0.5 shrink-0" />
+        <div>
+          <p className="font-semibold">CP resmi tersedia untuk {context.subjectName || context.subjectCode} {context.gradeLevel ? `kelas ${context.gradeLevel}` : ""}{context.phase ? ` / Fase ${context.phase.toUpperCase()}` : ""}.</p>
+          <p className="mt-0.5 opacity-80">Source: {context.source === "remote_fetch" ? "Kemendikdasmendasmen · baru disinkronkan" : "local DB"}</p>
+        </div>
+      </div>
+    );
+  }
+  if (context.status === "not_applicable") return null;
+  return (
+    <div className="mt-3 flex items-start gap-2 rounded-lg border border-[var(--warning)]/25 bg-[var(--warning-soft)] px-3 py-2 text-[11px] text-[var(--warning)]">
+      <Info size={13} className="mt-0.5 shrink-0" />
+      <div>
+        <p className="font-semibold">CP resmi belum tersedia untuk exam ini.</p>
+        <p className="mt-0.5">{context.warnings[0] ?? "AI tetap bisa membantu draft, tetapi CP/TP perlu diverifikasi manual."}</p>
+      </div>
+    </div>
+  );
+}
 
 function KisiActionButton({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (

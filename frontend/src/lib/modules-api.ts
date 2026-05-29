@@ -647,6 +647,39 @@ export function getExam(id: string) {
   return get<Exam>(`/api/v1/exams/${id}`);
 }
 
+export interface CurriculumCPElement {
+  id: string;
+  name: string;
+  content: string;
+  sortOrder: number;
+}
+
+export interface ExamCurriculumContext {
+  status: "ready" | "missing" | "not_applicable";
+  source: "local_db" | "remote_fetch" | "remote_failed" | "none";
+  subjectId?: string;
+  subjectName?: string;
+  subjectCode?: string;
+  gradeLevel?: string;
+  levelCode?: string;
+  phase?: string;
+  reference?: {
+    id: string;
+    subjectName: string;
+    phase: string;
+    generalCp: string;
+    sourceName: string;
+    sourceUrl?: string | null;
+    updatedAt: string;
+  };
+  elements: CurriculumCPElement[];
+  warnings: string[];
+}
+
+export function getExamCurriculumContext(examId: string) {
+  return get<ExamCurriculumContext>(`/api/v1/exams/${examId}/curriculum-context`);
+}
+
 export interface CreateExamPayload {
   title: string;
   description?: string;
