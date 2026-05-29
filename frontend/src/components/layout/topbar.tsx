@@ -65,6 +65,7 @@ export function Topbar({ onToggleAiChat, aiChatOpen }: TopbarProps) {
 
   const segments = pathname.split("/").filter(Boolean);
   const displaySegments = segments.filter((s) => s !== "app");
+  const mobileDisplaySegments = displaySegments.length > 1 ? ["..", displaySegments[displaySegments.length - 1]] : displaySegments;
   const roleLabel = session?.roles?.[0]?.replace("_", " ") || "User";
 
   return (
@@ -79,20 +80,41 @@ export function Topbar({ onToggleAiChat, aiChatOpen }: TopbarProps) {
                 <span className="sr-only">Home</span>
               </BreadcrumbLink>
             </BreadcrumbItem>
-            {displaySegments.map((segment, index) => (
-              <span key={segment} className="contents">
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  {index === displaySegments.length - 1 ? (
-                    <BreadcrumbPage title={formatSegment(segment)}><span className="md:hidden">{truncateMobileBreadcrumb(formatSegment(segment))}</span><span className="hidden md:inline">{formatSegment(segment)}</span></BreadcrumbPage>
-                  ) : (
-                    <BreadcrumbLink href={`/app/${displaySegments.slice(0, index + 1).join("/")}`} title={formatSegment(segment)}>
-                      <span className="md:hidden">{truncateMobileBreadcrumb(formatSegment(segment))}</span><span className="hidden md:inline">{formatSegment(segment)}</span>
-                    </BreadcrumbLink>
-                  )}
-                </BreadcrumbItem>
-              </span>
-            ))}
+            <span className="contents md:hidden">
+              {mobileDisplaySegments.map((segment, index) => {
+                const isEllipsis = segment === "..";
+                const isLast = index === mobileDisplaySegments.length - 1;
+                const label = isEllipsis ? ".." : truncateMobileBreadcrumb(formatSegment(segment));
+                return (
+                  <span key={`${segment}-${index}`} className="contents">
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      {isLast ? (
+                        <BreadcrumbPage title={isEllipsis ? undefined : formatSegment(segment)}>{label}</BreadcrumbPage>
+                      ) : (
+                        <span className="text-[var(--muted-foreground)]">{label}</span>
+                      )}
+                    </BreadcrumbItem>
+                  </span>
+                );
+              })}
+            </span>
+            <span className="contents max-md:hidden">
+              {displaySegments.map((segment, index) => (
+                <span key={segment} className="contents">
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    {index === displaySegments.length - 1 ? (
+                      <BreadcrumbPage>{formatSegment(segment)}</BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink href={`/app/${displaySegments.slice(0, index + 1).join("/")}`}>
+                        {formatSegment(segment)}
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                </span>
+              ))}
+            </span>
           </BreadcrumbList>
         </Breadcrumb>
       </div>
