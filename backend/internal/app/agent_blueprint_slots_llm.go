@@ -20,9 +20,11 @@ func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID 
 	if ctxResp.Status != "ready" {
 		warnings = append(warnings, "CP resmi belum siap; kisi-kisi wajib diverifikasi manual sebelum dipakai.")
 	}
+	contextPack := a.agentContextPackJSON(ctx, tenantID, strings.TrimSpace(req.SessionID), req.Shadow.ActiveEntities)
 	prompt := a.blueprintSlotPrompt(req.Message, count, ctxResp)
+	prompt += " AgentContextPack JSON berikut adalah memori kerja wajib. Gunakan untuk memahami target, draft sebelumnya, distribusi existing, dan menghindari duplikasi. Jangan membuat slot yang bertentangan dengan draft yang sudah disetujui user. " + contextPack
 	if strings.Contains(strings.ToLower(req.Message), "simpan") {
-		prompt += " User meminta menyimpan draft dari percakapan sebelumnya. Ekstrak/rekonstruksi slot dari konteks percakapan terbaru jika tersedia; jangan membuat topik baru yang tidak sesuai draft sebelumnya."
+		prompt += " User meminta menyimpan draft dari percakapan sebelumnya. Ekstrak/rekonstruksi slot dari AgentContextPack/recentMessages jika tersedia; jangan membuat topik baru yang tidak sesuai draft sebelumnya."
 	}
 	provider, err := a.resolveAIProvider(ctx, &AuthContext{UserID: userID, EffectiveTenantID: &tenantID}, tenantID)
 	if err != nil {

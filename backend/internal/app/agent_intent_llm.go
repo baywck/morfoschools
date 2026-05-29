@@ -9,7 +9,7 @@ import (
 
 func (a *App) extractAgentIntent(ctx context.Context, tenantID, userID string, roles []string, sessionID string, req aiChatRequest) (agentIntentResponse, error) {
 	subjects := a.agentSubjectCatalog(ctx, tenantID)
-	conversationContext := a.agentRecentConversationContext(ctx, sessionID)
+	conversationContext := a.agentContextPackJSON(ctx, tenantID, sessionID, req.Shadow.ActiveEntities)
 	prompt := `Kamu adalah intent extractor. Balas JSON valid saja, tanpa markdown dan tanpa penjelasan.
 Intent/workflow yang didukung sekarang: create_exam, edit_exam, create_exam_section, discussion, unsupported.
 WAJIB pilih create_exam jika user meminta buat/create/bikin exam/ujian/tes/kuis baru.
@@ -22,7 +22,7 @@ examType valid: quiz, midterm, final, tryout, daily. UAS/Ujian Akhir Semester =>
 Jika user meminta kisi-kisi aktif, set usesKisiKisi=true. Jika user meminta matikan/nonaktifkan kisi-kisi, set usesKisiKisi=false.
 Subject valid tenant: ` + subjects + `
 Active entities dari halaman: ` + activeEntitiesJSON(req.Shadow.ActiveEntities) + `
-Konteks percakapan terbaru: ` + conversationContext + `
+AgentContextPack JSON (memori kerja + konteks aktif): ` + conversationContext + `
 Untuk create_exam lanjutan seperti "buat ujiannya dulu", ambil subject/grade/exam type/title dari konteks percakapan terbaru. Jangan pakai judul generik "Ujian Baru" jika konteks berisi Pendidikan Pancasila/Kelas/UAS/kenaikan kelas.
 Untuk edit_exam/create_exam_section, jika activeEntities berisi examId dan user tidak menyebut ID lain, pakai examId aktif itu.
 Untuk edit_exam lanjutan seperti "ubah namanya/judulnya jadi ..." setelah exam baru berhasil dibuat, pakai examId dari hasil workflow create_exam terakhir di konteks percakapan terbaru.
@@ -62,33 +62,6 @@ Output shape: {"intent":"create_exam|edit_exam|create_exam_section|discussion|un
 		out.Args = json.RawMessage(`{}`)
 	}
 	return out, nil
-}
-
-func (a *App) agentRecentConversationContext(ctx context.Context, sessionID string) string {
-	if sessionID == "" {
-		return "[]"
-	}
-	rows, err := a.db.QueryContext(ctx, `SELECT role, content FROM ai_messages WHERE session_id=$1 ORDER BY created_at DESC LIMIT 8`, sessionID)
-	if err != nil {
-		return "[]"
-	}
-	defer rows.Close()
-	type msg struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
-	items := []msg{}
-	for rows.Next() {
-		var m msg
-		if err := rows.Scan(&m.Role, &m.Content); err == nil {
-			if len(m.Content) > 1200 {
-				m.Content = m.Content[:1200]
-			}
-			items = append(items, m)
-		}
-	}
-	b, _ := json.Marshal(items)
-	return string(b)
 }
 
 func activeEntitiesJSON(active map[string]string) string {

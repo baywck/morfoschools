@@ -59,8 +59,8 @@ func (a *App) agentTurnClassifierPrompt(ctx context.Context, tenantID, sessionID
 	b.WriteString(req.Shadow.Route)
 	b.WriteString(" Active entities: ")
 	b.WriteString(activeEntitiesJSON(req.Shadow.ActiveEntities))
-	b.WriteString(" Recent conversation: ")
-	b.WriteString(a.agentRecentConversationContext(ctx, sessionID))
+	b.WriteString(" AgentContextPack JSON: ")
+	b.WriteString(a.agentContextPackJSON(ctx, tenantID, sessionID, req.Shadow.ActiveEntities))
 	if examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"]); examID != "" {
 		ctxResp, err := a.ensureExamCurriculumContext(ctx, tenantID, examID)
 		if err == nil {

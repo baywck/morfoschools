@@ -111,6 +111,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		writeErrorJSON(w, http.StatusInternalServerError, "ai_error", "Could not create session", r)
 		return
 	}
+	req.SessionID = sessionID
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content) VALUES ($1, 'user', $2)`, sessionID, req.Message)
 	if a.tryConfirmLatestAgentProposalFromChat(w, r, tenantID, auth.UserID, sessionID, req.Message) {
 		_, _ = a.db.ExecContext(r.Context(), `UPDATE ai_sessions SET message_count = message_count + 2, last_active_at = now() WHERE id=$1`, sessionID)
@@ -141,22 +142,17 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID string, roles []string, active map[string]string, userMessage string) (string, int, error) {
-	messages := []llmMessage{{Role: "system", Content: a.discussionSystemPrompt(ctx, tenantID, active)}}
-	rows, err := a.db.QueryContext(ctx, `SELECT role, content FROM ai_messages WHERE session_id=$1 AND role IN ('user','assistant') ORDER BY created_at DESC LIMIT 12`, sessionID)
-	if err == nil {
-		defer rows.Close()
-		var history []llmMessage
-		for rows.Next() {
-			var m llmMessage
-			if scanErr := rows.Scan(&m.Role, &m.Content); scanErr == nil {
-				history = append(history, m)
-			}
-		}
-		for i := len(history) - 1; i >= 0; i-- {
-			messages = append(messages, history[i])
-		}
+	pack := a.buildAgentContextPack(ctx, tenantID, sessionID, active)
+	messages := []llmMessage{
+		{Role: "system", Content: a.discussionSystemPrompt(ctx, tenantID, active)},
+		{Role: "system", Content: "AgentContextPack JSON (gunakan sebagai memori kerja dan konteks nyata; jangan abaikan draft/keputusan sebelumnya): " + mustJSON(pack)},
 	}
-	messages = append(messages, llmMessage{Role: "user", Content: userMessage})
+	for _, m := range pack.Recent {
+		messages = append(messages, llmMessage{Role: m.Role, Content: m.Content})
+	}
+	if len(pack.Recent) == 0 || pack.Recent[len(pack.Recent)-1].Role != "user" || strings.TrimSpace(pack.Recent[len(pack.Recent)-1].Content) != strings.TrimSpace(userMessage) {
+		messages = append(messages, llmMessage{Role: "user", Content: userMessage})
+	}
 	provider, err := a.resolveAIProvider(ctx, &AuthContext{UserID: userID, Roles: roles, EffectiveTenantID: &tenantID}, tenantID)
 	if err != nil {
 		return "", 0, err
