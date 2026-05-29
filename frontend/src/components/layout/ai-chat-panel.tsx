@@ -196,10 +196,20 @@ function renderMessageContent(content: string) {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const tableStart = isMarkdownTableStart(lines, i);
     const listMatch = line.match(/^\s*(?:[-*•]|\d+[.)]) (.+)/);
     const quoteMatch = line.match(/^>\s?(.*)$/);
 
-    if (listMatch) {
+    if (tableStart) {
+      flushList();
+      const tableLines: string[] = [];
+      while (i < lines.length && isMarkdownTableLine(lines[i])) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      i--;
+      elements.push(<MarkdownTable key={`table-${i}`} lines={tableLines} />);
+    } else if (listMatch) {
       listItems.push(listMatch[1]);
     } else if (quoteMatch) {
       flushList();
@@ -230,6 +240,59 @@ function renderMessageContent(content: string) {
   flushList();
 
   return <>{elements}</>;
+}
+
+function isMarkdownTableLine(line: string) {
+  const trimmed = line.trim();
+  return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|");
+}
+
+function isMarkdownTableSeparator(line: string) {
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function isMarkdownTableStart(lines: string[], index: number) {
+  return isMarkdownTableLine(lines[index] || "") && isMarkdownTableSeparator(lines[index + 1] || "");
+}
+
+function parseMarkdownTableRow(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function MarkdownTable({ lines }: { lines: string[] }) {
+  const header = parseMarkdownTableRow(lines[0] || "");
+  const rows = lines.slice(2).filter(isMarkdownTableLine).map(parseMarkdownTableRow);
+  return (
+    <div className="my-2 max-w-full overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]/70">
+      <table className="min-w-max w-full border-collapse text-left text-[11px] leading-snug">
+        <thead className="bg-[var(--muted)]/50 text-[var(--muted-foreground)]">
+          <tr>
+            {header.map((cell, idx) => (
+              <th key={idx} className="border-b border-[var(--border)] px-2 py-1.5 font-semibold whitespace-nowrap">
+                {renderInline(cell)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIdx) => (
+            <tr key={rowIdx} className="border-t border-[var(--border)]/70">
+              {header.map((_, cellIdx) => (
+                <td key={cellIdx} className="px-2 py-1.5 align-top whitespace-nowrap text-[var(--foreground)]">
+                  {renderInline(row[cellIdx] || "")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function renderInline(text: string): React.ReactNode {
