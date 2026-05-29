@@ -8,12 +8,6 @@ import (
 )
 
 func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, classification agentTurnClassification) bool {
-	if n := requestedBlueprintSlotCount(req.Message); n > maxBlueprintSlotsPerProposal {
-		content := fmt.Sprintf("Untuk menjaga kualitas kisi-kisi dan menghindari draft terlalu panjang, saya batasi pembuatan otomatis maksimal %d slot per sekali proposal. Permintaan %d slot lebih baik kita pecah. Saya sarankan mulai dengan 5 slot pertama dulu; ketik `buatkan proposal 5 slot` dan setelah cocok kita lanjut batch berikutnya.", maxBlueprintSlotsPerProposal, n)
-		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
-		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false})
-		return true
-	}
 	args, err := a.generateBlueprintSlotsDraft(r.Context(), tenantID, userID, req, req.Message)
 	if err != nil {
 		a.logger.Error("create blueprint slots draft failed", "error", err, "classifierReason", classification.Reason)
