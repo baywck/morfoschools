@@ -67,6 +67,7 @@ func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID 
 			out.Slots[i].SourceConfidence = ctxResp.Status
 		}
 	}
+	out.Slots = a.repairInvalidBlueprintSlots(ctx, provider, prompt, out.Slots)
 	return agentCreateBlueprintSlotsArgs{ExamID: examID, Topic: out.Topic, Slots: out.Slots, Warnings: warnings, CPStatus: ctxResp.Status, CPSource: ctxResp.Source, Confirmable: true}, nil
 }
 

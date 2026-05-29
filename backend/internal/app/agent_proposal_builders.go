@@ -2,7 +2,9 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 )
 
 func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, classification agentTurnClassification) bool {
@@ -13,7 +15,20 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 		return true
 	}
 	if fields := a.validateAgentCreateBlueprintSlotsArgs(r.Context(), tenantID, userID, args); len(fields) > 0 {
-		writeValidationError(w, fields, r)
+		badSlots := 0
+		for k := range fields {
+			if strings.HasPrefix(k, "slots.") {
+				badSlots++
+			}
+		}
+		var content string
+		if badSlots > 0 {
+			content = fmt.Sprintf("Saya sudah menyusun draft, tapi %d slot belum memenuhi aturan Kurikulum Merdeka (TP harus ABCD dengan KKO terukur, indikator harus berbasis stimulus 'Disajikan ...'). Coba minta lagi dengan jumlah lebih kecil atau topik lebih spesifik, lalu saya susun ulang.", badSlots)
+		} else {
+			content = buildAgentProposalValidationMessage(fields)
+		}
+		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false, "validation": fields})
 		return true
 	}
 	cleanArgs, _ := json.Marshal(args)
