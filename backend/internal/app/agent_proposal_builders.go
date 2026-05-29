@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,7 +9,11 @@ import (
 )
 
 func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, classification agentTurnClassification) bool {
-	args, err := a.generateBlueprintSlotsDraft(r.Context(), tenantID, userID, req, req.Message)
+	args, fromMemory := a.blueprintSlotsArgsFromApprovedMemory(r.Context(), tenantID, sessionID, req)
+	var err error
+	if !fromMemory {
+		args, err = a.generateBlueprintSlotsDraft(r.Context(), tenantID, userID, req, req.Message)
+	}
 	if err != nil {
 		a.logger.Error("create blueprint slots draft failed", "error", err, "classifierReason", classification.Reason)
 		writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat proposal kisi-kisi. Coba ulang sebentar lagi atau beri topik lebih spesifik.", r)
@@ -16,6 +21,9 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 	}
 	if r.Context().Err() != nil {
 		return true
+	}
+	if fromMemory {
+		args = repairMemoryBlueprintSlots(args)
 	}
 	if fields := a.validateAgentCreateBlueprintSlotsArgs(r.Context(), tenantID, userID, args); len(fields) > 0 {
 		badSlots := 0
@@ -57,6 +65,44 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 		"proposal":   map[string]any{"id": proposalID, "proposalId": proposalID, "workflow": string(agentWorkflowCreateBlueprintSlots), "toolName": string(agentWorkflowCreateBlueprintSlots), "preview": preview, "confirmationText": preview},
 	})
 	return true
+}
+
+func (a *App) blueprintSlotsArgsFromApprovedMemory(ctx context.Context, tenantID, sessionID string, req aiChatRequest) (agentCreateBlueprintSlotsArgs, bool) {
+	if !(classifyShortReply(strings.ToLower(req.Message)) == "affirm" || isBlueprintDraftSaveRequest(strings.ToLower(req.Message))) {
+		return agentCreateBlueprintSlotsArgs{}, false
+	}
+	draft, ok := a.latestBlueprintDraft(ctx, tenantID, sessionID, deriveScopeKey(req.Shadow.ActiveEntities))
+	if !ok || len(draft.Slots) == 0 {
+		return agentCreateBlueprintSlotsArgs{}, false
+	}
+	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
+	ctxResp, _ := a.ensureExamCurriculumContext(ctx, tenantID, examID)
+	warnings := append([]string{}, ctxResp.Warnings...)
+	if ctxResp.Status != "ready" {
+		warnings = append(warnings, "CP resmi belum siap; kisi-kisi wajib diverifikasi manual sebelum dipakai.")
+	}
+	slots := append([]agentBlueprintSlotDraft(nil), draft.Slots...)
+	return agentCreateBlueprintSlotsArgs{ExamID: examID, Topic: "Draft kisi-kisi yang sudah disetujui", Slots: slots, Warnings: warnings, CPStatus: ctxResp.Status, CPSource: ctxResp.Source, Confirmable: true}, true
+}
+
+func repairMemoryBlueprintSlots(args agentCreateBlueprintSlotsArgs) agentCreateBlueprintSlotsArgs {
+	for i := range args.Slots {
+		if args.Slots[i].Position <= 0 {
+			args.Slots[i].Position = i + 1
+		}
+		args.Slots[i].CognitiveLevel = normalizeCognitiveLevel(args.Slots[i].CognitiveLevel)
+		args.Slots[i].QuestionType = normalizeQuestionType(args.Slots[i].QuestionType)
+		if strings.TrimSpace(args.Slots[i].QuestionType) == "" {
+			args.Slots[i].QuestionType = "multiple_choice"
+		}
+		if args.Slots[i].Points <= 0 {
+			args.Slots[i].Points = 1
+		}
+		if strings.TrimSpace(args.Slots[i].KelasSemester) == "" {
+			args.Slots[i].KelasSemester = "Sesuai exam aktif"
+		}
+	}
+	return args
 }
 
 func (a *App) createAgentProposalFromClassifiedIntent(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, classification agentTurnClassification) bool {
