@@ -38,7 +38,7 @@ import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
 import { LoadKisiKisiSheet } from "@/components/exams/load-kisi-kisi-sheet";
 import { ExportBlueprintSheet } from "@/components/exams/export-blueprint-sheet";
 import { RenderedContent } from "@/components/ui/rendered-content";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConfirmDialog, Dialog } from "@/components/ui/confirm-dialog";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { RowActions } from "@/components/ui/row-actions";
 import {
@@ -52,11 +52,13 @@ import {
   Sparkle,
   Save,
   Send,
+  SendHorizontal,
   Settings2,
   Share2,
   ShieldCheck,
   Sparkles,
   Trash2,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { questionTypeLabel } from "@/lib/question-labels";
@@ -772,46 +774,65 @@ function KisiKisiManagerPanel({
               </form>
             )}
           </RightPullSheet>
-          <RightPullSheet
+          <Dialog
             open={!!aiTarget}
             title="Ubah slot dengan AI"
             width="lg"
             onClose={() => { setAiTarget(null); setAiProposal(null); setAiInstruction(""); }}
-            footer={
-              <div className="flex justify-end gap-2">
-                <button type="button" disabled={aiLoading || aiApplying} onClick={() => { setAiTarget(null); setAiProposal(null); setAiInstruction(""); }} className="h-8 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)] disabled:opacity-50">Batal</button>
-                {aiProposal ? (
-                  <button type="button" disabled={aiApplying} onClick={applyAISlotEdit} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50">{aiApplying ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Save size={14} />}Apply perubahan</button>
-                ) : (
-                  <button type="submit" form="ai-edit-kisi-kisi-slot-form" disabled={aiLoading || !aiInstruction.trim()} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50">{aiLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Sparkle size={14} />}Generate</button>
-                )}
-              </div>
-            }
           >
             {aiTarget && (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--accent)] p-3">
-                  <p className="text-[12px] font-bold text-[var(--foreground)]">Slot spesifik</p>
-                  <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{aiTarget.elemenCp || "Elemen belum diisi"} · {aiTarget.cognitiveLevel || "-"} · {questionTypeLabel(aiTarget.questionType)}</p>
-                </div>
-                {aiProposal && (
-                  <div className="space-y-3">
-                    {aiProposal.warnings?.map((warning, idx) => <p key={idx} className="rounded-lg border border-[var(--warning)]/25 bg-[var(--warning-soft)] px-3 py-2 text-[11px] font-medium text-[var(--warning)]">{warning}</p>)}
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-                      <p className="text-[12px] font-bold text-[var(--foreground)]">Preview perubahan</p>
-                      <div className="mt-3 space-y-3">
-                        {aiProposal.diff.map((d) => <DiffBlock key={d.field} label={d.label} before={d.before} after={d.after} />)}
+              <div className="flex flex-col h-full">
+                <div className="space-y-4 pb-4">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--accent)] p-3">
+                    <p className="text-[12px] font-bold text-[var(--foreground)]">Slot spesifik</p>
+                    <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{aiTarget.elemenCp || "Elemen belum diisi"} · {aiTarget.cognitiveLevel || "-"} · {questionTypeLabel(aiTarget.questionType)}</p>
+                  </div>
+                  {aiProposal && (
+                    <div className="space-y-3">
+                      {aiProposal.warnings?.map((warning, idx) => <p key={idx} className="rounded-lg border border-[var(--warning)]/25 bg-[var(--warning-soft)] px-3 py-2 text-[11px] font-medium text-[var(--warning)]">{warning}</p>)}
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-sm">
+                        <div className="flex items-center justify-between mb-3 border-b border-[var(--border)] pb-3">
+                          <p className="text-[12px] font-bold text-[var(--foreground)]">Preview perubahan</p>
+                          <button type="button" disabled={aiApplying} onClick={applyAISlotEdit} className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[var(--primary)] px-2.5 text-[11px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50 transition-all hover:bg-[var(--primary)]/90 active:scale-95">{aiApplying ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Save size={13} />}Apply perubahan</button>
+                        </div>
+                        <div className="space-y-3">
+                          {aiProposal.diff.map((d) => <DiffBlock key={d.field} label={d.label} before={d.before} after={d.after} />)}
+                        </div>
                       </div>
                     </div>
+                  )}
+                </div>
+
+                <form onSubmit={generateAISlotEdit} className="mt-auto shrink-0 pt-2 pb-1">
+                  <div className="flex items-end gap-2 rounded-xl border border-[var(--border)] bg-[var(--accent)] p-1.5 focus-within:border-[var(--primary)] focus-within:ring-1 focus-within:ring-[var(--primary)] transition-all">
+                    <textarea
+                      rows={1}
+                      value={aiInstruction}
+                      disabled={aiLoading || aiApplying}
+                      onChange={(e) => setAiInstruction(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          void generateAISlotEdit(e as any);
+                        }
+                      }}
+                      placeholder={aiProposal ? "Masukan tambahan (contoh: buat lebih HOTS)..." : "Instruksi perubahan (contoh: ganti level ke C5)..."}
+                      className="min-h-[36px] max-h-[120px] w-full resize-none bg-transparent px-2.5 py-2 text-[13px] leading-relaxed text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] disabled:opacity-50"
+                    />
+                    <div className="shrink-0 pb-1 pr-1">
+                      <button
+                        type="submit"
+                        disabled={aiLoading || !aiInstruction.trim()}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50 transition-all active:scale-95"
+                      >
+                        {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SendHorizontal className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
                   </div>
-                )}
-                <form id="ai-edit-kisi-kisi-slot-form" onSubmit={generateAISlotEdit} className="space-y-2">
-                  <TextareaField label={aiProposal ? "Masukan tambahan" : "Instruksi perubahan"} rows={4} value={aiInstruction} disabled={aiLoading || aiApplying} onChange={(e) => setAiInstruction(e.target.value)} />
-                  {aiProposal && <button type="submit" disabled={aiLoading || !aiInstruction.trim()} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)] disabled:opacity-50">{aiLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Sparkle size={14} />}Revisi preview</button>}
                 </form>
               </div>
             )}
-          </RightPullSheet>
+          </Dialog>
           <ConfirmDialog
             open={!!deleteTarget}
             title="Hapus slot kisi-kisi?"
