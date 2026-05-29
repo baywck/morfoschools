@@ -191,7 +191,7 @@ export function ShareDialog({
 
   return (
     <>
-      <RightPullSheet open={open} title={`Collaborator — ${resourceName}`} onClose={onClose}>
+      <RightPullSheet open={open} title={`Collaborator`} onClose={onClose}>
         {loading ? (
           <div className="flex items-center justify-center py-8 text-[var(--muted-foreground)]">
             <Loader2 size={16} className="animate-spin" />

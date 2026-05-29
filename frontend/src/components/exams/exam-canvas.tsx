@@ -83,6 +83,7 @@ import { QuestionAccordion } from "@/components/exams/question-accordion";
 import { GroupCard } from "@/components/exams/group-card";
 import { SectionCard } from "@/components/exams/section-card";
 import { cn } from "@/lib/cn";
+import { questionTypeLabel } from "@/lib/question-labels";
 
 export interface ExamCanvasProps {
   exam: Exam;
@@ -929,6 +930,15 @@ function GroupBlock(props: {
     opacity: sortable.isDragging ? 0 : 1,
   };
   const drop = useDroppable({ id: `drop-group:${group.id}` });
+  const numbers = questions
+    .map((q) => questionNumber[q.id])
+    .filter((n): n is number => typeof n === "number" && n > 0)
+    .sort((a, b) => a - b);
+  const questionRange = numbers.length === 0
+    ? undefined
+    : numbers.length === 1
+    ? String(numbers[0])
+    : `${numbers[0]}-${numbers[numbers.length - 1]}`;
 
   return (
     <div ref={sortable.setNodeRef} style={style}>
@@ -942,6 +952,7 @@ function GroupBlock(props: {
         <GroupCard
           group={group}
           questionCount={questions.length}
+          questionRange={questionRange}
           canEdit={canEdit}
           examId={examId}
           onAddQuestion={onAddDraft}
@@ -1078,7 +1089,7 @@ function DragPreview({
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-[12px] text-[var(--foreground)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] max-w-[640px]">
         <div className="flex items-center gap-2">
           <span className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted-foreground)]">
-            {q.questionType.replace("_", " ")}
+            {questionTypeLabel(q.questionType)}
           </span>
           <span className="truncate flex-1">{preview || "(soal kosong)"}</span>
         </div>

@@ -96,7 +96,6 @@ func (a *App) Handler() http.Handler {
 	a.registerExamSectionRoutes(mux)
 	a.registerExamQuestionRoutes(mux)
 	a.registerQuestionMoveRoutes(mux)
-	a.registerExamGateRoutes(mux)
 	a.registerCollaboratorRoutes(mux)
 	a.registerStimuliRoutes(mux)
 	a.registerBlueprintTemplateRoutes(mux)

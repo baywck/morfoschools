@@ -972,34 +972,6 @@ export function deleteOption(optionId: string) {
   return del<{ status: string }>(`/api/v1/options/${optionId}`);
 }
 
-// --- Exam Gate Windows ---
-export interface ExamGate {
-  id: string;
-  examId: string;
-  opensAt: string;
-  closesAt: string;
-  accessCode: string | null;
-  isOpen: boolean;
-  createdAt: string;
-}
-
-export function listExamGates(examId: string) {
-  return get<{ data: ExamGate[] }>(`/api/v1/exams/${examId}/gates`);
-}
-
-export function createExamGate(examId: string, data: { opensAt: string; closesAt: string; accessCode?: string }) {
-  return post<{ id: string }>(`/api/v1/exams/${examId}/gates`, data);
-}
-
-export function updateExamGate(gateId: string, data: { opensAt?: string; closesAt?: string; accessCode?: string }) {
-  return patch<{ id: string }>(`/api/v1/exam-gates/${gateId}`, data);
-}
-
-export function deleteExamGate(gateId: string) {
-  return del<{ status: string }>(`/api/v1/exam-gates/${gateId}`);
-}
-
-// ==========================================================================
 // Phase 9.5 — Collaborators (works for exam/course/blueprint_template)
 // ==========================================================================
 

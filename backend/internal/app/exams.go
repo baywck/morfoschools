@@ -264,7 +264,11 @@ func (a *App) handleGetExam(w http.ResponseWriter, r *http.Request) {
 		writeErrorJSON(w, http.StatusNotFound, "not_found", "Exam not found", r)
 		return
 	}
+	access := a.examAccessBatch(r.Context(), tenantID, AuthFromContext(r.Context()), []string{e.ID})
+	acc := access[e.ID]
 	e.CanAccess = true // verified by requireExamAccess above
+	e.CanWrite = acc.CanWrite
+	e.CanDelete = acc.CanDelete
 	writeJSON(w, http.StatusOK, e)
 }
 
@@ -317,6 +321,9 @@ func (a *App) handleCreateExam(w http.ResponseWriter, r *http.Request) {
 		for key, message := range a.validateTenantGradeLevel(r.Context(), tenantID, *req.GradeLevel) {
 			fields[key] = message
 		}
+	}
+	if req.DurationMinutes != nil && (*req.DurationMinutes < 0 || *req.DurationMinutes > 9999) {
+		fields["durationMinutes"] = "Duration must be a maximum of 4 digits"
 	}
 	if len(fields) > 0 {
 		writeValidationError(w, fields, r)
@@ -568,6 +575,10 @@ func (a *App) handleUpdateExam(w http.ResponseWriter, r *http.Request) {
 		add("exam_type", *req.ExamType)
 	}
 	if req.DurationMinutes != nil {
+		if *req.DurationMinutes < 0 || *req.DurationMinutes > 9999 {
+			writeValidationError(w, map[string]string{"durationMinutes": "Duration must be a maximum of 4 digits"}, r)
+			return
+		}
 		add("duration_minutes", *req.DurationMinutes)
 	}
 	if req.MaxScore != nil {

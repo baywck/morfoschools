@@ -62,26 +62,21 @@ import { normalizeRichTextForEditor } from "@/lib/rich-text";
 import { StimulusEditorPanel } from "@/components/exams/stimulus-editor-panel";
 import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
 import { cn } from "@/lib/cn";
+import { questionTypeShortLabel } from "@/lib/question-labels";
 
 const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string }[] = [
-  { value: "multiple_choice", label: "Multiple Choice" },
-  { value: "true_false", label: "True / False" },
-  { value: "short_answer", label: "Short Answer" },
-  { value: "essay", label: "Essay" },
+  { value: "multiple_choice", label: "Pilihan Ganda" },
+  { value: "true_false", label: "Benar/Salah" },
+  { value: "short_answer", label: "Isian Singkat" },
+  { value: "essay", label: "Uraian" },
 ];
 
 const SCORING_MODE_OPTIONS: { value: ScoringMode; label: string }[] = [
-  { value: "correct_all", label: "Correct All — must select exactly all correct" },
-  { value: "correct_one", label: "Correct One — any correct = full points" },
-  { value: "percentage", label: "Percentage — partial credit" },
+  { value: "correct_all", label: "Semua benar — harus memilih tepat semua jawaban benar" },
+  { value: "correct_one", label: "Satu benar — salah satu jawaban benar mendapat poin penuh" },
+  { value: "percentage", label: "Persentase — nilai parsial sesuai proporsi benar" },
 ];
 
-const QUESTION_TYPE_LABEL: Record<string, string> = {
-  multiple_choice: "PG",
-  true_false: "B/S",
-  short_answer: "Isian",
-  essay: "Essay",
-};
 
 export interface QuestionAccordionProps {
   /** When undefined this is a brand-new draft accordion (filled from slot or blank). */
@@ -582,7 +577,7 @@ export function QuestionAccordion({
             </p>
             <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
               <span className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 text-[9.5px] font-medium text-[var(--muted-foreground)]">
-                {QUESTION_TYPE_LABEL[type] ?? type}
+                {questionTypeShortLabel(type)}
               </span>
               <span className="text-[10px] text-[var(--muted-foreground)]">
                 {Number(points || 0)} pt
@@ -840,8 +835,8 @@ export function QuestionAccordion({
             <div>
               <label className="mb-1 block text-[11px] font-medium text-[var(--muted-foreground)]">
                 {type === "short_answer"
-                  ? "Reference answer (opsional)"
-                  : "Rubrik / catatan grading (opsional)"}
+                  ? "Jawaban rujukan (opsional)"
+                  : "Rubrik / catatan penilaian (opsional)"}
               </label>
               <RichEditor
                 value={correctAnswer}
@@ -849,7 +844,7 @@ export function QuestionAccordion({
                 minRows={2}
                 placeholder={type === "short_answer" ? "Jawaban rujukan." : "Rubrik atau catatan grading."}
                 disabled={!canEdit}
-                ariaLabel={type === "short_answer" ? "Reference answer" : "Rubrik"}
+                ariaLabel={type === "short_answer" ? "Jawaban rujukan" : "Rubrik"}
               />
             </div>
           )}

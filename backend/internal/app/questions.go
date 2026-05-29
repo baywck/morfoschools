@@ -154,47 +154,6 @@ func (a *App) handleListQuestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Gate enforcement: callers without exams:write are takers, not authors.
-	// They can only fetch questions while at least one gate window is open.
-	// Authors (exams:write) and platform admins always bypass the gate.
-	auth := AuthFromContext(r.Context())
-	if !hasPermission(auth, "exams:write") && (auth == nil || !auth.IsPlatformAdmin) {
-		var examStatus string
-		err := a.db.QueryRowContext(r.Context(),
-			`SELECT status FROM exams WHERE id = $1 AND tenant_id = $2`,
-			examID, tenantID,
-		).Scan(&examStatus)
-		if err != nil {
-			writeErrorJSON(w, http.StatusNotFound, "not_found", "Exam not found", r)
-			return
-		}
-		if examStatus != "published" {
-			writeErrorJSON(w, http.StatusForbidden, "exam_not_open", "This exam is not currently available", r)
-			return
-		}
-		var gateCount int
-		_ = a.db.QueryRowContext(r.Context(),
-			`SELECT COUNT(*) FROM exam_gate_windows WHERE exam_id = $1 AND tenant_id = $2`,
-			examID, tenantID,
-		).Scan(&gateCount)
-		if gateCount > 0 {
-			var isOpen bool
-			_ = a.db.QueryRowContext(r.Context(), `
-				SELECT EXISTS(
-				    SELECT 1 FROM exam_gate_windows
-				     WHERE exam_id = $1 AND tenant_id = $2
-				       AND now() BETWEEN opens_at AND closes_at
-				)`,
-				examID, tenantID,
-			).Scan(&isOpen)
-			if !isOpen {
-				writeErrorJSON(w, http.StatusForbidden, "exam_not_open",
-					"This exam is not currently within an open window", r)
-				return
-			}
-		}
-	}
-
 	// One round-trip per exam: questions with their options nested via
 	// json_agg, ordered by section then sort_order. We also embed the
 	// blueprint slot summary when the question is linked to a slot, so

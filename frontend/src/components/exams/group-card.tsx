@@ -32,12 +32,13 @@ import { stripHtmlPreview } from "@/components/ui/rendered-content";
 import { StimulusEditorPanel } from "@/components/exams/stimulus-editor-panel";
 import { normalizeRichTextForEditor } from "@/lib/rich-text";
 import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
-import { cn } from "@/lib/cn";
 
 export interface GroupCardProps {
   group: ExamQuestionGroup;
   /** Total questions in this group (rendered as the count badge). */
   questionCount: number;
+  /** Human-visible question number range for questions inside this group, e.g. 1-2. */
+  questionRange?: string;
   /** Children render slot — usually <SortableContext> + <QuestionAccordion>s. */
   children: React.ReactNode;
   canEdit: boolean;
@@ -58,6 +59,7 @@ export interface GroupCardProps {
 export function GroupCard({
   group,
   questionCount,
+  questionRange,
   children,
   canEdit,
   examId,
@@ -67,7 +69,7 @@ export function GroupCard({
 }: GroupCardProps) {
   const { toast } = useToast();
   const [stimulusOpen, setStimulusOpen] = useState(false);
-  const [bodyOpen, setBodyOpen] = useState(true);
+  const [bodyOpen, setBodyOpen] = useState(false);
   const [savingStim, setSavingStim] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -199,32 +201,36 @@ export function GroupCard({
             <GripVertical size={13} />
           </button>
         )}
+        <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-[var(--brand-soft)] px-1.5 font-mono text-[10.5px] font-semibold text-[var(--brand)]">
+          {questionRange || "-"}
+        </span>
         <button
           type="button"
           onClick={() => setBodyOpen((v) => !v)}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+          className="shrink-0 text-[var(--muted-foreground)] transition-colors"
           aria-label={bodyOpen ? "Collapse group" : "Expand group"}
           aria-expanded={bodyOpen}
         >
           {bodyOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--brand-soft)] text-[var(--brand)]">
-          <Layers size={11} />
-        </div>
-        <div className="flex-1 min-w-0">
+        <button type="button" onClick={() => setBodyOpen((v) => !v)} className="flex-1 min-w-0 text-left">
           <p className="text-[12px] font-semibold text-[var(--foreground)]">
             {stimulusTitle ?? "Stimulus group"}
           </p>
-          <p className="text-[10px] text-[var(--muted-foreground)] truncate">
-            {stimulusTitle
-              ? stimulusBody
-                ? stripHtmlPreview(stimulusBody, 90)
-                : "Tanpa isi"
-              : "Belum ada stimulus — klik untuk pilih"}
-            {" · "}
-            {questionCount} soal
-          </p>
-        </div>
+          <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 text-[9.5px] font-medium text-[var(--muted-foreground)]">
+              GROUP
+            </span>
+            <span className="text-[10px] text-[var(--muted-foreground)]">
+              {questionCount} soal
+            </span>
+            {stimulusTitle && stimulusBody && (
+              <span className="rounded-md bg-[var(--accent)] px-1.5 py-0.5 text-[9.5px] font-medium text-[var(--muted-foreground)] truncate max-w-[56%]">
+                Stim: {stripHtmlPreview(stimulusBody, 90)}
+              </span>
+            )}
+          </div>
+        </button>
         {canEdit && (
           <>
             <InlineMagicPopover
