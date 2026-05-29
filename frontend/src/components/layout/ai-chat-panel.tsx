@@ -826,7 +826,7 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
       const csrfToken = csrfMatch ? csrfMatch[1] : "";
 
       const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 120_000);
+      const timeoutId = window.setTimeout(() => controller.abort(), 180_000);
       let response: Response;
       try {
         response = await fetch(`${API_BASE}/api/v1/ai/chat`, {

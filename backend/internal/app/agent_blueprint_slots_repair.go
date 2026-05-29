@@ -11,7 +11,7 @@ import (
 // clear, friendly message. This stays LLM-only; there is no template fallback.
 func (a *App) repairInvalidBlueprintSlots(ctx context.Context, provider resolvedAIProvider, prompt string, slots []agentBlueprintSlotDraft) []agentBlueprintSlotDraft {
 	const repairNote = " Beberapa slot berikut melanggar aturan: TP wajib audience 'Peserta didik' + KKO terukur sesuai level; indikator wajib berisi pola stimulus 'Disajikan ...'; level harus C1-C6; tanpa KD/SK. Perbaiki SEMUA slot ini dan kembalikan JSON object {\"slots\":[...]} dengan jumlah dan urutan position yang sama persis."
-	for pass := 0; pass < 2; pass++ {
+	for pass := 0; pass < 1; pass++ {
 		var badIdx []int
 		for i := range slots {
 			if hasBlockingCurriculumIssues(validateKurikulumMerdekaBlueprintSlot(slots[i])) {

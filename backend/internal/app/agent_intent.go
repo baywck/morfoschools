@@ -24,6 +24,13 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 	if a.tryCreateChatBlueprintSlotEditProposal(w, r, tenantID, userID, sessionID, req) {
 		return true
 	}
+	// Deterministic fast-path: a clear "buatkan N slot" command on the
+	// kisi-kisi page goes straight to a proposal, skipping the classifier LLM
+	// call. This removes one sequential round-trip so the whole chain stays
+	// well under the client timeout.
+	if isBlueprintPageRequest(req) && isBlueprintSlotCreateCommand(lower) {
+		return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "deterministic slot-create command"})
+	}
 	auth := AuthFromContext(r.Context())
 	roles := []string{}
 	if auth != nil {
