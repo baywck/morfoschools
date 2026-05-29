@@ -37,6 +37,7 @@ import { ExportBlueprintSheet } from "@/components/exams/export-blueprint-sheet"
 import { RenderedContent } from "@/components/ui/rendered-content";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
+import { RowActions } from "@/components/ui/row-actions";
 import {
   ClipboardCopy,
   ClipboardList,
@@ -648,9 +649,11 @@ function KisiKisiManagerPanel({
                       </td>
                       {canWrite && (
                         <td className="border-t border-[var(--border)] px-2 py-2 text-right">
-                          <div className="flex justify-end gap-1">
-                            <button type="button" onClick={() => openEditSlot(slot)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]" aria-label="Edit slot kisi-kisi"><Pencil size={13} /></button>
-                            <button type="button" onClick={() => setDeleteTarget(slot)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] text-[var(--danger)] hover:opacity-80" aria-label="Hapus slot kisi-kisi"><Trash2 size={13} /></button>
+                          <div className="flex justify-end">
+                            <RowActions actions={[
+                              { label: "Edit", icon: <Pencil size={13} />, onClick: () => openEditSlot(slot) },
+                              { label: "Hapus", icon: <Trash2 size={13} />, variant: "danger", onClick: () => setDeleteTarget(slot) },
+                            ]} />
                           </div>
                         </td>
                       )}
