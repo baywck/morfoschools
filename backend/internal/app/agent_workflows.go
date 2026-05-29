@@ -15,6 +15,7 @@ const (
 	agentWorkflowCreateExamSection    agentWorkflow = "create_exam_section"
 	agentWorkflowCreateBlueprintSlots agentWorkflow = "create_blueprint_slots"
 	agentWorkflowEditBlueprintSlot    agentWorkflow = "edit_blueprint_slot"
+	agentWorkflowEditBlueprintSlots   agentWorkflow = "edit_blueprint_slots"
 )
 
 type agentWorkflowResult struct {
@@ -34,6 +35,8 @@ func (a *App) executeAgentWorkflow(ctx context.Context, tenantID, userID string,
 		return a.executeAgentCreateBlueprintSlots(ctx, tenantID, userID, args)
 	case agentWorkflowEditBlueprintSlot:
 		return a.executeAgentEditBlueprintSlot(ctx, tenantID, userID, args)
+	case agentWorkflowEditBlueprintSlots:
+		return a.executeAgentEditBlueprintSlots(ctx, tenantID, userID, args)
 	default:
 		return agentWorkflowResult{}, fmt.Errorf("unsupported agent workflow: %s", workflow)
 	}

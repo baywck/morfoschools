@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var chatBlueprintSlotEditRe = regexp.MustCompile(`(?i)\b(?:slot|nomor)\s*(\d+)\b`)
+var chatBlueprintSlotEditRe = regexp.MustCompile(`(?i)\b(?:slot|nomor)\s*(\d+)(?:\s*[-–]\s*(\d+))?\b`)
 
 func (a *App) tryCreateChatBlueprintSlotEditProposal(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest) bool {
 	if !isBlueprintSlotEditChatRequest(req) {
@@ -19,56 +19,66 @@ func (a *App) tryCreateChatBlueprintSlotEditProposal(w http.ResponseWriter, r *h
 	if examID == "" {
 		return false
 	}
-	position := extractBlueprintSlotPosition(req.Message)
-	if position <= 0 {
-		content := "Slot mana yang ingin diubah? Sebutkan nomor slotnya, misalnya: `ubah TP di slot 2 agar mengikuti ABCD`."
+	positions := extractBlueprintSlotPositions(req.Message)
+	if len(positions) == 0 {
+		content := "Slot mana yang ingin diubah? Sebutkan nomor slotnya, misalnya: `ubah TP di slot 2 agar mengikuti ABCD` atau `perbaiki slot 2-5`."
 		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 		return true
 	}
-	slotID, err := a.findExamBlueprintSlotIDByPosition(r.Context(), tenantID, examID, position)
-	if err != nil || slotID == "" {
-		content := fmt.Sprintf("Saya tidak menemukan slot %d pada kisi-kisi exam aktif.", position)
-		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
-		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
-		return true
+	items := []agentEditBlueprintSlotArgs{}
+	previews := []string{}
+	for _, position := range positions {
+		slotID, err := a.findExamBlueprintSlotIDByPosition(r.Context(), tenantID, examID, position)
+		if err != nil || slotID == "" {
+			content := fmt.Sprintf("Saya tidak menemukan slot %d pada kisi-kisi exam aktif.", position)
+			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
+			return true
+		}
+		before, err := a.loadSlotPayload(r.Context(), "exam_blueprint_slots", slotID)
+		if err != nil {
+			return false
+		}
+		after, err := a.generateBlueprintSlotEditDraft(r.Context(), tenantID, userID, slotID, req.Message, before)
+		if err != nil {
+			a.logger.Error("chat AI blueprint slot edit failed", "error", err)
+			writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat perubahan slot. Coba instruksi yang lebih spesifik.", r)
+			return true
+		}
+		merged := mergeSlotPayload(before, after)
+		if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, merged); len(errs) > 0 {
+			content := buildAgentProposalValidationMessage(errs)
+			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false, "validation": errs})
+			return true
+		}
+		diff := buildBlueprintSlotAIDiff(before, merged)
+		if len(diff) == 0 {
+			content := fmt.Sprintf("AI belum menghasilkan perubahan bermakna untuk slot %d. Coba instruksi lebih spesifik.", position)
+			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
+			return true
+		}
+		warnings := a.blueprintSlotEditWarnings(r.Context(), slotID)
+		items = append(items, agentEditBlueprintSlotArgs{SlotID: slotID, Instruction: req.Message, Before: before, After: merged})
+		previews = append(previews, fmt.Sprintf("Slot %d\n%s", position, buildBlueprintSlotEditPreview(diff, warnings)))
 	}
-	before, err := a.loadSlotPayload(r.Context(), "exam_blueprint_slots", slotID)
-	if err != nil {
-		return false
+	workflow := agentWorkflowEditBlueprintSlot
+	raw, _ := json.Marshal(items[0])
+	if len(items) > 1 {
+		workflow = agentWorkflowEditBlueprintSlots
+		raw, _ = json.Marshal(agentEditBlueprintSlotsArgs{Items: items})
 	}
-	after, err := a.generateBlueprintSlotEditDraft(r.Context(), tenantID, userID, slotID, req.Message, before)
-	if err != nil {
-		a.logger.Error("chat AI blueprint slot edit failed", "error", err)
-		writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat perubahan slot. Coba instruksi yang lebih spesifik.", r)
-		return true
-	}
-	merged := mergeSlotPayload(before, after)
-	if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, merged); len(errs) > 0 {
-		content := buildAgentProposalValidationMessage(errs)
-		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
-		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false, "validation": errs})
-		return true
-	}
-	diff := buildBlueprintSlotAIDiff(before, merged)
-	if len(diff) == 0 {
-		content := "AI belum menghasilkan perubahan bermakna untuk slot ini. Coba instruksi lebih spesifik, misalnya: `ubah TP slot 2 menjadi ABCD lengkap dengan kondisi dan degree`."
-		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
-		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
-		return true
-	}
-	warnings := a.blueprintSlotEditWarnings(r.Context(), slotID)
-	args := agentEditBlueprintSlotArgs{SlotID: slotID, Instruction: req.Message, Before: before, After: merged}
-	raw, _ := json.Marshal(args)
-	preview := buildBlueprintSlotEditPreview(diff, warnings)
-	proposalID, err := a.createAgentProposal(r, tenantID, userID, sessionID, agentWorkflowEditBlueprintSlot, raw, preview)
+	preview := strings.Join(previews, "\n\n---\n\n")
+	proposalID, err := a.createAgentProposal(r, tenantID, userID, sessionID, workflow, raw, preview)
 	if err != nil {
 		writeErrorJSON(w, http.StatusInternalServerError, "proposal_failed", "Could not create proposal", r)
 		return true
 	}
 	content := preview + "\n\nBalas `simpan` untuk menerapkan perubahan ini."
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
-	writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "proposalId": proposalID, "proposal": map[string]any{"id": proposalID, "proposalId": proposalID, "workflow": string(agentWorkflowEditBlueprintSlot), "preview": preview}})
+	writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "proposalId": proposalID, "proposal": map[string]any{"id": proposalID, "proposalId": proposalID, "workflow": string(workflow), "preview": preview}})
 	return true
 }
 
@@ -80,17 +90,34 @@ func isBlueprintSlotEditChatRequest(req aiChatRequest) bool {
 	if !(strings.Contains(lower, "slot") || strings.Contains(lower, "nomor")) {
 		return false
 	}
-	return strings.Contains(lower, "ubah") || strings.Contains(lower, "perbaiki") || strings.Contains(lower, "edit") || strings.Contains(lower, "revisi") || strings.Contains(lower, "tp") || strings.Contains(lower, "tujuan pembelajaran") || strings.Contains(lower, "indikator")
+	return strings.Contains(lower, "ubah") || strings.Contains(lower, "perbaiki") || strings.Contains(lower, "edit") || strings.Contains(lower, "revisi") || strings.Contains(lower, "tp") || strings.Contains(lower, "tujuan pembelajaran") || strings.Contains(lower, "indikator") || strings.Contains(lower, "condition") || strings.Contains(lower, "degree")
 }
 
-func extractBlueprintSlotPosition(message string) int {
+func extractBlueprintSlotPositions(message string) []int {
 	match := chatBlueprintSlotEditRe.FindStringSubmatch(message)
 	if len(match) < 2 {
-		return 0
+		return nil
 	}
-	var pos int
-	_, _ = fmt.Sscanf(match[1], "%d", &pos)
-	return pos
+	var start, end int
+	_, _ = fmt.Sscanf(match[1], "%d", &start)
+	end = start
+	if len(match) > 2 && strings.TrimSpace(match[2]) != "" {
+		_, _ = fmt.Sscanf(match[2], "%d", &end)
+	}
+	if start <= 0 || end <= 0 {
+		return nil
+	}
+	if end < start {
+		start, end = end, start
+	}
+	if end-start > 20 {
+		end = start + 20
+	}
+	out := make([]int, 0, end-start+1)
+	for i := start; i <= end; i++ {
+		out = append(out, i)
+	}
+	return out
 }
 
 func (a *App) findExamBlueprintSlotIDByPosition(ctx context.Context, tenantID, examID string, position int) (string, error) {
