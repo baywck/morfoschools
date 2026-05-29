@@ -19,6 +19,12 @@ func (a *App) tryHandleBlueprintSlotsRequest(w http.ResponseWriter, r *http.Requ
 	if examID == "" {
 		return false
 	}
+	if n := requestedBlueprintSlotCount(lower); n > maxBlueprintSlotsPerProposal {
+		content := "Untuk menjaga kualitas kisi-kisi dan menghindari draft terlalu panjang, saya batasi pembuatan otomatis maksimal 5 slot per sekali proposal. Permintaan lebih dari 5 slot lebih baik kita pecah. Mulai dengan 5 slot pertama dulu, lalu lanjut batch berikutnya."
+		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false})
+		return true
+	}
 	if !hasSpecificBlueprintGenerationRequest(lower) {
 		return false
 	}
@@ -49,6 +55,8 @@ func (a *App) tryHandleBlueprintSlotsRequest(w http.ResponseWriter, r *http.Requ
 	})
 	return true
 }
+
+const maxBlueprintSlotsPerProposal = 5
 
 var blueprintCountPattern = regexp.MustCompile(`(?i)(\d+)\s*(slot|soal|nomor|butir)?`)
 
