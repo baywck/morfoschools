@@ -599,10 +599,10 @@ function QuestionNumberBadge({ questionNumber, content }: { questionNumber: numb
       <span
         id={tooltipId}
         role="tooltip"
-        className="pointer-events-none absolute left-full top-1/2 z-[100] ml-2 hidden w-[min(420px,calc(100vw-48px))] -translate-y-1/2 rounded-xl border border-[var(--border)] bg-[var(--popover)] p-3 text-left shadow-2xl group-hover:block group-focus-within:block"
+        className="pointer-events-none absolute left-full top-1/2 z-[100] ml-2 hidden w-[min(420px,calc(100vw-48px))] -translate-y-1/2 rounded-xl border border-slate-700 bg-slate-950 p-3 text-left shadow-2xl group-hover:block group-focus-within:block"
       >
-        <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-[var(--border)] bg-[var(--popover)]" />
-        <RenderedContent html={content} className="relative max-h-64 overflow-auto text-[12px] text-[var(--foreground)]" />
+        <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-slate-700 bg-slate-950" />
+        <RenderedContent html={content} className="relative max-h-64 overflow-auto whitespace-normal break-words text-[12px] leading-relaxed text-slate-50 [&_*]:text-slate-50" />
       </span>
     </span>
   );
