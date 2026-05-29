@@ -42,8 +42,10 @@ func (a *App) tryCreateChatBlueprintSlotEditProposal(w http.ResponseWriter, r *h
 		}
 		after, err := a.generateBlueprintSlotEditDraft(r.Context(), tenantID, userID, slotID, req.Message, before)
 		if err != nil {
-			a.logger.Error("chat AI blueprint slot edit failed", "error", err)
-			writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat perubahan slot. Coba instruksi yang lebih spesifik.", r)
+			a.logger.Error("chat AI blueprint slot edit failed", "error", err, "slot", position)
+			content := fmt.Sprintf("AI belum bisa membuat perubahan untuk slot %d karena respons model tidak valid/terpotong. Coba ulangi atau pecah instruksi menjadi range lebih kecil, misalnya `perbaiki slot %d dulu`.", position, position)
+			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 			return true
 		}
 		merged := mergeSlotPayload(before, after)

@@ -172,6 +172,23 @@ Kembalikan JSON object valid saja. Boleh root {"slot":{...}} atau langsung field
 	if err != nil {
 		return slotPayload{}, err
 	}
+	parsed, parseErr := parseBlueprintSlotEditPayload(content)
+	if parseErr == nil {
+		return parsed, nil
+	}
+	repairPrompt := prompt + " Output sebelumnya tidak valid/terpotong. Perbaiki menjadi JSON valid saja, satu object slot lengkap, tanpa markdown."
+	repaired, repairErr := a.callBlueprintSlotEditLLMJSON(ctx, provider, repairPrompt, "Perbaiki JSON slot edit ini menjadi valid dan lengkap: "+content)
+	if repairErr == nil {
+		parsed, parseErr = parseBlueprintSlotEditPayload(repaired)
+		if parseErr == nil {
+			return parsed, nil
+		}
+	}
+	a.logger.Error("blueprint slot edit parse failed", "content", content, "error", parseErr, "repairError", repairErr)
+	return slotPayload{}, parseErr
+}
+
+func parseBlueprintSlotEditPayload(content string) (slotPayload, error) {
 	// LLM may return either {"slot":{...}} or the slot fields at root.
 	var wrapped struct {
 		Slot *slotPayload `json:"slot"`
@@ -181,7 +198,6 @@ Kembalikan JSON object valid saja. Boleh root {"slot":{...}} atau langsung field
 	}
 	var flat slotPayload
 	if err := json.Unmarshal([]byte(content), &flat); err != nil {
-		a.logger.Error("blueprint slot edit parse failed", "content", content, "error", err)
 		return slotPayload{}, err
 	}
 	return flat, nil
@@ -193,7 +209,7 @@ func slotPayloadHasEditableValue(p slotPayload) bool {
 
 func (a *App) callBlueprintSlotEditLLMJSON(ctx context.Context, provider resolvedAIProvider, prompt, userMessage string) (string, error) {
 	extra := map[string]any{"response_format": map[string]string{"type": "json_object"}}
-	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}}, 0.2, 1800, extra)
+	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}}, 0.2, 3000, extra)
 	if err != nil {
 		return "", err
 	}
