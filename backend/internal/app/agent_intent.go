@@ -21,6 +21,9 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 		return true
 	}
+	if a.tryCreateChatBlueprintSlotEditProposal(w, r, tenantID, userID, sessionID, req) {
+		return true
+	}
 	auth := AuthFromContext(r.Context())
 	roles := []string{}
 	if auth != nil {
