@@ -36,6 +36,13 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 			return false
 		}
 	} else if classification.Mode != "proposal_request" {
+		// Safety net: a clear "create N slots" command on the kisi-kisi page
+		// must become a real proposal, never discussion (which can fabricate
+		// slots as plain text). The classifier occasionally misroutes these.
+		if isBlueprintPageRequest(req) && isBlueprintSlotCreateCommand(lower) {
+			classification.Workflow = string(agentWorkflowCreateBlueprintSlots)
+			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, classification)
+		}
 		return false
 	} else if agentWorkflow(classification.Workflow) == "" && isBlueprintPageRequest(req) {
 		classification.Workflow = string(agentWorkflowCreateBlueprintSlots)
