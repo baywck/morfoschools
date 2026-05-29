@@ -561,17 +561,17 @@ function KisiKisiManagerPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <PanelHeader icon={<Sparkles size={15} />} title="Kisi-kisi" subtitle="Aktifkan blueprint agar soal bisa dipetakan ke indikator dan coverage." />
-        {exam.usesKisiKisi && <CurriculumContextNotice context={curriculumContext} />}
-        <div className="mt-3 flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--accent)] px-3 py-2">
-          <div><p className="text-[12px] font-semibold text-[var(--foreground)]">Use Kisi-Kisi / Blueprint</p><p className="text-[11px] text-[var(--muted-foreground)]">Jika dimatikan, data lama tidak dihapus; hanya disembunyikan dari authoring.</p></div>
-          <div className="flex items-center gap-2">
-            {togglingKisi && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--muted-foreground)] border-r-transparent" />}
-            <ToggleSwitch checked={exam.usesKisiKisi} disabled={!canWrite || togglingKisi} onChange={onToggleKisiKisi} ariaLabel="Toggle kisi-kisi" />
-          </div>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold text-[var(--foreground)]">Kisi-kisi {exam.usesKisiKisi ? "aktif" : "nonaktif"}</p>
+          <p className="truncate text-[11px] text-[var(--muted-foreground)]">{exam.usesKisiKisi ? "Pemetaan soal ke indikator aktif." : "Aktifkan untuk memetakan soal ke indikator."}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {togglingKisi && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--muted-foreground)] border-r-transparent" />}
+          <ToggleSwitch checked={exam.usesKisiKisi} disabled={!canWrite || togglingKisi} onChange={onToggleKisiKisi} ariaLabel="Toggle kisi-kisi" />
         </div>
       </div>
+      {exam.usesKisiKisi && <CurriculumContextNotice context={curriculumContext} />}
 
       {!exam.usesKisiKisi ? (
         <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--accent)] p-8 text-center">
@@ -589,15 +589,17 @@ function KisiKisiManagerPanel({
             <SummaryCard label="Belum terhubung" value={String(unlinked.length)} tone={unlinked.length > 0 ? "warning" : "success"} />
             <SummaryCard label="Coverage slot" value={total > 0 ? `${Math.round((filled / total) * 100)}%` : "0%"} />
           </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <PanelHeader icon={<ClipboardList size={15} />} title={blueprint.title || "Kisi-Kisi Manager"} subtitle={`${blueprint.curriculumCode} · ${blueprint.blueprintType} · ${total} slot`} />
-              <div className="hidden flex-wrap items-center gap-2 md:flex">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-semibold text-[var(--foreground)]">{blueprint.title || "Kisi-kisi"}</p>
+              <p className="text-[10px] text-[var(--muted-foreground)]">{total} slot · {filled} terhubung</p>
+            </div>
+            <div className="hidden flex-wrap items-center gap-2 md:flex">
                 {canWrite && <KisiActionButton icon={<ClipboardPaste size={13} />} label={blueprint ? "Ganti template kisi-kisi" : "Import template kisi-kisi"} onClick={onLoadTemplate} />}
                 {blueprint && <KisiActionButton icon={<ClipboardCopy size={13} />} label="Simpan sebagai template" onClick={onExportTemplate} />}
                 {blueprint && <KisiActionButton icon={<Printer size={13} />} label="Print kisi-kisi" onClick={onPrint} />}
               </div>
-              <div className="md:hidden">
+            <div className="md:hidden">
                 <RowActions actions={[
                   ...(canWrite ? [{ label: blueprint ? "Ganti template" : "Import template", icon: <ClipboardPaste size={13} />, onClick: onLoadTemplate }] : []),
                   ...(blueprint ? [
@@ -605,7 +607,6 @@ function KisiKisiManagerPanel({
                     { label: "Print kisi-kisi", icon: <Printer size={13} />, onClick: onPrint },
                   ] : []),
                 ]} />
-              </div>
             </div>
           </div>
           <div className="hidden rounded-xl border border-[var(--border)] bg-[var(--card)] print:block print:border-black print:shadow-none md:block">
