@@ -79,31 +79,42 @@ func (a *App) ensureExamCurriculumContext(ctx context.Context, tenantID, examID 
 	phase := gradeLevelToPhase(gradeLevel)
 	resp.LevelCode = levelCode
 	resp.Phase = phase
-	if subjectCode == "" || gradeLevel == "" || levelCode == "" || phase == "" {
+	if (subjectName == "" && subjectCode == "") || gradeLevel == "" || levelCode == "" || phase == "" {
 		resp.Status = "missing"
 		resp.Warnings = append(resp.Warnings, "CP resmi belum bisa dimuat karena mata pelajaran atau kelas exam belum lengkap.")
 		return resp, nil
 	}
-	ref, found, err := a.findCPReferenceBySubject(ctx, levelCode, subjectCode, phase)
-	if err != nil {
-		return resp, err
-	}
-	if found {
-		resp.Status = "ready"
-		resp.Source = "local_db"
-		resp.Reference = &ref
-		resp.Elements = ref.Elements
-		return resp, nil
+	candidates := cpSubjectCodeCandidates(subjectCode, subjectName)
+	for _, candidate := range candidates {
+		ref, found, err := a.findCPReferenceBySubject(ctx, levelCode, candidate, phase)
+		if err != nil {
+			return resp, err
+		}
+		if found {
+			resp.Status = "ready"
+			resp.Source = "local_db"
+			resp.Reference = &ref
+			resp.Elements = ref.Elements
+			if candidate != strings.ToLower(strings.TrimSpace(subjectCode)) {
+				resp.Warnings = append(resp.Warnings, "Kode subject lokal berbeda dengan kode CP resmi; CP dimuat memakai padanan resmi "+candidate+".")
+			}
+			return resp, nil
+		}
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, 28*time.Second)
 	defer cancel()
-	seeded, fields, err := a.seedCPReferenceFromKemendikdasmen(fetchCtx, levelCode, subjectCode, phase)
-	if err == nil && len(fields) == 0 {
-		resp.Status = "ready"
-		resp.Source = "remote_fetch"
-		resp.Reference = &seeded
-		resp.Elements = seeded.Elements
-		return resp, nil
+	for _, candidate := range candidates {
+		seeded, fields, err := a.seedCPReferenceFromKemendikdasmen(fetchCtx, levelCode, candidate, phase)
+		if err == nil && len(fields) == 0 {
+			resp.Status = "ready"
+			resp.Source = "remote_fetch"
+			resp.Reference = &seeded
+			resp.Elements = seeded.Elements
+			if candidate != strings.ToLower(strings.TrimSpace(subjectCode)) {
+				resp.Warnings = append(resp.Warnings, "Kode subject lokal berbeda dengan kode CP resmi; CP disinkronkan memakai padanan resmi "+candidate+".")
+			}
+			return resp, nil
+		}
 	}
 	resp.Status = "missing"
 	resp.Source = "remote_failed"
@@ -131,6 +142,45 @@ func (a *App) findCPReferenceBySubject(ctx context.Context, levelCode, subjectCo
 	}
 	ref, _, err := a.loadCPReferenceNoHTTP(ctx, id)
 	return ref, err == nil, err
+}
+
+func cpSubjectCodeCandidates(subjectCode, subjectName string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(v string) {
+		v = strings.ToLower(strings.TrimSpace(v))
+		if v == "" || seen[v] {
+			return
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	code := strings.ToLower(strings.TrimSpace(subjectCode))
+	nameSlug := slugifyCPSubjectName(subjectName)
+	add(code)
+	add(nameSlug)
+	if strings.Contains(code, "kewarganegaraan") || strings.Contains(nameSlug, "pancasila") || strings.Contains(nameSlug, "kewarganegaraan") {
+		add("pendidikan-pancasila")
+	}
+	return out
+}
+
+func slugifyCPSubjectName(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 func cpLevelCodeForGrade(gradeLevel string) string {
