@@ -14,6 +14,14 @@ func isBlueprintPageRequest(req aiChatRequest) bool {
 // "langsung buatkan 10 sekaligus"). It deliberately requires an imperative
 // creation verb so planning phrases like "aku berencana membuat 10 soal" or
 // "aku ingin membuat kisi-kisi" do NOT match.
+func isBlueprintDraftSaveRequest(lower string) bool {
+	lower = strings.ToLower(strings.TrimSpace(lower))
+	if !(strings.Contains(lower, "simpan") || strings.Contains(lower, "save") || strings.Contains(lower, "buatkan proposal")) {
+		return false
+	}
+	return strings.Contains(lower, "slot") || strings.Contains(lower, "kisi-kisi") || strings.Contains(lower, "kisi kisi")
+}
+
 func isBlueprintSlotPlanningQuestion(lower string) bool {
 	lower = strings.ToLower(strings.TrimSpace(lower))
 	if !(strings.Contains(lower, "kisi-kisi") || strings.Contains(lower, "kisi kisi") || strings.Contains(lower, "slot")) {

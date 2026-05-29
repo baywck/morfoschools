@@ -48,6 +48,7 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 		return true
 	}
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, preview)
+	a.markLatestBlueprintDraftStatus(r.Context(), tenantID, sessionID, deriveScopeKey(req.Shadow.ActiveEntities), "proposal_created")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message":    map[string]string{"role": "assistant", "content": preview},
 		"sessionId":  sessionID,

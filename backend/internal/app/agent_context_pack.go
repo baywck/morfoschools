@@ -12,6 +12,7 @@ type agentContextPack struct {
 	ExamID    string                `json:"examId,omitempty"`
 	Exam      agentContextExam      `json:"exam,omitempty"`
 	Blueprint agentContextBlueprint `json:"blueprint,omitempty"`
+	Memory    agentSessionMemory    `json:"memory,omitempty"`
 	Recent    []agentContextMessage `json:"recentMessages,omitempty"`
 	Notes     []string              `json:"notes,omitempty"`
 }
@@ -44,6 +45,8 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 	if active != nil {
 		pack.ExamID = strings.TrimSpace(active["examId"])
 	}
+	scopeKey := deriveScopeKey(active)
+	pack.Memory = a.loadAgentSessionMemory(ctx, tenantID, sessionID, scopeKey)
 	pack.Recent = a.loadAgentRecentMessages(ctx, sessionID, 16, 2200)
 	if pack.ExamID != "" {
 		if ctxResp, err := a.ensureExamCurriculumContext(ctx, tenantID, pack.ExamID); err == nil {

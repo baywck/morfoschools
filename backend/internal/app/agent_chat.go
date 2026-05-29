@@ -133,6 +133,7 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// from silently confirming an unrelated proposal.
 	_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_proposals SET status='expired' WHERE session_id=$1 AND status='pending'`, sessionID)
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+	a.rememberAssistantBlueprintDraft(r.Context(), tenantID, sessionID, scopeKey, content)
 	_, _ = a.db.ExecContext(r.Context(), `UPDATE ai_sessions SET message_count = message_count + 2, last_active_at = now() WHERE id=$1`, sessionID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message":   map[string]string{"role": "assistant", "content": content},

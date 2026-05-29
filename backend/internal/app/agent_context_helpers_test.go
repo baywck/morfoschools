@@ -2,6 +2,22 @@ package app
 
 import "testing"
 
+func TestIsBlueprintDraftSaveRequest(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"simpan dulu slot 6-10", true},
+		{"buatkan proposal kisi-kisi ini", true},
+		{"simpan pengaturan", false},
+	}
+	for _, c := range cases {
+		if got := isBlueprintDraftSaveRequest(c.msg); got != c.want {
+			t.Fatalf("isBlueprintDraftSaveRequest(%q) = %v, want %v", c.msg, got, c.want)
+		}
+	}
+}
+
 func TestBlueprintAffirmativeActionWords(t *testing.T) {
 	for _, msg := range []string{"setuju", "lakukan", "jalankan"} {
 		if got := classifyShortReply(msg); got != "affirm" {

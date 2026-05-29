@@ -24,7 +24,13 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 	if a.tryCreateChatBlueprintSlotEditProposal(w, r, tenantID, userID, sessionID, req) {
 		return true
 	}
-	if isBlueprintPageRequest(req) && classifyShortReply(lower) == "affirm" {
+	if isBlueprintPageRequest(req) && (classifyShortReply(lower) == "affirm" || isBlueprintDraftSaveRequest(lower)) {
+		scopeKey := deriveScopeKey(req.Shadow.ActiveEntities)
+		if draft, ok := a.latestBlueprintDraft(r.Context(), tenantID, sessionID, scopeKey); ok {
+			draftJSON := mustJSON(draft)
+			req.Message = "Buatkan proposal tepat berdasarkan blueprintDraft JSON yang sudah disetujui user ini. Gunakan slots dari JSON sebagai sumber utama; jangan lanjut ke slot lain dan jangan membuat materi baru. blueprintDraft=" + draftJSON
+			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "affirmed memory blueprint draft"})
+		}
 		if previousDraft, ok := a.lastAssistantBlueprintDraft(r.Context(), sessionID); ok {
 			req.Message = "Buatkan proposal 5 slot berdasarkan draft yang sudah disetujui user berikut. Pertahankan isi draft, jangan lanjut ke slot lain.\n\n" + previousDraft
 			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "affirmed previous blueprint draft"})
