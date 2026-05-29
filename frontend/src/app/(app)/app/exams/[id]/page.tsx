@@ -13,9 +13,13 @@ import {
   getExamCurriculumContext,
   getSlotsWithQuestions,
   listSubjects,
+  updateExamBlueprintSlot,
+  deleteExamBlueprintSlot,
   type Exam,
   type ExamBlueprint,
   type ExamCurriculumContext,
+  type SlotPayload,
+  type SlotWithQuestion,
   type SlotsWithQuestionsResponse,
   type Subject,
 } from "@/lib/modules-api";
@@ -31,12 +35,14 @@ import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
 import { LoadKisiKisiSheet } from "@/components/exams/load-kisi-kisi-sheet";
 import { ExportBlueprintSheet } from "@/components/exams/export-blueprint-sheet";
 import { RenderedContent } from "@/components/ui/rendered-content";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ClipboardCopy,
   ClipboardList,
   ClipboardPaste,
   FileQuestion,
   Info,
+  Pencil,
   Printer,
   Save,
   Send,
@@ -44,11 +50,13 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { questionTypeLabel } from "@/lib/question-labels";
 import { tenantEnabledPhases } from "@/lib/tenant-education";
 import { gradeOptionsForPhases, phaseForGrade } from "@/lib/grade-options";
+import { MerdekaKisiKisiFields } from "@/components/blueprint/merdeka-kisi-kisi-fields";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -379,6 +387,7 @@ export default function ExamDetailPage({ params }: PageProps) {
                 onExportTemplate={() => setShowExportKK(true)}
                 onPrint={() => window.print()}
                 onGenerateFromQuestions={() => toast({ tone: "info", title: "Buka AI chat", description: "Reverse-flow kisi-kisi tetap lewat proposal/confirm AI chat." })}
+                onChanged={reload}
               />
             )}
           </div>
@@ -484,6 +493,7 @@ function KisiKisiManagerPanel({
   onExportTemplate,
   onPrint,
   onGenerateFromQuestions,
+  onChanged,
 }: {
   exam: Exam;
   blueprint: ExamBlueprint | null;
@@ -496,11 +506,74 @@ function KisiKisiManagerPanel({
   onExportTemplate: () => void;
   onPrint: () => void;
   onGenerateFromQuestions: () => void;
+  onChanged: () => Promise<void>;
 }) {
+  const { toast } = useToast();
+  const [editingSlot, setEditingSlot] = useState<SlotWithQuestion | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SlotWithQuestion | null>(null);
+  const [savingSlot, setSavingSlot] = useState(false);
+  const [deletingSlot, setDeletingSlot] = useState(false);
+  const [slotErrors, setSlotErrors] = useState<Record<string, string>>({});
+  const [slotForm, setSlotForm] = useState<SlotPayload>({});
   const filled = slotsData?.coverage.filled ?? blueprint?.filledSlots ?? 0;
   const total = slotsData?.coverage.total ?? blueprint?.totalSlots ?? 0;
   const unlinked = slotsData?.unlinked ?? [];
   const slots = slotsData?.slots ?? [];
+
+  function openEditSlot(slot: SlotWithQuestion) {
+    setEditingSlot(slot);
+    setSlotErrors({});
+    setSlotForm({
+      capaianPembelajaran: slot.capaianPembelajaran ?? "",
+      elemenCp: slot.elemenCp ?? "",
+      tujuanPembelajaran: slot.tujuanPembelajaran ?? "",
+      materiPokok: slot.materiPokok ?? "",
+      kelas: slot.kelas ?? exam.gradeLevel ?? "",
+      semester: slot.semester ?? "",
+      cognitiveLevel: slot.cognitiveLevel ?? "",
+      difficulty: slot.difficulty ?? "",
+      indikatorSoal: slot.indikatorSoal ?? "",
+      questionType: slot.questionType ?? "multiple_choice",
+      points: slot.points ?? 1,
+    });
+  }
+
+  async function saveSlotEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingSlot) return;
+    setSavingSlot(true);
+    setSlotErrors({});
+    try {
+      const res = await updateExamBlueprintSlot(editingSlot.id, slotForm);
+      if (res.error) {
+        setSlotErrors(res.error.fields ?? {});
+        toast({ tone: "error", title: "Gagal menyimpan kisi-kisi", description: res.error.message });
+        return;
+      }
+      toast({ tone: "success", title: "Kisi-kisi diperbarui" });
+      setEditingSlot(null);
+      await onChanged();
+    } finally {
+      setSavingSlot(false);
+    }
+  }
+
+  async function confirmDeleteSlot() {
+    if (!deleteTarget) return;
+    setDeletingSlot(true);
+    try {
+      const res = await deleteExamBlueprintSlot(deleteTarget.id);
+      if (res.error) {
+        toast({ tone: "error", title: "Gagal menghapus kisi-kisi", description: res.error.message });
+        return;
+      }
+      toast({ tone: "success", title: "Slot kisi-kisi dihapus", description: deleteTarget.question ? "Soal terkait dilepas dari slot ini, bukan dihapus." : undefined });
+      setDeleteTarget(null);
+      await onChanged();
+    } finally {
+      setDeletingSlot(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -544,7 +617,7 @@ function KisiKisiManagerPanel({
           </div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] print:border-black print:shadow-none">
             <div className="overflow-x-auto">
-              <table className="min-w-[980px] w-full border-collapse text-left text-[11px]">
+              <table className="min-w-[1040px] w-full border-collapse text-left text-[11px]">
                 <thead className="bg-[var(--muted)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
                     <th className="w-16 border-b border-[var(--border)] px-2 py-2 text-center">Soal</th>
@@ -553,11 +626,12 @@ function KisiKisiManagerPanel({
                     <th className="border-b border-[var(--border)] px-2 py-2">Materi</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Indikator Soal</th>
                     <th className="w-32 border-b border-[var(--border)] px-2 py-2">Bentuk / Level</th>
+                    {canWrite && <th className="w-20 border-b border-[var(--border)] px-2 py-2 text-right">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {slots.length === 0 ? (
-                    <tr><td colSpan={6} className="px-3 py-8 text-center text-[12px] text-[var(--muted-foreground)]">Belum ada slot kisi-kisi.</td></tr>
+                    <tr><td colSpan={canWrite ? 7 : 6} className="px-3 py-8 text-center text-[12px] text-[var(--muted-foreground)]">Belum ada slot kisi-kisi.</td></tr>
                   ) : slots.map((slot) => (
                     <tr key={slot.id} className="align-top odd:bg-[var(--background)] even:bg-[var(--accent)]/40">
                       <td className="border-t border-[var(--border)] px-2 py-2 text-center">
@@ -571,6 +645,14 @@ function KisiKisiManagerPanel({
                         <p className="font-medium text-[var(--foreground)]">{questionTypeLabel(slot.questionType)}</p>
                         <p className="mt-1 text-[10px] font-semibold text-[var(--muted-foreground)]">{slot.cognitiveLevel || "-"}</p>
                       </td>
+                      {canWrite && (
+                        <td className="border-t border-[var(--border)] px-2 py-2 text-right">
+                          <div className="flex justify-end gap-1">
+                            <button type="button" onClick={() => openEditSlot(slot)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]" aria-label="Edit slot kisi-kisi"><Pencil size={13} /></button>
+                            <button type="button" onClick={() => setDeleteTarget(slot)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--danger)]/25 bg-[var(--danger-soft)] text-[var(--danger)] hover:opacity-80" aria-label="Hapus slot kisi-kisi"><Trash2 size={13} /></button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -578,6 +660,51 @@ function KisiKisiManagerPanel({
             </div>
           </div>
           <div className="space-y-2"><h3 className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">Soal belum terhubung</h3>{unlinked.length === 0 ? <p className="rounded-xl border border-[var(--border)] bg-[var(--success-soft)] p-4 text-[12px] font-medium text-[var(--success)]">Semua soal sudah terhubung ke kisi-kisi.</p> : unlinked.map((q) => <div key={q.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-semibold text-[var(--muted-foreground)]">{questionTypeLabel(q.questionType)} · {q.points} pts</p><span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">unlinked</span></div><div className="mt-2"><RenderedContent html={q.content} className="text-[12px]" /></div></div>)}</div>
+          {editingSlot && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[1px]">
+              <form onSubmit={saveSlotEdit} className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl">
+                <PanelHeader icon={<Pencil size={15} />} title="Edit slot kisi-kisi" subtitle="Perubahan pada slot akan memengaruhi pemetaan/validasi soal yang terhubung." />
+                {editingSlot.question && <p className="mt-3 rounded-lg border border-[var(--warning)]/25 bg-[var(--warning-soft)] px-3 py-2 text-[11px] font-medium text-[var(--warning)]">Slot ini terhubung ke soal. Mengubah indikator, bentuk, atau level dapat membuat soal perlu ditinjau ulang.</p>}
+                <div className="mt-3">
+                  <MerdekaKisiKisiFields
+                    capaianPembelajaran={slotForm.capaianPembelajaran ?? ""}
+                    elemenCp={slotForm.elemenCp ?? ""}
+                    tujuanPembelajaran={slotForm.tujuanPembelajaran ?? ""}
+                    materiPokok={slotForm.materiPokok ?? ""}
+                    kelas={slotForm.kelas ?? ""}
+                    semester={slotForm.semester ?? ""}
+                    cognitiveLevel={slotForm.cognitiveLevel ?? ""}
+                    difficulty={slotForm.difficulty ?? ""}
+                    indikatorSoal={slotForm.indikatorSoal ?? ""}
+                    onCapaianPembelajaran={(v) => setSlotForm({ ...slotForm, capaianPembelajaran: v })}
+                    onElemenCp={(v) => setSlotForm({ ...slotForm, elemenCp: v })}
+                    onTujuanPembelajaran={(v) => setSlotForm({ ...slotForm, tujuanPembelajaran: v })}
+                    onMateriPokok={(v) => setSlotForm({ ...slotForm, materiPokok: v })}
+                    onKelas={(v) => setSlotForm({ ...slotForm, kelas: v })}
+                    onSemester={(v) => setSlotForm({ ...slotForm, semester: v })}
+                    onCognitiveLevel={(v) => setSlotForm({ ...slotForm, cognitiveLevel: v })}
+                    onDifficulty={(v) => setSlotForm({ ...slotForm, difficulty: v })}
+                    onIndikatorSoal={(v) => setSlotForm({ ...slotForm, indikatorSoal: v })}
+                    errors={slotErrors}
+                  />
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button type="button" disabled={savingSlot} onClick={() => setEditingSlot(null)} className="h-8 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)] disabled:opacity-50">Batal</button>
+                  <button type="submit" disabled={savingSlot} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50">{savingSlot ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Save size={14} />}Simpan slot</button>
+                </div>
+              </form>
+            </div>
+          )}
+          <ConfirmDialog
+            open={!!deleteTarget}
+            title="Hapus slot kisi-kisi?"
+            description={deleteTarget?.question ? "Slot akan dihapus dan soal terkait akan dilepas dari kisi-kisi, tetapi soal tidak ikut dihapus." : "Slot akan dihapus dari kisi-kisi exam ini. Tindakan ini tidak menghapus soal."}
+            confirmLabel="Hapus slot"
+            destructive
+            loading={deletingSlot}
+            onConfirm={confirmDeleteSlot}
+            onCancel={() => setDeleteTarget(null)}
+          />
         </>
       )}
     </div>
