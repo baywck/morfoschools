@@ -21,6 +21,9 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 		return true
 	}
+	if a.tryHandleBlueprintSlotsRequest(w, r, tenantID, userID, sessionID, req, lower) {
+		return true
+	}
 	if !isAgentExamMutationCandidate(lower) {
 		return false
 	}
@@ -142,7 +145,7 @@ func genericAgentCreateExamIntent(intent agentIntentResponse) bool {
 
 func isAgentExamMutationCandidate(lower string) bool {
 	mutationWords := []string{"buat", "create", "bikin", "buatkan", "membuat", "tambah", "tambahkan", "ubah", "edit", "update", "ganti", "set", "aktifkan", "nonaktifkan", "namanya", "judulnya", "judul"}
-	examWords := []string{"exam", "exams", "ujian", "tes", "kuis", "section", "bagian", "sesi"}
+	examWords := []string{"exam", "exams", "ujian", "tes", "kuis", "section", "bagian", "sesi", "kisi-kisi", "blueprint"}
 	hasMutation := false
 	for _, word := range mutationWords {
 		if strings.Contains(lower, word) {

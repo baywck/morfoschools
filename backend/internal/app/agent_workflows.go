@@ -10,9 +10,10 @@ import (
 type agentWorkflow string
 
 const (
-	agentWorkflowCreateExam        agentWorkflow = "create_exam"
-	agentWorkflowEditExam          agentWorkflow = "edit_exam"
-	agentWorkflowCreateExamSection agentWorkflow = "create_exam_section"
+	agentWorkflowCreateExam           agentWorkflow = "create_exam"
+	agentWorkflowEditExam             agentWorkflow = "edit_exam"
+	agentWorkflowCreateExamSection    agentWorkflow = "create_exam_section"
+	agentWorkflowCreateBlueprintSlots agentWorkflow = "create_blueprint_slots"
 )
 
 type agentWorkflowResult struct {
@@ -28,6 +29,8 @@ func (a *App) executeAgentWorkflow(ctx context.Context, tenantID, userID string,
 		return a.executeAgentEditExam(ctx, tenantID, userID, args)
 	case agentWorkflowCreateExamSection:
 		return a.executeAgentCreateExamSection(ctx, tenantID, userID, args)
+	case agentWorkflowCreateBlueprintSlots:
+		return a.executeAgentCreateBlueprintSlots(ctx, tenantID, userID, args)
 	default:
 		return agentWorkflowResult{}, fmt.Errorf("unsupported agent workflow: %s", workflow)
 	}
