@@ -36,6 +36,7 @@ import { LoadKisiKisiSheet } from "@/components/exams/load-kisi-kisi-sheet";
 import { ExportBlueprintSheet } from "@/components/exams/export-blueprint-sheet";
 import { RenderedContent } from "@/components/ui/rendered-content";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import {
   ClipboardCopy,
   ClipboardList,
@@ -616,17 +617,17 @@ function KisiKisiManagerPanel({
             </div>
           </div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] print:border-black print:shadow-none">
-            <div className="overflow-x-auto">
-              <table className="min-w-[1040px] w-full border-collapse text-left text-[11px]">
+            <div className="overflow-x-auto md:overflow-x-visible">
+              <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-[var(--muted)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
-                    <th className="w-16 border-b border-[var(--border)] px-2 py-2 text-center">Soal</th>
-                    <th className="border-b border-[var(--border)] px-2 py-2">CP / Elemen</th>
-                    <th className="border-b border-[var(--border)] px-2 py-2">Tujuan Pembelajaran</th>
-                    <th className="border-b border-[var(--border)] px-2 py-2">Materi</th>
-                    <th className="border-b border-[var(--border)] px-2 py-2">Indikator Soal</th>
-                    <th className="w-32 border-b border-[var(--border)] px-2 py-2">Bentuk / Level</th>
-                    {canWrite && <th className="w-20 border-b border-[var(--border)] px-2 py-2 text-right">Aksi</th>}
+                    <th className="w-[6%] border-b border-[var(--border)] px-2 py-2 text-center">Soal</th>
+                    <th className="w-[20%] border-b border-[var(--border)] px-2 py-2">CP / Elemen</th>
+                    <th className="w-[20%] border-b border-[var(--border)] px-2 py-2">Tujuan Pembelajaran</th>
+                    <th className="w-[12%] border-b border-[var(--border)] px-2 py-2">Materi</th>
+                    <th className="w-[25%] border-b border-[var(--border)] px-2 py-2">Indikator Soal</th>
+                    <th className="w-[11%] border-b border-[var(--border)] px-2 py-2">Bentuk / Level</th>
+                    {canWrite && <th className="w-[6%] border-b border-[var(--border)] px-2 py-2 text-right">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -637,10 +638,10 @@ function KisiKisiManagerPanel({
                       <td className="border-t border-[var(--border)] px-2 py-2 text-center">
                         {slot.question ? <QuestionNumberBadge questionNumber={Math.max(1, (slot.question.sortOrder ?? 0) + 1)} content={slot.question.content} /> : <span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">-</span>}
                       </td>
-                      <td className="border-t border-[var(--border)] px-2 py-2"><p className="font-semibold text-[var(--foreground)]">{slot.elemenCp || "-"}</p><p className="mt-1 line-clamp-3 text-[var(--muted-foreground)]">{slot.capaianPembelajaran || "-"}</p></td>
-                      <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.tujuanPembelajaran || "-"}</td>
-                      <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.materiPokok || "-"}</td>
-                      <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.indikatorSoal || "-"}</td>
+                      <td className="break-words border-t border-[var(--border)] px-2 py-2"><p className="font-semibold text-[var(--foreground)]">{slot.elemenCp || "-"}</p><p className="mt-1 line-clamp-3 text-[var(--muted-foreground)]">{slot.capaianPembelajaran || "-"}</p></td>
+                      <td className="break-words border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.tujuanPembelajaran || "-"}</td>
+                      <td className="break-words border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.materiPokok || "-"}</td>
+                      <td className="break-words border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.indikatorSoal || "-"}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--muted-foreground)]">
                         <p className="font-medium text-[var(--foreground)]">{questionTypeLabel(slot.questionType)}</p>
                         <p className="mt-1 text-[10px] font-semibold text-[var(--muted-foreground)]">{slot.cognitiveLevel || "-"}</p>
@@ -660,41 +661,46 @@ function KisiKisiManagerPanel({
             </div>
           </div>
           <div className="space-y-2"><h3 className="text-[12px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">Soal belum terhubung</h3>{unlinked.length === 0 ? <p className="rounded-xl border border-[var(--border)] bg-[var(--success-soft)] p-4 text-[12px] font-medium text-[var(--success)]">Semua soal sudah terhubung ke kisi-kisi.</p> : unlinked.map((q) => <div key={q.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3"><div className="flex items-center justify-between gap-2"><p className="text-[11px] font-semibold text-[var(--muted-foreground)]">{questionTypeLabel(q.questionType)} · {q.points} pts</p><span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">unlinked</span></div><div className="mt-2"><RenderedContent html={q.content} className="text-[12px]" /></div></div>)}</div>
-          {editingSlot && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[1px]">
-              <form onSubmit={saveSlotEdit} className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl">
-                <PanelHeader icon={<Pencil size={15} />} title="Edit slot kisi-kisi" subtitle="Perubahan pada slot akan memengaruhi pemetaan/validasi soal yang terhubung." />
-                {editingSlot.question && <p className="mt-3 rounded-lg border border-[var(--warning)]/25 bg-[var(--warning-soft)] px-3 py-2 text-[11px] font-medium text-[var(--warning)]">Slot ini terhubung ke soal. Mengubah indikator, bentuk, atau level dapat membuat soal perlu ditinjau ulang.</p>}
-                <div className="mt-3">
-                  <MerdekaKisiKisiFields
-                    capaianPembelajaran={slotForm.capaianPembelajaran ?? ""}
-                    elemenCp={slotForm.elemenCp ?? ""}
-                    tujuanPembelajaran={slotForm.tujuanPembelajaran ?? ""}
-                    materiPokok={slotForm.materiPokok ?? ""}
-                    kelas={slotForm.kelas ?? ""}
-                    semester={slotForm.semester ?? ""}
-                    cognitiveLevel={slotForm.cognitiveLevel ?? ""}
-                    difficulty={slotForm.difficulty ?? ""}
-                    indikatorSoal={slotForm.indikatorSoal ?? ""}
-                    onCapaianPembelajaran={(v) => setSlotForm({ ...slotForm, capaianPembelajaran: v })}
-                    onElemenCp={(v) => setSlotForm({ ...slotForm, elemenCp: v })}
-                    onTujuanPembelajaran={(v) => setSlotForm({ ...slotForm, tujuanPembelajaran: v })}
-                    onMateriPokok={(v) => setSlotForm({ ...slotForm, materiPokok: v })}
-                    onKelas={(v) => setSlotForm({ ...slotForm, kelas: v })}
-                    onSemester={(v) => setSlotForm({ ...slotForm, semester: v })}
-                    onCognitiveLevel={(v) => setSlotForm({ ...slotForm, cognitiveLevel: v })}
-                    onDifficulty={(v) => setSlotForm({ ...slotForm, difficulty: v })}
-                    onIndikatorSoal={(v) => setSlotForm({ ...slotForm, indikatorSoal: v })}
-                    errors={slotErrors}
-                  />
-                </div>
-                <div className="mt-4 flex justify-end gap-2">
-                  <button type="button" disabled={savingSlot} onClick={() => setEditingSlot(null)} className="h-8 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)] disabled:opacity-50">Batal</button>
-                  <button type="submit" disabled={savingSlot} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50">{savingSlot ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Save size={14} />}Simpan slot</button>
-                </div>
+          <RightPullSheet
+            open={!!editingSlot}
+            title="Edit slot kisi-kisi"
+            width="lg"
+            onClose={() => setEditingSlot(null)}
+            footer={
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={savingSlot} onClick={() => setEditingSlot(null)} className="h-8 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)] disabled:opacity-50">Batal</button>
+                <button type="submit" form="edit-kisi-kisi-slot-form" disabled={savingSlot} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50">{savingSlot ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Save size={14} />}Simpan slot</button>
+              </div>
+            }
+          >
+            {editingSlot && (
+              <form id="edit-kisi-kisi-slot-form" onSubmit={saveSlotEdit} className="space-y-3">
+                <PanelHeader icon={<Pencil size={15} />} title="Kisi-kisi manual" subtitle="Perubahan pada slot akan memengaruhi pemetaan/validasi soal yang terhubung." />
+                {editingSlot.question && <p className="rounded-lg border border-[var(--warning)]/25 bg-[var(--warning-soft)] px-3 py-2 text-[11px] font-medium text-[var(--warning)]">Slot ini terhubung ke soal. Mengubah indikator, bentuk, atau level dapat membuat soal perlu ditinjau ulang.</p>}
+                <MerdekaKisiKisiFields
+                  capaianPembelajaran={slotForm.capaianPembelajaran ?? ""}
+                  elemenCp={slotForm.elemenCp ?? ""}
+                  tujuanPembelajaran={slotForm.tujuanPembelajaran ?? ""}
+                  materiPokok={slotForm.materiPokok ?? ""}
+                  kelas={slotForm.kelas ?? ""}
+                  semester={slotForm.semester ?? ""}
+                  cognitiveLevel={slotForm.cognitiveLevel ?? ""}
+                  difficulty={slotForm.difficulty ?? ""}
+                  indikatorSoal={slotForm.indikatorSoal ?? ""}
+                  onCapaianPembelajaran={(v) => setSlotForm({ ...slotForm, capaianPembelajaran: v })}
+                  onElemenCp={(v) => setSlotForm({ ...slotForm, elemenCp: v })}
+                  onTujuanPembelajaran={(v) => setSlotForm({ ...slotForm, tujuanPembelajaran: v })}
+                  onMateriPokok={(v) => setSlotForm({ ...slotForm, materiPokok: v })}
+                  onKelas={(v) => setSlotForm({ ...slotForm, kelas: v })}
+                  onSemester={(v) => setSlotForm({ ...slotForm, semester: v })}
+                  onCognitiveLevel={(v) => setSlotForm({ ...slotForm, cognitiveLevel: v })}
+                  onDifficulty={(v) => setSlotForm({ ...slotForm, difficulty: v })}
+                  onIndikatorSoal={(v) => setSlotForm({ ...slotForm, indikatorSoal: v })}
+                  errors={slotErrors}
+                />
               </form>
-            </div>
-          )}
+            )}
+          </RightPullSheet>
           <ConfirmDialog
             open={!!deleteTarget}
             title="Hapus slot kisi-kisi?"
