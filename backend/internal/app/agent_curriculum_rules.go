@@ -56,6 +56,14 @@ func validateKurikulumMerdekaBlueprintSlot(slot agentBlueprintSlotDraft) []curri
 	if strings.TrimSpace(slot.IndikatorSoal) != "" && !hasStimulusPhrase(slot.IndikatorSoal) {
 		issues = append(issues, curriculumIssue{Code: "indicator_missing_stimulus", Severity: curriculumIssueError, Field: "indikatorSoal", Message: "Indikator soal wajib menyebut stimulus, misalnya: Disajikan [stimulus], peserta didik dapat ..."})
 	}
+	if strings.TrimSpace(slot.TujuanPembelajaran) != "" {
+		if !hasTPAudience(slot.TujuanPembelajaran) {
+			issues = append(issues, curriculumIssue{Code: "tp_missing_audience", Severity: curriculumIssueError, Field: "tujuanPembelajaran", Message: "TP wajib menyebut Audience, minimal 'Peserta didik'"})
+		}
+		if !hasAnyBloomKKO(slot.TujuanPembelajaran) {
+			issues = append(issues, curriculumIssue{Code: "tp_missing_behavior", Severity: curriculumIssueError, Field: "tujuanPembelajaran", Message: "TP wajib memuat Behavior berupa KKO yang terukur"})
+		}
+	}
 	if level != "" {
 		if !containsKKOForLevel(slot.TujuanPembelajaran, level) {
 			issues = append(issues, curriculumIssue{Code: "tp_kko_mismatch", Severity: curriculumIssueWarning, Field: "tujuanPembelajaran", Message: "KKO pada TP belum tampak selaras dengan level " + level})
@@ -81,6 +89,23 @@ func normalizeCognitiveLevel(level string) string {
 func hasStimulusPhrase(s string) bool {
 	lower := strings.ToLower(s)
 	return strings.Contains(lower, "disajikan") || strings.Contains(lower, "berdasarkan stimulus") || strings.Contains(lower, "berdasarkan wacana") || strings.Contains(lower, "berdasarkan kasus") || strings.Contains(lower, "berdasarkan data")
+}
+
+func hasTPAudience(tp string) bool {
+	lower := strings.ToLower(tp)
+	return strings.Contains(lower, "peserta didik") || strings.Contains(lower, "murid") || strings.Contains(lower, "siswa")
+}
+
+func hasAnyBloomKKO(text string) bool {
+	lower := strings.ToLower(text)
+	for _, verbs := range bloomKKOByLevel {
+		for _, verb := range verbs {
+			if strings.Contains(lower, verb) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func containsKKOForLevel(text, level string) bool {

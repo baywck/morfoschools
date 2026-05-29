@@ -75,7 +75,7 @@ func (a *App) blueprintSlotPrompt(userMessage string, count int, ctxResp examCur
 	b.WriteString("Kamu menyusun kisi-kisi Kurikulum Merdeka untuk exam aktif. Balas JSON object valid saja tanpa markdown. Root harus object, bukan array. ")
 	b.WriteString("JANGAN gunakan KD/SK/Kompetensi Dasar/Standar Kompetensi. Basis wajib CP, Elemen CP, TP, materi, indikator soal. ")
 	b.WriteString("Indikator soal wajib menyebut stimulus dan diawali/berisi pola 'Disajikan ... peserta didik dapat ...'. Satu indikator tepat untuk satu soal. ")
-	b.WriteString("Level kognitif C1-C6; KKO TP dan indikator harus selaras. HOTS C4-C6 harus punya stimulus. ")
+	b.WriteString("Level kognitif C1-C6; KKO TP dan indikator harus selaras. HOTS C4-C6 harus punya stimulus. TP wajib mengikuti prinsip A-B-C-D: Audience minimal 'Peserta didik' dan Behavior berupa satu KKO terukur sesuai level; Condition dan Degree dianjurkan. Contoh TP C4: 'Peserta didik dapat menganalisis struktur teks editorial berdasarkan kutipan teks aktual dengan tepat.' Jangan membuat TP tanpa audience atau tanpa KKO. Jangan memakai lebih dari satu kompetensi dalam satu TP. ")
 	b.WriteString(fmt.Sprintf("Buat tepat %d slot. ", count))
 	b.WriteString("QuestionType hanya multiple_choice, true_false, short_answer, essay. Default multiple_choice jika user tidak menentukan. Points default 1. ")
 	b.WriteString("Output shape wajib persis: {\"topic\":\"...\",\"slots\":[{\"position\":1,\"capaianPembelajaran\":\"...\",\"elemenCp\":\"...\",\"tujuanPembelajaran\":\"...\",\"materiPokok\":\"...\",\"cognitiveLevel\":\"C4\",\"indikatorSoal\":\"Disajikan ... peserta didik dapat ...\",\"questionType\":\"multiple_choice\",\"points\":1}]}. Jangan tulis teks lain. ")

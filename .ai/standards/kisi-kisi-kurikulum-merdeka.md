@@ -29,10 +29,13 @@ Format TP: A-B-C-D.
 
 Rules:
 
+- Minimal TP memuat A dan B: Audience (“Peserta didik”) + Behavior (KKO + kompetensi terukur).
+- Condition dan Degree dianjurkan jika relevan.
 - Satu TP hanya memuat satu kompetensi.
 - TP diturunkan dari CP, bukan KD lama.
 - KKO harus sesuai level kognitif.
 - Hindari TP gabungan seperti “menjelaskan dan menganalisis serta mengevaluasi”.
+- Contoh benar: “Peserta didik dapat menganalisis struktur teks editorial berdasarkan kutipan teks aktual dengan tepat.”
 
 ## Level Kognitif dan KKO
 
