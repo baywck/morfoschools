@@ -8,13 +8,6 @@ import (
 	"strings"
 )
 
-// AI chat is intentionally reset to discussion-only mode.
-//
-// The legacy generic agent/tool orchestration has been removed from the hot
-// path because it became unsafe and difficult to reason about after the
-// Kurikulum Merdeka/kisi-kisi upgrade. This endpoint now preserves the chat UX
-// and session history, but it does not expose tools or mutate domain data.
-
 func (a *App) registerAIChatRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/ai/chat", a.handleAIChat)
 	mux.HandleFunc("POST /api/v1/ai/confirm", a.handleAgentConfirm)
@@ -175,9 +168,9 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID
 
 func (a *App) discussionSystemPrompt(ctx context.Context, tenantID string, active map[string]string) string {
 	var b strings.Builder
-	b.WriteString("Kamu adalah asisten diskusi untuk Morfoschools. Jawab natural dalam Bahasa Indonesia. ")
-	b.WriteString("PENTING: mode saat ini discussion-only. Kamu tidak punya tools dan tidak boleh mengklaim sudah membuat, menyimpan, mengubah, menghapus, atau mengirim proposal/action. ")
-	b.WriteString("Tetap bantu diskusi, rekomendasi materi, kisi-kisi konseptual, bobot, dan penjelasan. Jangan mengulang disclaimer panjang setiap jawaban; cukup sebut singkat hanya jika user meminta aksi penyimpanan/pembuatan data. ")
+	b.WriteString("Kamu adalah asisten Morfoschools. Jawab natural dalam Bahasa Indonesia. ")
+	b.WriteString("Jika permintaan user sudah didukung workflow sistem, backend akan membuat proposal sebelum pesan ini dipakai. Jika pesan sampai ke mode diskusi ini, berarti permintaan dianggap diskusi/unsupported. ")
+	b.WriteString("Jangan mengklaim sudah membuat, menyimpan, mengubah, atau menghapus data. Untuk aksi penyimpanan yang belum didukung, arahkan user memakai UI atau jelaskan bahwa perlu proposal workflow. ")
 	if examID := strings.TrimSpace(active["examId"]); examID != "" && a.db != nil {
 		var title string
 		var subject, grade sql.NullString

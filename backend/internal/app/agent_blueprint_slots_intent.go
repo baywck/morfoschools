@@ -21,7 +21,9 @@ func (a *App) tryHandleBlueprintSlotsRequest(w http.ResponseWriter, r *http.Requ
 	}
 	args, err := a.generateBlueprintSlotsDraft(r.Context(), tenantID, userID, req, lower)
 	if err != nil {
-		return false
+		a.logger.Error("create blueprint slots draft failed", "error", err)
+		writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat proposal kisi-kisi. Coba ulang dengan topik lebih spesifik.", r)
+		return true
 	}
 	if fields := a.validateAgentCreateBlueprintSlotsArgs(r.Context(), tenantID, userID, args); len(fields) > 0 {
 		writeValidationError(w, fields, r)
