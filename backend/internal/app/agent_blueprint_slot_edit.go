@@ -86,7 +86,8 @@ func (a *App) handleAIEditExamBlueprintSlot(w http.ResponseWriter, r *http.Reque
 	}
 	diff := buildBlueprintSlotAIDiff(before, merged)
 	if len(diff) == 0 {
-		writeValidationError(w, map[string]string{"instruction": "AI tidak menghasilkan perubahan bermakna"}, r)
+		a.logger.Info("AI slot edit produced no diff", "slotId", slotID, "instruction", req.Instruction)
+		writeValidationError(w, map[string]string{"instruction": "AI tidak menghasilkan perubahan bermakna. Coba instruksi lebih spesifik (mis. sebutkan field dan target perubahan)."}, r)
 		return
 	}
 	warnings := a.blueprintSlotEditWarnings(r.Context(), slotID)
@@ -164,19 +165,25 @@ func (a *App) generateBlueprintSlotEditDraft(ctx context.Context, tenantID, user
 	beforeJSON, _ := json.Marshal(before)
 	prompt := `Anda mengubah SATU slot kisi-kisi Kurikulum Merdeka. Jangan hapus slot. Jangan membuat soal. Revisi hanya field slot.
 Wajib patuh: tanpa KD/SK; CP, Elemen CP, TP, Materi, Level, Indikator. TP minimal Audience 'Peserta didik' + satu Behavior KKO sesuai level; Condition/Degree dianjurkan. Indikator wajib diawali/berisi stimulus: 'Disajikan ... peserta didik dapat ...'. KKO TP, level, dan indikator harus selaras.
-Kembalikan JSON object valid saja dengan root {"slot":{...}}. Field slot: capaianPembelajaran, elemenCp, tujuanPembelajaran, materiPokok, kelas, semester, cognitiveLevel, difficulty, indikatorSoal, questionType, points. Pertahankan field lama yang tidak diminta berubah.`
+Kembalikan JSON object valid saja. Boleh root {"slot":{...}} atau langsung field di root. Field: capaianPembelajaran, elemenCp, tujuanPembelajaran, materiPokok, kelas, semester, cognitiveLevel, difficulty, indikatorSoal, questionType, points. WAJIB sertakan SEMUA field di atas dengan nilai final (yang berubah maupun yang dipertahankan), bukan hanya yang berubah.`
 	user := fmt.Sprintf("SlotID: %s\nSlot saat ini JSON:\n%s\n\nInstruksi user:\n%s", slotID, string(beforeJSON), instruction)
 	content, err := a.callBlueprintSlotEditLLMJSON(ctx, provider, prompt, user)
 	if err != nil {
 		return slotPayload{}, err
 	}
-	var parsed struct {
-		Slot slotPayload `json:"slot"`
+	// LLM may return either {"slot":{...}} or the slot fields at root.
+	var wrapped struct {
+		Slot *slotPayload `json:"slot"`
 	}
-	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+	if err := json.Unmarshal([]byte(content), &wrapped); err == nil && wrapped.Slot != nil {
+		return *wrapped.Slot, nil
+	}
+	var flat slotPayload
+	if err := json.Unmarshal([]byte(content), &flat); err != nil {
+		a.logger.Error("blueprint slot edit parse failed", "content", content, "error", err)
 		return slotPayload{}, err
 	}
-	return parsed.Slot, nil
+	return flat, nil
 }
 
 func (a *App) callBlueprintSlotEditLLMJSON(ctx context.Context, provider resolvedAIProvider, prompt, userMessage string) (string, error) {
