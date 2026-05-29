@@ -14,7 +14,7 @@ type blueprintSlotsLLMOutput struct {
 
 func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID string, req aiChatRequest, lower string) (agentCreateBlueprintSlotsArgs, error) {
 	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
-	count := requestedBlueprintSlotCount(lower)
+	count := blueprintSlotCountOrDefault(lower)
 	ctxResp, _ := a.ensureExamCurriculumContext(ctx, tenantID, examID)
 	warnings := append([]string{}, ctxResp.Warnings...)
 	if ctxResp.Status != "ready" {

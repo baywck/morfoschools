@@ -19,6 +19,9 @@ func (a *App) tryHandleBlueprintSlotsRequest(w http.ResponseWriter, r *http.Requ
 	if examID == "" {
 		return false
 	}
+	if !hasSpecificBlueprintGenerationRequest(lower) {
+		return false
+	}
 	args, err := a.generateBlueprintSlotsDraft(r.Context(), tenantID, userID, req, lower)
 	if err != nil {
 		a.logger.Error("create blueprint slots draft failed", "error", err)
@@ -49,12 +52,31 @@ func (a *App) tryHandleBlueprintSlotsRequest(w http.ResponseWriter, r *http.Requ
 
 var blueprintCountPattern = regexp.MustCompile(`(?i)(\d+)\s*(slot|soal|nomor|butir)?`)
 
+func hasSpecificBlueprintGenerationRequest(lower string) bool {
+	if requestedBlueprintSlotCount(lower) > 0 {
+		return true
+	}
+	for _, marker := range []string{"tentang", "materi", "topik", "bab", "teks", "cp", "elemen", "tujuan pembelajaran"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func requestedBlueprintSlotCount(message string) int {
 	m := blueprintCountPattern.FindStringSubmatch(message)
 	if len(m) > 1 {
 		if n, err := strconv.Atoi(m[1]); err == nil && n > 0 && n <= 100 {
 			return n
 		}
+	}
+	return 0
+}
+
+func blueprintSlotCountOrDefault(message string) int {
+	if n := requestedBlueprintSlotCount(message); n > 0 {
+		return n
 	}
 	return 5
 }
