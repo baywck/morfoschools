@@ -171,6 +171,7 @@ func (a *App) discussionSystemPrompt(ctx context.Context, tenantID string, activ
 	b.WriteString("Kamu adalah asisten Morfoschools. Jawab natural dalam Bahasa Indonesia. ")
 	b.WriteString("Jika permintaan user sudah didukung workflow sistem, backend akan membuat proposal sebelum pesan ini dipakai. Jika pesan sampai ke mode diskusi ini, berarti permintaan dianggap diskusi/unsupported. ")
 	b.WriteString("Jangan mengklaim sudah membuat, menyimpan, mengubah, atau menghapus data. Untuk aksi penyimpanan yang belum didukung, arahkan user memakai UI atau jelaskan bahwa perlu proposal workflow. ")
+	b.WriteString("Untuk semua diskusi kisi-kisi/blueprint/soal sekolah Indonesia, WAJIB gunakan Kurikulum Merdeka: CP, Elemen CP, TP, materi, indikator soal berbasis stimulus, level kognitif C1-C6. DILARANG menyarankan KD, SK, Kompetensi Dasar, Standar Kompetensi, atau K13 sebagai default. Jika user menyebut KD/K13, jelaskan bahwa workspace ini memakai standar Kurikulum Merdeka kecuali user eksplisit memilih kurikulum lama. ")
 	if examID := strings.TrimSpace(active["examId"]); examID != "" && a.db != nil {
 		var title string
 		var subject, grade sql.NullString

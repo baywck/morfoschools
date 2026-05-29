@@ -12,7 +12,7 @@ func (a *App) tryHandleBlueprintSlotsRequest(w http.ResponseWriter, r *http.Requ
 	if !strings.Contains(lower, "kisi") && !strings.Contains(lower, "blueprint") {
 		return false
 	}
-	if !strings.Contains(lower, "buat") && !strings.Contains(lower, "bikin") && !strings.Contains(lower, "generate") && !strings.Contains(lower, "tambahkan") && !strings.Contains(lower, "tambah") {
+	if !strings.Contains(lower, "buat") && !strings.Contains(lower, "membuat") && !strings.Contains(lower, "bikin") && !strings.Contains(lower, "generate") && !strings.Contains(lower, "susun") && !strings.Contains(lower, "rancang") && !strings.Contains(lower, "bantu") && !strings.Contains(lower, "tambahkan") && !strings.Contains(lower, "tambah") {
 		return false
 	}
 	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
