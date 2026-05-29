@@ -1422,6 +1422,34 @@ export function deleteExamBlueprintSlot(slotId: string) {
   return del<{ status: string }>(`/api/v1/exam-blueprint-slots/${slotId}`);
 }
 
+export interface BlueprintSlotAIDiff {
+  field: string;
+  label: string;
+  before: string;
+  after: string;
+}
+
+export interface BlueprintSlotAIEditResponse {
+  proposalId: string;
+  workflow: string;
+  before: SlotPayload;
+  after: SlotPayload;
+  diff: BlueprintSlotAIDiff[];
+  warnings?: string[];
+  preview: string;
+}
+
+export function aiEditExamBlueprintSlot(slotId: string, instruction: string) {
+  return post<BlueprintSlotAIEditResponse>(
+    `/api/v1/exam-blueprint-slots/${slotId}/ai-edit`,
+    { instruction },
+  );
+}
+
+export function confirmAgentProposal(proposalId: string) {
+  return post<{ result: unknown }>(`/api/v1/ai/confirm`, { proposalId });
+}
+
 export function assignQuestionToSlot(slotId: string, questionId: string | null) {
   return patch<{ slotId: string; questionId: string | null; status: string }>(
     `/api/v1/exam-blueprint-slots/${slotId}/assign-question`,

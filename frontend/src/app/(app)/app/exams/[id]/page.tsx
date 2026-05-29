@@ -15,9 +15,12 @@ import {
   listSubjects,
   updateExamBlueprintSlot,
   deleteExamBlueprintSlot,
+  aiEditExamBlueprintSlot,
+  confirmAgentProposal,
   type Exam,
   type ExamBlueprint,
   type ExamCurriculumContext,
+  type BlueprintSlotAIEditResponse,
   type SlotPayload,
   type SlotWithQuestion,
   type SlotsWithQuestionsResponse,
@@ -46,6 +49,7 @@ import {
   Info,
   Pencil,
   Printer,
+  Sparkle,
   Save,
   Send,
   Settings2,
@@ -499,6 +503,11 @@ function KisiKisiManagerPanel({
   const [deletingSlot, setDeletingSlot] = useState(false);
   const [slotErrors, setSlotErrors] = useState<Record<string, string>>({});
   const [slotForm, setSlotForm] = useState<SlotPayload>({});
+  const [aiTarget, setAiTarget] = useState<SlotWithQuestion | null>(null);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiProposal, setAiProposal] = useState<BlueprintSlotAIEditResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiApplying, setAiApplying] = useState(false);
   const filled = slotsData?.coverage.filled ?? blueprint?.filledSlots ?? 0;
   const total = slotsData?.coverage.total ?? blueprint?.totalSlots ?? 0;
   const unlinked = slotsData?.unlinked ?? [];
@@ -539,6 +548,47 @@ function KisiKisiManagerPanel({
       await onChanged();
     } finally {
       setSavingSlot(false);
+    }
+  }
+
+  function openAIEditSlot(slot: SlotWithQuestion) {
+    setAiTarget(slot);
+    setAiInstruction("");
+    setAiProposal(null);
+  }
+
+  async function generateAISlotEdit(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!aiTarget || !aiInstruction.trim()) return;
+    setAiLoading(true);
+    try {
+      const res = await aiEditExamBlueprintSlot(aiTarget.id, aiInstruction.trim());
+      if (res.error) {
+        toast({ tone: "error", title: "AI gagal membuat perubahan", description: res.error.message });
+        return;
+      }
+      setAiProposal(res.data ?? null);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function applyAISlotEdit() {
+    if (!aiProposal) return;
+    setAiApplying(true);
+    try {
+      const res = await confirmAgentProposal(aiProposal.proposalId);
+      if (res.error) {
+        toast({ tone: "error", title: "Gagal menerapkan perubahan", description: res.error.message });
+        return;
+      }
+      toast({ tone: "success", title: "Kisi-kisi diperbarui oleh AI" });
+      setAiTarget(null);
+      setAiProposal(null);
+      setAiInstruction("");
+      await onChanged();
+    } finally {
+      setAiApplying(false);
     }
   }
 
@@ -644,6 +694,7 @@ function KisiKisiManagerPanel({
                           <div className="flex justify-end">
                             <RowActions actions={[
                               { label: "Edit", icon: <Pencil size={13} />, onClick: () => openEditSlot(slot) },
+                              { label: "Ubah dengan AI", icon: <Sparkle size={13} />, onClick: () => openAIEditSlot(slot) },
                               { label: "Hapus", icon: <Trash2 size={13} />, variant: "danger", onClick: () => setDeleteTarget(slot) },
                             ]} />
                           </div>
@@ -670,7 +721,7 @@ function KisiKisiManagerPanel({
                     <p className="mt-2 text-[13px] font-bold text-[var(--foreground)]">{slot.elemenCp || "Elemen belum diisi"}</p>
                     <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[var(--muted-foreground)]">{slot.materiPokok || "Materi belum diisi"}</p>
                   </div>
-                  {canWrite && <RowActions actions={[{ label: "Edit", icon: <Pencil size={13} />, onClick: () => openEditSlot(slot) }, { label: "Hapus", icon: <Trash2 size={13} />, variant: "danger", onClick: () => setDeleteTarget(slot) }]} />}
+                  {canWrite && <RowActions actions={[{ label: "Edit", icon: <Pencil size={13} />, onClick: () => openEditSlot(slot) }, { label: "Ubah dengan AI", icon: <Sparkle size={13} />, onClick: () => openAIEditSlot(slot) }, { label: "Hapus", icon: <Trash2 size={13} />, variant: "danger", onClick: () => setDeleteTarget(slot) }]} />}
                 </div>
                 <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
                   <MobileKisiField label="TP" value={slot.tujuanPembelajaran} />
@@ -721,6 +772,46 @@ function KisiKisiManagerPanel({
               </form>
             )}
           </RightPullSheet>
+          <RightPullSheet
+            open={!!aiTarget}
+            title="Ubah slot dengan AI"
+            width="lg"
+            onClose={() => { setAiTarget(null); setAiProposal(null); setAiInstruction(""); }}
+            footer={
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={aiLoading || aiApplying} onClick={() => { setAiTarget(null); setAiProposal(null); setAiInstruction(""); }} className="h-8 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)] disabled:opacity-50">Batal</button>
+                {aiProposal ? (
+                  <button type="button" disabled={aiApplying} onClick={applyAISlotEdit} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50">{aiApplying ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Save size={14} />}Apply perubahan</button>
+                ) : (
+                  <button type="submit" form="ai-edit-kisi-kisi-slot-form" disabled={aiLoading || !aiInstruction.trim()} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50">{aiLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Sparkle size={14} />}Generate</button>
+                )}
+              </div>
+            }
+          >
+            {aiTarget && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--accent)] p-3">
+                  <p className="text-[12px] font-bold text-[var(--foreground)]">Slot spesifik</p>
+                  <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">{aiTarget.elemenCp || "Elemen belum diisi"} · {aiTarget.cognitiveLevel || "-"} · {questionTypeLabel(aiTarget.questionType)}</p>
+                </div>
+                {aiProposal && (
+                  <div className="space-y-3">
+                    {aiProposal.warnings?.map((warning, idx) => <p key={idx} className="rounded-lg border border-[var(--warning)]/25 bg-[var(--warning-soft)] px-3 py-2 text-[11px] font-medium text-[var(--warning)]">{warning}</p>)}
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+                      <p className="text-[12px] font-bold text-[var(--foreground)]">Preview perubahan</p>
+                      <div className="mt-3 space-y-3">
+                        {aiProposal.diff.map((d) => <DiffBlock key={d.field} label={d.label} before={d.before} after={d.after} />)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <form id="ai-edit-kisi-kisi-slot-form" onSubmit={generateAISlotEdit} className="space-y-2">
+                  <TextareaField label={aiProposal ? "Masukan tambahan" : "Instruksi perubahan"} rows={4} value={aiInstruction} disabled={aiLoading || aiApplying} onChange={(e) => setAiInstruction(e.target.value)} />
+                  {aiProposal && <button type="submit" disabled={aiLoading || !aiInstruction.trim()} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)] disabled:opacity-50">{aiLoading ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Sparkle size={14} />}Revisi preview</button>}
+                </form>
+              </div>
+            )}
+          </RightPullSheet>
           <ConfirmDialog
             open={!!deleteTarget}
             title="Hapus slot kisi-kisi?"
@@ -737,6 +828,18 @@ function KisiKisiManagerPanel({
   );
 }
 
+
+function DiffBlock({ label, before, after }: { label: string; before: string; after: string }) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--accent)] p-2.5">
+      <p className="text-[11px] font-bold text-[var(--foreground)]">{label}</p>
+      <div className="mt-2 grid gap-2 md:grid-cols-2">
+        <div className="rounded-md bg-[var(--danger-soft)] p-2 text-[11px] leading-relaxed text-[var(--danger)]"><span className="font-bold">Sebelum:</span><br />{before || "-"}</div>
+        <div className="rounded-md bg-[var(--success-soft)] p-2 text-[11px] leading-relaxed text-[var(--success)]"><span className="font-bold">Sesudah:</span><br />{after || "-"}</div>
+      </div>
+    </div>
+  );
+}
 
 function MobileKisiField({ label, value, clamp }: { label: string; value?: string | null; clamp?: boolean }) {
   return (
