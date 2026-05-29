@@ -156,7 +156,7 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID
 	if err != nil {
 		return "", 0, err
 	}
-	resp, err := a.callLLMWithProvider(ctx, provider, messages)
+	resp, err := a.callLLMWithProviderOptions(ctx, provider, messages, 0.35, 3000, nil)
 	if err != nil {
 		return "", 0, err
 	}
@@ -173,25 +173,47 @@ func (a *App) discussionSystemPrompt(ctx context.Context, tenantID string, activ
 	b.WriteString("Jangan mengklaim sudah membuat, menyimpan, mengubah, atau menghapus data. Untuk aksi penyimpanan yang belum didukung, arahkan user memakai UI atau jelaskan bahwa perlu proposal workflow. ")
 	b.WriteString("Untuk semua diskusi kisi-kisi/blueprint/soal sekolah Indonesia, WAJIB gunakan Kurikulum Merdeka: CP, Elemen CP, TP, materi, indikator soal berbasis stimulus, level kognitif C1-C6. DILARANG menyarankan KD, SK, Kompetensi Dasar, Standar Kompetensi, atau K13 sebagai default. Jika user menyebut KD/K13, jelaskan bahwa workspace ini memakai standar Kurikulum Merdeka kecuali user eksplisit memilih kurikulum lama. ")
 	if examID := strings.TrimSpace(active["examId"]); examID != "" && a.db != nil {
-		var title string
-		var subject, grade sql.NullString
-		_ = a.db.QueryRowContext(ctx, `SELECT e.title, s.name, e.grade_level FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id AND s.tenant_id=e.tenant_id WHERE e.id=$1 AND e.tenant_id=NULLIF($2,'')::uuid`, examID, tenantID).Scan(&title, &subject, &grade)
-		if title != "" || subject.Valid || grade.Valid {
+		ctxResp, err := a.ensureExamCurriculumContext(ctx, tenantID, examID)
+		if err == nil {
 			b.WriteString("Konteks halaman aktif: ")
-			if title != "" {
-				b.WriteString("exam=\"")
-				b.WriteString(title)
-				b.WriteString("\". ")
-			}
-			if strings.TrimSpace(subject.String) != "" {
+			b.WriteString("examId=\"")
+			b.WriteString(examID)
+			b.WriteString("\". ")
+			if ctxResp.SubjectName != "" {
 				b.WriteString("mapel=\"")
-				b.WriteString(strings.TrimSpace(subject.String))
+				b.WriteString(ctxResp.SubjectName)
 				b.WriteString("\". ")
 			}
-			if strings.TrimSpace(grade.String) != "" {
+			if ctxResp.GradeLevel != "" {
 				b.WriteString("kelas=\"")
-				b.WriteString(strings.TrimSpace(grade.String))
+				b.WriteString(ctxResp.GradeLevel)
 				b.WriteString("\". ")
+			}
+			if ctxResp.Phase != "" {
+				b.WriteString("fase=\"")
+				b.WriteString(ctxResp.Phase)
+				b.WriteString("\". ")
+			}
+			b.WriteString("CP context status=")
+			b.WriteString(ctxResp.Status)
+			b.WriteString(" source=")
+			b.WriteString(ctxResp.Source)
+			b.WriteString(". ")
+			for _, warning := range ctxResp.Warnings {
+				b.WriteString("Peringatan CP: ")
+				b.WriteString(warning)
+				b.WriteString(" ")
+			}
+			if ctxResp.Reference != nil {
+				b.WriteString("CP umum ringkas: ")
+				b.WriteString(truncateForPrompt(ctxResp.Reference.GeneralCP, 2200))
+				b.WriteString(" Elemen CP tersedia: ")
+				for _, el := range ctxResp.Elements {
+					b.WriteString(el.Name)
+					b.WriteString(" — ")
+					b.WriteString(truncateForPrompt(el.Content, 700))
+					b.WriteString(" | ")
+				}
 			}
 		}
 	}
