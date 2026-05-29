@@ -20,14 +20,10 @@ func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID 
 	if err != nil {
 		return agentCreateBlueprintSlotsArgs{}, err
 	}
-	resp, err := a.callLLMWithProvider(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: req.Message}})
+	content, err := a.callBlueprintSlotsLLMJSON(ctx, provider, prompt, req.Message)
 	if err != nil {
 		return agentCreateBlueprintSlotsArgs{}, err
 	}
-	if len(resp.Choices) == 0 {
-		return agentCreateBlueprintSlotsArgs{}, fmt.Errorf("empty blueprint LLM response")
-	}
-	content := strings.TrimSpace(resp.Choices[0].Message.Content)
 	content = strings.TrimPrefix(content, "```json")
 	content = strings.TrimPrefix(content, "```")
 	content = strings.TrimSuffix(content, "```")
@@ -38,13 +34,17 @@ func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID 
 		}
 	}
 	var out blueprintSlotsLLMOutput
-	if err := json.Unmarshal([]byte(content), &out); err != nil {
-		fallback, ok := a.fallbackBlueprintSlotsDraft(ctxResp, req.Message, count)
-		if !ok {
-			return agentCreateBlueprintSlotsArgs{}, err
+	if err := json.Unmarshal([]byte(content), &out); err != nil || len(out.Slots) == 0 {
+		repairPrompt := prompt + " Output sebelumnya tidak valid. Perbaiki menjadi JSON valid saja, tepat sesuai shape, tanpa markdown."
+		repaired, repairErr := a.callBlueprintSlotsLLMJSON(ctx, provider, repairPrompt, "Perbaiki draft kisi-kisi ini menjadi JSON valid: "+content)
+		if repairErr == nil {
+			content = repaired
+			err = json.Unmarshal([]byte(content), &out)
 		}
-		out = fallback
-		warnings = append(warnings, "LLM tidak mengembalikan JSON valid; proposal awal dibuat dengan generator terstruktur dan wajib direview manual.")
+		if err != nil || len(out.Slots) == 0 {
+			return agentCreateBlueprintSlotsArgs{}, fmt.Errorf("invalid blueprint JSON: %w", err)
+		}
+		warnings = append(warnings, "LLM membutuhkan repair pass agar JSON proposal valid; review manual tetap wajib.")
 	}
 	for i := range out.Slots {
 		if out.Slots[i].Position <= 0 {
