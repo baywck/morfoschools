@@ -24,6 +24,9 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 	if a.tryHandleBlueprintSlotsRequest(w, r, tenantID, userID, sessionID, req, lower) {
 		return true
 	}
+	if isVagueBlueprintHelpRequest(lower) {
+		return false
+	}
 	if !isAgentExamMutationCandidate(lower) {
 		return false
 	}
