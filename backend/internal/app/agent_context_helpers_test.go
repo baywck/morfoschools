@@ -2,6 +2,14 @@ package app
 
 import "testing"
 
+func TestBlueprintAffirmativeActionWords(t *testing.T) {
+	for _, msg := range []string{"setuju", "lakukan", "jalankan"} {
+		if got := classifyShortReply(msg); got != "affirm" {
+			t.Fatalf("classifyShortReply(%q) = %q, want affirm", msg, got)
+		}
+	}
+}
+
 func TestIsBlueprintSlotPlanningQuestion(t *testing.T) {
 	cases := []struct {
 		msg  string

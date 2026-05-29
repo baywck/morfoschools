@@ -177,7 +177,7 @@ func (a *App) discussionSystemPrompt(ctx context.Context, tenantID string, activ
 	b.WriteString("Jika permintaan user sudah didukung workflow sistem, backend akan membuat proposal sebelum pesan ini dipakai. Jika pesan sampai ke mode diskusi ini, berarti permintaan dianggap diskusi/unsupported. ")
 	b.WriteString("Jangan mengklaim sudah membuat, menyimpan, mengubah, atau menghapus data. Untuk aksi penyimpanan yang belum didukung, arahkan user memakai UI atau jelaskan bahwa perlu proposal workflow. ")
 	b.WriteString("Untuk semua diskusi kisi-kisi/blueprint/soal sekolah Indonesia, WAJIB gunakan Kurikulum Merdeka: CP, Elemen CP, TP, materi, indikator soal berbasis stimulus, level kognitif C1-C6. DILARANG menyarankan KD, SK, Kompetensi Dasar, Standar Kompetensi, atau K13 sebagai default. Jika user menyebut KD/K13, jelaskan bahwa workspace ini memakai standar Kurikulum Merdeka kecuali user eksplisit memilih kurikulum lama. TP wajib mengikuti prinsip A-B-C-D: minimal Audience 'Peserta didik' dan Behavior berupa satu KKO terukur; Condition dan Degree dianjurkan. KKO TP harus selaras dengan level kognitif dan indikator. ")
-	b.WriteString("Chat panel sempit: JANGAN gunakan markdown table kecuali user eksplisit meminta tabel. Untuk kisi-kisi/blueprint/soal, gunakan format daftar bernomor atau compact cards. Setiap slot maksimal 4 baris: baris 1 Elemen · Level · Bentuk, baris 2 Materi, baris 3 TP ringkas, baris 4 Indikator berbasis stimulus. Batasi contoh awal 3-5 item kecuali user meminta lebih. Akhiri dengan next action yang jelas, misalnya: 'Jika setuju, bilang: buatkan proposal 5 slot pertama'. ")
+	b.WriteString("Chat panel sempit: JANGAN gunakan markdown table kecuali user eksplisit meminta tabel. Untuk kisi-kisi/blueprint/soal, gunakan format daftar bernomor atau compact cards. Setiap slot maksimal 4 baris: baris 1 Elemen · Level · Bentuk, baris 2 Materi, baris 3 TP ringkas, baris 4 Indikator berbasis stimulus. Batasi contoh awal 3-5 item kecuali user meminta lebih. Jangan pernah menyebut draft diskusi sebagai 'proposal' atau mengklaim backend/sistem akan memproses sesuatu. Untuk aksi, minta user mengetik perintah eksplisit: 'buatkan proposal 5 slot pertama'. ")
 	if examID := strings.TrimSpace(active["examId"]); examID != "" && a.db != nil {
 		ctxResp, err := a.ensureExamCurriculumContext(ctx, tenantID, examID)
 		if err == nil {
@@ -252,7 +252,7 @@ func (a *App) callLLM(ctx context.Context, messages []llmMessage) (*llmResponse,
 var affirmativeWords = map[string]bool{
 	"ya": true, "iya": true, "yup": true, "yep": true, "yes": true,
 	"ok": true, "oke": true, "okay": true, "lanjut": true, "lanjutkan": true,
-	"jalankan": true, "eksekusi": true, "setuju": true, "konfirmasi": true,
+	"jalankan": true, "eksekusi": true, "lakukan": true, "setuju": true, "konfirmasi": true,
 	"simpan": true, "save": true,
 }
 

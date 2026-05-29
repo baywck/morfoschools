@@ -24,6 +24,12 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 	if a.tryCreateChatBlueprintSlotEditProposal(w, r, tenantID, userID, sessionID, req) {
 		return true
 	}
+	if isBlueprintPageRequest(req) && classifyShortReply(lower) == "affirm" {
+		if previousDraft, ok := a.lastAssistantBlueprintProposalPrompt(r.Context(), sessionID); ok {
+			req.Message = previousDraft + "\n\nUser menyetujui draft di atas. Buatkan proposal 5 slot berdasarkan draft tersebut."
+			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "affirmed previous blueprint proposal next action"})
+		}
+	}
 	// Soft intent / help-seeking language ("aku ingin..., dapatkah kamu
 	// membantuku?") is planning/clarification, not a write proposal. Let the
 	// discussion LLM answer first; do not generate slots yet.
