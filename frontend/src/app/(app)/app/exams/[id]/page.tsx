@@ -128,6 +128,8 @@ export default function ExamDetailPage({ params }: PageProps) {
 
   const activeTab = normalizeTab(tabFromPath(pathname), exam?.usesKisiKisi ?? false);
   const canWrite = exam?.canWrite !== false;
+  const hasSubject = !!exam?.subjectId;
+  const visibleTab = !hasSubject && activeTab === "kisi-kisi" ? "setup" : activeTab;
 
   function setTab(tab: WorkspaceTab) {
     router.replace(`/app/exams/${examId}/${tab}`, { scroll: false });
@@ -320,7 +322,7 @@ export default function ExamDetailPage({ params }: PageProps) {
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Settings2 size={17} /></div>
               <div>
                 <h2 className="text-[14px] font-bold text-[var(--foreground)]">Authoring Workspace</h2>
-                <p className="text-[11px] text-[var(--muted-foreground)]">Atur setup, kisi-kisi, dan questions dari satu workspace.</p>
+                <p className="text-[11px] text-[var(--muted-foreground)]">Atur setup{hasSubject ? ", kisi-kisi," : " dan"} questions dari satu workspace.</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-medium text-[var(--muted-foreground)]">
@@ -331,14 +333,14 @@ export default function ExamDetailPage({ params }: PageProps) {
 
           <div className="border-b border-[var(--border)] px-3 py-3">
             <div className="flex items-center gap-1 rounded-xl bg-[var(--muted)] p-1">
-              <WorkspaceTabButton active={activeTab === "setup"} icon={<Settings2 size={14} />} label="Setup" onClick={() => setTab("setup")} />
-              <WorkspaceTabButton active={activeTab === "kisi-kisi"} icon={<ClipboardList size={14} />} label="Kisi-Kisi" onClick={() => setTab("kisi-kisi")} />
-              <WorkspaceTabButton active={activeTab === "questions"} icon={<FileQuestion size={14} />} label="Questions" onClick={() => setTab("questions")} />
+              <WorkspaceTabButton active={visibleTab === "setup"} icon={<Settings2 size={14} />} label="Setup" onClick={() => setTab("setup")} />
+              {hasSubject && <WorkspaceTabButton active={visibleTab === "kisi-kisi"} icon={<ClipboardList size={14} />} label="Kisi-Kisi" onClick={() => setTab("kisi-kisi")} />}
+              <WorkspaceTabButton active={visibleTab === "questions"} icon={<FileQuestion size={14} />} label="Questions" onClick={() => setTab("questions")} />
             </div>
           </div>
 
           <div className="p-3 md:p-4">
-            {activeTab === "setup" && (
+            {visibleTab === "setup" && (
               <SetupPanel
                 exam={exam}
                 subjects={subjects}
@@ -355,7 +357,7 @@ export default function ExamDetailPage({ params }: PageProps) {
                 onSaveBehavior={handleSaveBehavior}
               />
             )}
-            {activeTab === "questions" && (
+            {visibleTab === "questions" && (
               <ExamCanvas
                 exam={exam}
                 onExamChange={reload}
@@ -364,7 +366,7 @@ export default function ExamDetailPage({ params }: PageProps) {
                 onGenerateFromQuestions={() => toast({ tone: "info", title: "Buka AI chat", description: "Panggil convert_questions_to_kisi_kisi via chat untuk konfirmasi reverse-flow." })}
               />
             )}
-            {activeTab === "kisi-kisi" && (
+            {visibleTab === "kisi-kisi" && (
               <KisiKisiManagerPanel
                 exam={exam}
                 blueprint={blueprint}
@@ -430,7 +432,13 @@ function SetupPanel(props: {
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <InputField label="Nama ujian" value={p.basicForm.title} disabled={!p.canWrite} error={p.fieldErrors.title} onChange={(e) => p.setBasicForm({ ...p.basicForm, title: e.target.value })} />
           <SelectField label="Exam type" value={p.basicForm.examType} disabled={!p.canWrite} options={examTypeOptions} onChange={(v) => p.setBasicForm({ ...p.basicForm, examType: v })} />
-          <SelectField label="Subject" value={p.basicForm.subjectId} disabled={!p.canWrite} error={p.fieldErrors.subjectId} options={[{ value: "", label: "None" }, ...p.subjects.map((s) => ({ value: s.id, label: s.name }))]} onChange={(v) => p.setBasicForm({ ...p.basicForm, subjectId: v })} />
+          {p.subjects.length === 0 ? (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--warning-soft)] px-3 py-2 text-[11px] text-[var(--warning)]">
+              Belum ada Subject aktif. Tambahkan subject dulu agar kisi-kisi dan AI Kurikulum Merdeka bisa digunakan.
+            </div>
+          ) : (
+            <SelectField label="Subject" value={p.basicForm.subjectId} disabled={!p.canWrite} error={p.fieldErrors.subjectId} options={[{ value: "", label: "None" }, ...p.subjects.map((s) => ({ value: s.id, label: s.name }))]} onChange={(v) => p.setBasicForm({ ...p.basicForm, subjectId: v })} />
+          )}
           <SelectField label="Grade" value={p.basicForm.gradeLevel} disabled={!p.canWrite} error={p.fieldErrors.gradeLevel} options={[{ value: "", label: "None" }, ...p.gradeOptions.map((grade) => ({ value: grade, label: `Kelas ${grade} · Fase ${(phaseForGrade(grade) || "?").toUpperCase()}` }))]} onChange={(v) => p.setBasicForm({ ...p.basicForm, gradeLevel: v })} />
           <InputField label="Duration minutes" inputMode="numeric" value={p.basicForm.durationMinutes} disabled={!p.canWrite} error={p.fieldErrors.durationMinutes} onChange={(e) => p.setBasicForm({ ...p.basicForm, durationMinutes: e.target.value.replace(/\D/g, "").slice(0, 4) })} />
           <div className="grid grid-cols-2 gap-3">
