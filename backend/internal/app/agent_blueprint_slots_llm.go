@@ -37,12 +37,14 @@ func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID 
 			content = content[start : end+1]
 		}
 	}
-	var out struct {
-		Topic string                    `json:"topic"`
-		Slots []agentBlueprintSlotDraft `json:"slots"`
-	}
+	var out blueprintSlotsLLMOutput
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
-		return agentCreateBlueprintSlotsArgs{}, err
+		fallback, ok := a.fallbackBlueprintSlotsDraft(ctxResp, req.Message, count)
+		if !ok {
+			return agentCreateBlueprintSlotsArgs{}, err
+		}
+		out = fallback
+		warnings = append(warnings, "LLM tidak mengembalikan JSON valid; proposal awal dibuat dengan generator terstruktur dan wajib direview manual.")
 	}
 	for i := range out.Slots {
 		if out.Slots[i].Position <= 0 {
