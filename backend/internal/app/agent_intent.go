@@ -21,19 +21,23 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 		return true
 	}
-	if a.tryHandleBlueprintSlotsRequest(w, r, tenantID, userID, sessionID, req, lower) {
-		return true
-	}
-	if isVagueBlueprintHelpRequest(lower) {
-		return false
-	}
-	if !isAgentExamMutationCandidate(lower) {
-		return false
-	}
 	auth := AuthFromContext(r.Context())
 	roles := []string{}
 	if auth != nil {
 		roles = auth.Roles
+	}
+	classification, classErr := a.classifyAgentTurn(r.Context(), tenantID, userID, roles, sessionID, req)
+	if classErr != nil {
+		a.logger.Error("agent turn classification failed", "error", classErr)
+		if !isAgentExamMutationCandidate(lower) {
+			return false
+		}
+	} else if classification.Mode != "proposal_request" {
+		return false
+	} else if agentWorkflow(classification.Workflow) == agentWorkflowCreateBlueprintSlots {
+		return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, classification)
+	} else if classification.Args != nil && string(classification.Args) != "{}" {
+		return a.createAgentProposalFromClassifiedIntent(w, r, tenantID, userID, sessionID, req, classification)
 	}
 	intent, err := a.extractAgentIntent(r.Context(), tenantID, userID, roles, sessionID, req)
 	if err != nil {
@@ -47,6 +51,10 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 			intent = fallback
 		}
 	}
+	return a.createAgentProposalFromIntentResponse(w, r, tenantID, userID, sessionID, req, intent)
+}
+
+func (a *App) createAgentProposalFromIntentResponse(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, intent agentIntentResponse) bool {
 	workflow := agentWorkflow(intent.Workflow)
 	if workflow == "" && intent.Intent == string(agentWorkflowCreateExam) {
 		workflow = agentWorkflowCreateExam
