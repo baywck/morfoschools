@@ -188,7 +188,10 @@ export default function ExamsPage() {
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!crud.editTarget) return;
-    await crud.handleEdit(crud.editTarget.id, buildPayload(editForm));
+    const { subjectId: _subjectId, gradeLevel: _gradeLevel, ...payload } = buildPayload(editForm);
+    void _subjectId;
+    void _gradeLevel;
+    await crud.handleEdit(crud.editTarget.id, payload);
   }
 
   async function handleHardDelete() {
@@ -409,12 +412,12 @@ function ExamFormSheet({
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
-        <PanelHeader icon={<Settings2 size={15} />} title="Basic setup" subtitle="Identitas utama exam: nama, mapel, kelas, durasi, dan scoring." />
+        <PanelHeader icon={<Settings2 size={15} />} title="Basic setup" subtitle={mode === "create" ? "Pilih mapel dan kelas dengan benar. Subject dan Grade dikunci setelah exam dibuat." : "Identitas utama exam. Subject dan Grade tidak bisa diedit setelah dibuat."} />
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           <InputField label="Nama ujian" value={form.title} error={fieldErrors.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <SelectField label="Exam type" value={form.examType} options={examTypeOptions} onChange={(v) => setForm({ ...form, examType: v })} />
-          <SelectField label="Subject" value={form.subjectId} error={fieldErrors.subjectId} options={[{ value: "", label: "None" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]} onChange={(v) => setForm({ ...form, subjectId: v })} />
-          <SelectField label="Grade" value={form.gradeLevel} error={fieldErrors.gradeLevel} options={[{ value: "", label: "None" }, ...gradeOptions.map((grade) => ({ value: grade, label: `Kelas ${grade} · Fase ${(phaseForGrade(grade) || "?").toUpperCase()}` }))]} onChange={(v) => setForm({ ...form, gradeLevel: v })} />
+          <SelectField label="Subject" value={form.subjectId} disabled={mode === "edit"} helperText={mode === "create" ? "Tidak bisa diedit setelah exam dibuat." : "Subject dikunci setelah exam dibuat."} error={fieldErrors.subjectId} options={[{ value: "", label: "None" }, ...subjects.map((s) => ({ value: s.id, label: s.name }))]} onChange={(v) => setForm({ ...form, subjectId: v })} />
+          <SelectField label="Grade" value={form.gradeLevel} disabled={mode === "edit"} helperText={mode === "create" ? "Tidak bisa diedit setelah exam dibuat." : "Grade dikunci setelah exam dibuat."} error={fieldErrors.gradeLevel} options={[{ value: "", label: "None" }, ...gradeOptions.map((grade) => ({ value: grade, label: `Kelas ${grade} · Fase ${(phaseForGrade(grade) || "?").toUpperCase()}` }))]} onChange={(v) => setForm({ ...form, gradeLevel: v })} />
           <InputField label="Duration minutes" inputMode="numeric" value={form.durationMinutes} error={fieldErrors.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: e.target.value.replace(/\D/g, "").slice(0, 4) })} />
           <div className="grid grid-cols-2 gap-2">
             <InputField label="Max score" inputMode="numeric" value={form.maxScore} error={fieldErrors.maxScore} onChange={(e) => setForm({ ...form, maxScore: e.target.value })} />

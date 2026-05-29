@@ -442,12 +442,13 @@ func (a *App) handleUpdateExam(w http.ResponseWriter, r *http.Request) {
 	var current struct {
 		Status       string
 		SubjectID    *string
+		GradeLevel   *string
 		UsesKisiKisi bool
 	}
 	err := a.db.QueryRowContext(r.Context(),
-		`SELECT status, subject_id::text, uses_kisi_kisi FROM exams WHERE id = $1 AND tenant_id = $2`,
+		`SELECT status, subject_id::text, grade_level, uses_kisi_kisi FROM exams WHERE id = $1 AND tenant_id = $2`,
 		examID, tenantID,
-	).Scan(&current.Status, &current.SubjectID, &current.UsesKisiKisi)
+	).Scan(&current.Status, &current.SubjectID, &current.GradeLevel, &current.UsesKisiKisi)
 	if err != nil {
 		writeErrorJSON(w, http.StatusNotFound, "not_found", "Exam not found", r)
 		return
@@ -474,11 +475,33 @@ func (a *App) handleUpdateExam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.GradeLevel != nil {
-		if fields := a.validateTenantGradeLevel(r.Context(), tenantID, *req.GradeLevel); len(fields) > 0 {
-			writeValidationError(w, fields, r)
-			return
+	immutableFields := map[string]string{}
+	if req.SubjectID != nil {
+		currentSubject := ""
+		if current.SubjectID != nil {
+			currentSubject = *current.SubjectID
 		}
+		if strings.TrimSpace(*req.SubjectID) != currentSubject {
+			immutableFields["subjectId"] = "Subject cannot be changed after exam creation"
+		}
+	}
+	if req.GradeLevel != nil {
+		currentGrade := ""
+		if current.GradeLevel != nil {
+			currentGrade = *current.GradeLevel
+		}
+		if strings.TrimSpace(*req.GradeLevel) != currentGrade {
+			immutableFields["gradeLevel"] = "Grade cannot be changed after exam creation"
+		}
+		if fields := a.validateTenantGradeLevel(r.Context(), tenantID, *req.GradeLevel); len(fields) > 0 {
+			for k, v := range fields {
+				immutableFields[k] = v
+			}
+		}
+	}
+	if len(immutableFields) > 0 {
+		writeValidationError(w, immutableFields, r)
+		return
 	}
 
 	// Kisi-kisi toggle gate (ADR-0012). Same admin override contract as

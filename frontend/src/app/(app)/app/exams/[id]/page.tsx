@@ -432,14 +432,8 @@ function SetupPanel(props: {
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <InputField label="Nama ujian" value={p.basicForm.title} disabled={!p.canWrite} error={p.fieldErrors.title} onChange={(e) => p.setBasicForm({ ...p.basicForm, title: e.target.value })} />
           <SelectField label="Exam type" value={p.basicForm.examType} disabled={!p.canWrite} options={examTypeOptions} onChange={(v) => p.setBasicForm({ ...p.basicForm, examType: v })} />
-          {p.subjects.length === 0 ? (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--warning-soft)] px-3 py-2 text-[11px] text-[var(--warning)]">
-              Belum ada Subject aktif. Tambahkan subject dulu agar kisi-kisi dan AI Kurikulum Merdeka bisa digunakan.
-            </div>
-          ) : (
-            <SelectField label="Subject" value={p.basicForm.subjectId} disabled={!p.canWrite} error={p.fieldErrors.subjectId} options={[{ value: "", label: "None" }, ...p.subjects.map((s) => ({ value: s.id, label: s.name }))]} onChange={(v) => p.setBasicForm({ ...p.basicForm, subjectId: v })} />
-          )}
-          <SelectField label="Grade" value={p.basicForm.gradeLevel} disabled={!p.canWrite} error={p.fieldErrors.gradeLevel} options={[{ value: "", label: "None" }, ...p.gradeOptions.map((grade) => ({ value: grade, label: `Kelas ${grade} · Fase ${(phaseForGrade(grade) || "?").toUpperCase()}` }))]} onChange={(v) => p.setBasicForm({ ...p.basicForm, gradeLevel: v })} />
+          <SelectField label="Subject" value={p.basicForm.subjectId} disabled error={p.fieldErrors.subjectId} helperText="Subject dikunci setelah exam dibuat." options={[{ value: "", label: "None" }, ...p.subjects.map((s) => ({ value: s.id, label: s.name }))]} onChange={() => {}} />
+          <SelectField label="Grade" value={p.basicForm.gradeLevel} disabled error={p.fieldErrors.gradeLevel} helperText="Grade dikunci setelah exam dibuat." options={[{ value: "", label: "None" }, ...p.gradeOptions.map((grade) => ({ value: grade, label: `Kelas ${grade} · Fase ${(phaseForGrade(grade) || "?").toUpperCase()}` }))]} onChange={() => {}} />
           <InputField label="Duration minutes" inputMode="numeric" value={p.basicForm.durationMinutes} disabled={!p.canWrite} error={p.fieldErrors.durationMinutes} onChange={(e) => p.setBasicForm({ ...p.basicForm, durationMinutes: e.target.value.replace(/\D/g, "").slice(0, 4) })} />
           <div className="grid grid-cols-2 gap-3">
             <InputField label="Max score" inputMode="numeric" value={p.basicForm.maxScore} disabled={!p.canWrite} error={p.fieldErrors.maxScore} onChange={(e) => p.setBasicForm({ ...p.basicForm, maxScore: e.target.value })} />
