@@ -63,7 +63,6 @@ export default function SubjectsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const success = await crud.handleCreate({
-      code: createForm.officialSubject || undefined,
       name: createForm.name,
       description: createForm.description || undefined,
     });
@@ -159,7 +158,7 @@ export default function SubjectsPage() {
             onCreate={(typedSubject) => setCreateForm({ ...createForm, officialSubject: "", name: typedSubject })}
             createLabel={(typedSubject) => `Tambah “${typedSubject}”`}
             error={crud.fieldErrors.name}
-            helperText="Ketik untuk mencari subject resmi. Jika tidak ada, tambahkan subject custom dari teks yang diketik."
+            helperText="Subject code otomatis mengikuti nama subject. Jika nama berubah, code ikut berubah."
             prefix={<BookOpen size={14} />}
           />
           <InputField
@@ -193,7 +192,7 @@ export default function SubjectsPage() {
             onCreate={(typedSubject) => setEditForm({ ...editForm, officialSubject: "", name: typedSubject })}
             createLabel={(typedSubject) => `Tambah “${typedSubject}”`}
             error={crud.fieldErrors.name}
-            helperText="Ketik untuk mencari subject resmi. Jika tidak ada, tambahkan subject custom dari teks yang diketik."
+            helperText="Subject code otomatis mengikuti nama subject. Jika nama berubah, code ikut berubah."
             prefix={<BookOpen size={14} />}
           />
           <InputField

@@ -131,9 +131,9 @@ func (a *App) handleCreateSubject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Code == "" {
-		req.Code = slugifySubjectName(req.Name)
-	}
+	// Subject code is the canonical slug representation of subject name.
+	// Ignore client-provided legacy/custom codes so name/code cannot diverge.
+	req.Code = slugifySubjectName(req.Name)
 
 	// Uniqueness
 	var exists bool
@@ -187,6 +187,7 @@ func (a *App) handleUpdateSubject(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Name        *string `json:"name"`
+		Code        *string `json:"code"`
 		Description *string `json:"description"`
 		Status      *string `json:"status"`
 	}
@@ -196,7 +197,19 @@ func (a *App) handleUpdateSubject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Name != nil {
-		_, _ = a.db.ExecContext(r.Context(), `UPDATE subjects SET name = $1, updated_at = now() WHERE id = $2`, strings.TrimSpace(*req.Name), subjectID)
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			writeValidationError(w, map[string]string{"name": "Name is required"}, r)
+			return
+		}
+		code := slugifySubjectName(name)
+		var duplicate bool
+		_ = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM subjects WHERE tenant_id = $1 AND id != $2 AND (lower(name) = lower($3) OR code = $4) AND status != 'archived')`, tenantID, subjectID, name, code).Scan(&duplicate)
+		if duplicate {
+			writeValidationError(w, map[string]string{"name": "Subject already exists"}, r)
+			return
+		}
+		_, _ = a.db.ExecContext(r.Context(), `UPDATE subjects SET name = $1, code = $2, updated_at = now() WHERE id = $3`, name, code, subjectID)
 	}
 	if req.Description != nil {
 		_, _ = a.db.ExecContext(r.Context(), `UPDATE subjects SET description = NULLIF($1,''), updated_at = now() WHERE id = $2`, strings.TrimSpace(*req.Description), subjectID)
