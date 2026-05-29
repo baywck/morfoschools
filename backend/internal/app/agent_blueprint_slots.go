@@ -102,7 +102,7 @@ func (a *App) executeAgentCreateBlueprintSlots(ctx context.Context, tenantID, us
 		return agentWorkflowResult{}, err
 	}
 	var nextPosition int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position),0)+1 FROM exam_blueprint_slots WHERE blueprint_id=$1`, blueprintID).Scan(&nextPosition); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position),0)+1 FROM exam_blueprint_slots WHERE exam_blueprint_id=$1`, blueprintID).Scan(&nextPosition); err != nil {
 		return agentWorkflowResult{}, err
 	}
 	created := 0
@@ -123,7 +123,7 @@ func (a *App) executeAgentCreateBlueprintSlots(ctx context.Context, tenantID, us
 		}
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO exam_blueprint_slots (
-				blueprint_id, position, points, materi, indikator, cognitive_level, difficulty, question_type,
+				exam_blueprint_id, position, points, materi, indikator, cognitive_level, difficulty, question_type,
 				capaian_pembelajaran, elemen_cp, tujuan_pembelajaran, materi_pokok, kelas, indikator_soal
 			) VALUES ($1,$2,$3,$4,$5,$6,'sedang',$7,$8,$9,$10,$11,NULLIF($12,''),$13)`,
 			blueprintID, position, points, slot.MateriPokok, slot.IndikatorSoal, normalizeCognitiveLevel(slot.CognitiveLevel), normalizeQuestionType(slot.QuestionType),
@@ -136,7 +136,7 @@ func (a *App) executeAgentCreateBlueprintSlots(ctx context.Context, tenantID, us
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE exam_blueprints b SET total_slots=s.cnt, total_points=s.points, updated_at=now()
-		FROM (SELECT COUNT(*)::int cnt, COALESCE(SUM(points),0) points FROM exam_blueprint_slots WHERE blueprint_id=$1) s
+		FROM (SELECT COUNT(*)::int cnt, COALESCE(SUM(points),0) points FROM exam_blueprint_slots WHERE exam_blueprint_id=$1) s
 		WHERE b.id=$1`, blueprintID); err != nil {
 		return agentWorkflowResult{}, err
 	}
