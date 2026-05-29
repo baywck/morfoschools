@@ -547,22 +547,19 @@ function KisiKisiManagerPanel({
               <table className="min-w-[980px] w-full border-collapse text-left text-[11px]">
                 <thead className="bg-[var(--muted)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
-                    <th className="w-12 border-b border-[var(--border)] px-2 py-2 text-center">No</th>
                     <th className="w-16 border-b border-[var(--border)] px-2 py-2 text-center">Soal</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">CP / Elemen</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Tujuan Pembelajaran</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Materi</th>
                     <th className="border-b border-[var(--border)] px-2 py-2">Indikator Soal</th>
-                    <th className="border-b border-[var(--border)] px-2 py-2">Bentuk</th>
-                    <th className="border-b border-[var(--border)] px-2 py-2">Level</th>
+                    <th className="w-32 border-b border-[var(--border)] px-2 py-2">Bentuk / Level</th>
                   </tr>
                 </thead>
                 <tbody>
                   {slots.length === 0 ? (
-                    <tr><td colSpan={8} className="px-3 py-8 text-center text-[12px] text-[var(--muted-foreground)]">Belum ada slot kisi-kisi.</td></tr>
+                    <tr><td colSpan={6} className="px-3 py-8 text-center text-[12px] text-[var(--muted-foreground)]">Belum ada slot kisi-kisi.</td></tr>
                   ) : slots.map((slot) => (
                     <tr key={slot.id} className="align-top odd:bg-[var(--background)] even:bg-[var(--accent)]/40">
-                      <td className="border-t border-[var(--border)] px-2 py-2 text-center font-semibold text-[var(--foreground)]">{slot.position}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-center">
                         {slot.question ? <QuestionNumberBadge questionNumber={Math.max(1, (slot.question.sortOrder ?? 0) + 1)} content={slot.question.content} /> : <span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">-</span>}
                       </td>
@@ -570,8 +567,10 @@ function KisiKisiManagerPanel({
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.tujuanPembelajaran || "-"}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.materiPokok || "-"}</td>
                       <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.indikatorSoal || "-"}</td>
-                      <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--muted-foreground)]">{questionTypeLabel(slot.questionType)}</td>
-                      <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--muted-foreground)]">{slot.cognitiveLevel || "-"}</td>
+                      <td className="border-t border-[var(--border)] px-2 py-2 text-[var(--muted-foreground)]">
+                        <p className="font-medium text-[var(--foreground)]">{questionTypeLabel(slot.questionType)}</p>
+                        <p className="mt-1 text-[10px] font-semibold text-[var(--muted-foreground)]">{slot.cognitiveLevel || "-"}</p>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
