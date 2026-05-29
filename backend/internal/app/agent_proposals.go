@@ -17,10 +17,15 @@ type agentProposalPayload struct {
 
 func (a *App) createAgentProposal(r *http.Request, tenantID, userID, sessionID string, workflow agentWorkflow, args json.RawMessage, preview string) (string, error) {
 	var id string
+	var sID sql.NullString
+	if sessionID != "" {
+		sID.String = sessionID
+		sID.Valid = true
+	}
 	err := a.db.QueryRowContext(r.Context(), `
 		INSERT INTO agent_proposals (tenant_id, user_id, session_id, workflow, args, preview, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, now() + interval '30 minutes')
-		RETURNING id::text`, tenantID, userID, sessionID, string(workflow), args, preview).Scan(&id)
+		RETURNING id::text`, tenantID, userID, sID, string(workflow), args, preview).Scan(&id)
 	return id, err
 }
 
