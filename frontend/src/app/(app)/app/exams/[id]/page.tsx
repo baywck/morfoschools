@@ -610,10 +610,19 @@ function KisiKisiManagerPanel({
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <PanelHeader icon={<ClipboardList size={15} />} title={blueprint.title || "Kisi-Kisi Manager"} subtitle={`${blueprint.curriculumCode} · ${blueprint.blueprintType} · ${total} slot`} />
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden flex-wrap items-center gap-2 md:flex">
                 {canWrite && <KisiActionButton icon={<ClipboardPaste size={13} />} label={blueprint ? "Ganti template kisi-kisi" : "Import template kisi-kisi"} onClick={onLoadTemplate} />}
                 {blueprint && <KisiActionButton icon={<ClipboardCopy size={13} />} label="Simpan sebagai template" onClick={onExportTemplate} />}
                 {blueprint && <KisiActionButton icon={<Printer size={13} />} label="Print kisi-kisi" onClick={onPrint} />}
+              </div>
+              <div className="md:hidden">
+                <RowActions actions={[
+                  ...(canWrite ? [{ label: blueprint ? "Ganti template" : "Import template", icon: <ClipboardPaste size={13} />, onClick: onLoadTemplate }] : []),
+                  ...(blueprint ? [
+                    { label: "Simpan template", icon: <ClipboardCopy size={13} />, onClick: onExportTemplate },
+                    { label: "Print kisi-kisi", icon: <Printer size={13} />, onClick: onPrint },
+                  ] : []),
+                ]} />
               </div>
             </div>
           </div>
