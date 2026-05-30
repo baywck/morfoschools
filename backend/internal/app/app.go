@@ -221,6 +221,12 @@ func corsMiddleware(next http.Handler) http.Handler {
 	allowed := map[string]bool{
 		"http://localhost:1666": true,
 		"http://127.0.0.1:1666": true,
+		// Development fallback ports. Next.js can auto-select these when 1666 is already in use;
+		// allowing them prevents browser-level CORS failures that look like backend outages.
+		"http://localhost:3000": true,
+		"http://127.0.0.1:3000": true,
+		"http://localhost:3001": true,
+		"http://127.0.0.1:3001": true,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

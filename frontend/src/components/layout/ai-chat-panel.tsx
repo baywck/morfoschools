@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { listAIModels } from "@/lib/modules-api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+const API_FALLBACK_BASE = API_BASE === "http://localhost:8080" ? "http://127.0.0.1:8080" : null;
 
 type AgentWorkflowResult = {
   data?: {
@@ -827,30 +828,42 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
 
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), 180_000);
+      const payload = JSON.stringify({
+        sessionId: sessionId || undefined,
+        message: trimmed,
+        shadow: {
+          route: pathname,
+          activeEntities: parseActiveEntities(pathname),
+        },
+      });
+      const fetchAIChat = (base: string) => fetch(`${base}/api/v1/ai/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        credentials: "include",
+        signal: controller.signal,
+        body: payload,
+      });
+
       let response: Response;
       try {
-        response = await fetch(`${API_BASE}/api/v1/ai/chat`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
-          },
-          credentials: "include",
-          signal: controller.signal,
-          body: JSON.stringify({
-            sessionId: sessionId || undefined,
-            message: trimmed,
-            shadow: {
-              route: pathname,
-              activeEntities: parseActiveEntities(pathname),
-            },
-          }),
-        });
+        response = await fetchAIChat(API_BASE);
       } catch (err) {
-        const msg = err instanceof DOMException && err.name === "AbortError"
-          ? "AI agent terlalu lama merespons atau koneksi request dibatalkan. Coba lagi dengan permintaan lebih kecil."
-          : `Request AI gagal terkirim ke ${API_BASE}. Cek koneksi/browser console; backend belum tentu mati.`;
-        throw new Error(msg);
+        if (API_FALLBACK_BASE && !(err instanceof DOMException && err.name === "AbortError")) {
+          try {
+            response = await fetchAIChat(API_FALLBACK_BASE);
+          } catch (fallbackErr) {
+            const detail = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+            throw new Error(`Request AI gagal terkirim ke ${API_BASE} maupun ${API_FALLBACK_BASE}. Detail: ${detail}`);
+          }
+        } else {
+          const msg = err instanceof DOMException && err.name === "AbortError"
+            ? "AI agent terlalu lama merespons atau koneksi request dibatalkan. Coba lagi dengan permintaan lebih kecil."
+            : `Request AI gagal terkirim ke ${API_BASE}. Cek koneksi/browser console; backend belum tentu mati.`;
+          throw new Error(msg);
+        }
       } finally {
         window.clearTimeout(timeoutId);
       }
