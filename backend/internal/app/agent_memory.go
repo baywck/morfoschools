@@ -93,6 +93,7 @@ func (a *App) markLatestBlueprintDraftStatus(ctx context.Context, tenantID, sess
 }
 
 var blueprintSlotHeaderRe = regexp.MustCompile(`(?i)^\s*(?:slot\s*)?(\d+)\s*[\).:-]?\s*$`)
+var blueprintSlotInlineHeaderRe = regexp.MustCompile(`(?i)^\s*slot\s*(\d+)\s*[·\-–—:]\s*(.+)$`)
 
 func extractBlueprintDraftSlotsFromText(content string) []agentBlueprintSlotDraft {
 	lines := strings.Split(content, "\n")
@@ -113,6 +114,12 @@ func extractBlueprintDraftSlotsFromText(content string) []agentBlueprintSlotDraf
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(strings.Trim(line, "-*• "))
 		if trimmed == "" {
+			continue
+		}
+		if m := blueprintSlotInlineHeaderRe.FindStringSubmatch(trimmed); len(m) == 3 {
+			flush()
+			current.Position, _ = strconv.Atoi(m[1])
+			parseBlueprintInlineHeader(m[2], &current)
 			continue
 		}
 		if m := blueprintSlotHeaderRe.FindStringSubmatch(trimmed); len(m) == 2 {
@@ -157,7 +164,7 @@ func parseBlueprintInlineHeader(line string, slot *agentBlueprintSlotDraft) {
 	if idx := strings.Index(strings.ToLower(value), "elemen:"); idx >= 0 {
 		value = value[idx+len("elemen:"):]
 	}
-	parts := strings.Split(value, "·")
+	parts := splitBlueprintHeaderParts(value)
 	if len(parts) > 0 {
 		slot.ElemenCP = strings.TrimSpace(parts[0])
 	}
@@ -168,16 +175,25 @@ func parseBlueprintInlineHeader(line string, slot *agentBlueprintSlotDraft) {
 			slot.CognitiveLevel = normalizeCognitiveLevel(upper)
 			continue
 		}
-		if strings.Contains(strings.ToLower(p), "pilihan ganda") || strings.EqualFold(p, "pg") {
+		lower := strings.ToLower(p)
+		if strings.Contains(lower, "pilihan ganda") || strings.EqualFold(p, "pg") || strings.EqualFold(p, "mc") {
 			slot.QuestionType = "multiple_choice"
-		} else if strings.Contains(strings.ToLower(p), "uraian") || strings.Contains(strings.ToLower(p), "esai") {
+		} else if strings.Contains(lower, "uraian") || strings.Contains(lower, "esai") || strings.Contains(lower, "essay") {
 			slot.QuestionType = "essay"
-		} else if strings.Contains(strings.ToLower(p), "benar") || strings.Contains(strings.ToLower(p), "salah") {
+		} else if strings.Contains(lower, "benar") || strings.Contains(lower, "salah") || strings.Contains(lower, "true") || strings.Contains(lower, "false") {
 			slot.QuestionType = "true_false"
-		} else if strings.Contains(strings.ToLower(p), "singkat") {
+		} else if strings.Contains(lower, "singkat") || strings.Contains(lower, "short") {
 			slot.QuestionType = "short_answer"
 		}
 	}
+}
+
+func splitBlueprintHeaderParts(value string) []string {
+	parts := strings.Split(value, "·")
+	if len(parts) > 1 {
+		return parts
+	}
+	return strings.Split(value, "-")
 }
 
 func cleanDraftValue(s string) string {

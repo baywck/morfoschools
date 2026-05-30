@@ -257,7 +257,13 @@ var negativeWords = map[string]bool{
 func classifyShortReply(msg string) string {
 	normalized := strings.ToLower(strings.TrimSpace(msg))
 	normalized = strings.TrimRight(normalized, ".!?,")
-	if normalized == "" || len(normalized) > 24 {
+	if normalized == "" {
+		return ""
+	}
+	if isNaturalApprovalReply(normalized) {
+		return "affirm"
+	}
+	if len(normalized) > 24 {
 		return ""
 	}
 	if affirmativeWords[normalized] {
@@ -276,6 +282,19 @@ func classifyShortReply(msg string) string {
 		}
 	}
 	return ""
+}
+
+func isNaturalApprovalReply(normalized string) bool {
+	phrases := []string{
+		"tidak ada yang perlu dirubah", "tidak ada yang perlu diubah", "nggak ada yang perlu diubah", "ga ada yang perlu diubah",
+		"sudah sesuai", "sudah oke", "sudah ok", "sudah benar", "boleh simpan", "oke simpan", "ok simpan",
+	}
+	for _, phrase := range phrases {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func looksLikeTopicAdvice(message string) bool {

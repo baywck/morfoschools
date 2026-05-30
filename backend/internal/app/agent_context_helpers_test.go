@@ -19,7 +19,7 @@ func TestIsBlueprintDraftSaveRequest(t *testing.T) {
 }
 
 func TestBlueprintAffirmativeActionWords(t *testing.T) {
-	for _, msg := range []string{"setuju", "lakukan", "jalankan"} {
+	for _, msg := range []string{"setuju", "lakukan", "jalankan", "tidak ada yang perlu dirubah", "oke simpan"} {
 		if got := classifyShortReply(msg); got != "affirm" {
 			t.Fatalf("classifyShortReply(%q) = %q, want affirm", msg, got)
 		}
