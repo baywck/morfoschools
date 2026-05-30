@@ -26,52 +26,22 @@ func TestBlueprintAffirmativeActionWords(t *testing.T) {
 	}
 }
 
-func TestIsBlueprintSlotPlanningQuestion(t *testing.T) {
+func TestIsExplicitBlueprintProposalFallbackCommand(t *testing.T) {
 	cases := []struct {
 		msg  string
 		want bool
 	}{
-		{"aku ingin menambah 10 slot kisi-kisi lagi, dapatkah kamu membantuku?", true},
-		{"Ya, bantu kau menambahkan slot kisi-kisi, kita akan membuat 40 soal, dan kita sudah membuat 5 saat ini, masih kurang 35 lagi", true},
-		{"apakah 5 slot itu distribusinya sudah baik?", true},
-		{"bagaimana rencana 35 kisi-kisi lagi?", true},
-		{"buatkan proposal 5 slot", false},
-		{"langsung buatkan 10 slot", false},
-	}
-	for _, c := range cases {
-		if got := isBlueprintSlotPlanningQuestion(c.msg); got != c.want {
-			t.Errorf("isBlueprintSlotPlanningQuestion(%q) = %v, want %v", c.msg, got, c.want)
-		}
-	}
-}
-
-func TestIsBlueprintSlotCreateCommand(t *testing.T) {
-	cases := []struct {
-		msg  string
-		want bool
-	}{
-		// Imperative creation commands → true
-		{"buatkan 10 slot", true},
-		{"buat 10 kisi-kisi", true},
-		{"langsung buatkan 10 sekaligus", true},
+		{"buatkan proposal 10 slot kisi-kisi", true},
+		{"langsung buatkan 10 slot sekarang", true},
 		{"Ya, bantu kau menambahkan slot kisi-kisi, kita akan membuat 40 soal, dan kita sudah membuat 5 saat ini, masih kurang 35 lagi", false},
-		{"tidak usah preview, buat 10 slot sekaligus", true},
-		{"generate 5 slot kisi-kisi", true},
-		{"susun 8 kisi-kisi", true},
-		// Planning / intention / discussion → false
+		{"generate 5 slot kisi-kisi", false},
+		{"susun 8 kisi-kisi", false},
 		{"aku ingin membuat kisi-kisi", false},
-		{"aku berencana membuat 50 soal", false},
-		{"bantu aku membuat kisi-kisi", false},
-		{"bagaimana cara membuat kisi-kisi yang baik?", false},
-		{"ayo diskusi kisi-kisi dulu", false},
-		// Missing target or verb → false
 		{"buatkan 10 soal pilihan ganda", false},
-		{"jelaskan 10 slot", false},
-		{"buat kisi-kisi", false},
 	}
 	for _, c := range cases {
-		if got := isBlueprintSlotCreateCommand(c.msg); got != c.want {
-			t.Errorf("isBlueprintSlotCreateCommand(%q) = %v, want %v", c.msg, got, c.want)
+		if got := isExplicitBlueprintProposalFallbackCommand(c.msg); got != c.want {
+			t.Errorf("isExplicitBlueprintProposalFallbackCommand(%q) = %v, want %v", c.msg, got, c.want)
 		}
 	}
 }

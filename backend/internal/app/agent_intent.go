@@ -36,19 +36,6 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "affirmed previous blueprint draft"})
 		}
 	}
-	// Soft intent / help-seeking language ("aku ingin..., dapatkah kamu
-	// membantuku?") is planning/clarification, not a write proposal. Let the
-	// discussion LLM answer first; do not generate slots yet.
-	if isBlueprintPageRequest(req) && isBlueprintSlotPlanningQuestion(lower) {
-		return false
-	}
-	// Deterministic fast-path: a clear "buatkan N slot" command on the
-	// kisi-kisi page goes straight to a proposal, skipping the classifier LLM
-	// call. This removes one sequential round-trip so the whole chain stays
-	// well under the client timeout.
-	if isBlueprintPageRequest(req) && isBlueprintSlotCreateCommand(lower) {
-		return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "deterministic slot-create command"})
-	}
 	auth := AuthFromContext(r.Context())
 	roles := []string{}
 	if auth != nil {
@@ -57,17 +44,13 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 	classification, classErr := a.classifyAgentTurn(r.Context(), tenantID, userID, roles, sessionID, req)
 	if classErr != nil {
 		a.logger.Error("agent turn classification failed", "error", classErr)
+		if isBlueprintPageRequest(req) && isExplicitBlueprintProposalFallbackCommand(lower) {
+			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, agentTurnClassification{Mode: "proposal_request", Workflow: string(agentWorkflowCreateBlueprintSlots), Reason: "classifier unavailable; explicit proposal fallback"})
+		}
 		if !isAgentExamMutationCandidate(lower) {
 			return false
 		}
 	} else if classification.Mode != "proposal_request" {
-		// Safety net: a clear "create N slots" command on the kisi-kisi page
-		// must become a real proposal, never discussion (which can fabricate
-		// slots as plain text). The classifier occasionally misroutes these.
-		if isBlueprintPageRequest(req) && isBlueprintSlotCreateCommand(lower) {
-			classification.Workflow = string(agentWorkflowCreateBlueprintSlots)
-			return a.handleBlueprintSlotsProposalRequest(w, r, tenantID, userID, sessionID, req, classification)
-		}
 		return false
 	} else if agentWorkflow(classification.Workflow) == "" && isBlueprintPageRequest(req) {
 		classification.Workflow = string(agentWorkflowCreateBlueprintSlots)
