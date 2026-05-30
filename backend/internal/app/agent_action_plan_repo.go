@@ -138,3 +138,32 @@ func derefString(ptr *string) string {
 	}
 	return *ptr
 }
+
+func (a *App) refreshAgentActionPlanProgress(ctx context.Context, planID string) error {
+	_, err := a.db.ExecContext(ctx, `
+		WITH stats AS (
+			SELECT
+				COUNT(*) AS total_batches,
+				COUNT(*) FILTER (WHERE status='confirmed') AS completed_batches,
+				COALESCE(SUM(progress_units),0) AS total_units,
+				COALESCE(SUM(completed_units),0) AS completed_units
+			FROM agent_action_plan_batches
+			WHERE plan_id=$1
+		)
+		UPDATE agent_action_plans p
+			SET current_batch_index = (
+				SELECT COALESCE(MAX(batch_index),0) FROM agent_action_plan_batches WHERE plan_id=$1 AND status='confirmed'
+			),
+			total_batches = stats.total_batches,
+			progress_percent = CASE WHEN stats.total_batches > 0 THEN LEAST(100, ROUND(100.0 * stats.completed_batches / stats.total_batches)) ELSE 0 END,
+			status = CASE
+				WHEN stats.total_batches = 0 THEN 'failed'
+				WHEN stats.completed_batches = stats.total_batches THEN 'completed'
+				ELSE 'active'
+			END,
+			updated_at = now()
+		FROM stats
+		WHERE p.id=$1
+	`, planID)
+	return err
+}
