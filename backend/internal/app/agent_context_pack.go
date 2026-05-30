@@ -12,6 +12,7 @@ type agentContextPack struct {
 	ExamID        string                `json:"examId,omitempty"`
 	Exam          agentContextExam      `json:"exam,omitempty"`
 	Blueprint     agentContextBlueprint `json:"blueprint,omitempty"`
+	ActivePlan    map[string]any        `json:"activePlan,omitempty"`
 	Memory        agentSessionMemory    `json:"memory,omitempty"`
 	QualityRubric []string              `json:"qualityRubric,omitempty"`
 	Recent        []agentContextMessage `json:"recentMessages,omitempty"`
@@ -82,6 +83,9 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 		pack.Blueprint = a.loadAgentBlueprintContext(ctx, tenantID, pack.ExamID)
 		if len(userMessage) > 0 {
 			pack.Blueprint.RequestedSlots = a.loadRequestedBlueprintSlots(ctx, tenantID, pack.ExamID, userMessage[0])
+		}
+		if activePlan, err := a.loadActiveAgentActionPlanForExam(ctx, pack.ExamID); err == nil && activePlan.ID != "" {
+			pack.ActivePlan = activePlanSummary(activePlan)
 		}
 	}
 	return pack

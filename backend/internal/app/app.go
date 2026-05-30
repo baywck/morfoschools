@@ -105,6 +105,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/exams/{id}/blueprint/export", a.handleExportExamBlueprintToTemplate)
 	a.registerAIProviderSettingsRoutes(mux)
 	a.registerAIChatRoutes(mux)
+	a.registerAgentActionPlanRoutes(mux)
 	a.registerBlueprintSlotAIRoutes(mux)
 
 	return a.applyMiddleware(mux)
