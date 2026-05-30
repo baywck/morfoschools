@@ -119,6 +119,21 @@ func summarizeActionPlanBatchResult(batch agentActionPlanBatch, result agentWork
 		if created, ok := result.Data["createdSlots"]; ok {
 			b.WriteString(fmt.Sprintf("\ncreatedSlots=%v", created))
 		}
+		if totalSlots, ok := result.Data["totalSlots"]; ok {
+			b.WriteString(fmt.Sprintf("\ntotalSlots=%v", totalSlots))
+		}
+		if missingTP, ok := result.Data["missingTP"]; ok {
+			b.WriteString(fmt.Sprintf("\nmissingTP=%v", missingTP))
+		}
+		if missingMateri, ok := result.Data["missingMateri"]; ok {
+			b.WriteString(fmt.Sprintf("\nmissingMateri=%v", missingMateri))
+		}
+		if missingIndikator, ok := result.Data["missingIndikator"]; ok {
+			b.WriteString(fmt.Sprintf("\nmissingIndikator=%v", missingIndikator))
+		}
+		if disconnected, ok := result.Data["disconnected"]; ok {
+			b.WriteString(fmt.Sprintf("\ndisconnected=%v", disconnected))
+		}
 	}
 	return b.String()
 }
