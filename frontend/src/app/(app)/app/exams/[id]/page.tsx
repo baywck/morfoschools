@@ -667,7 +667,7 @@ function KisiKisiManagerPanel({
               <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-[var(--muted)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
-                    <th className="w-[6%] border-b border-[var(--border)] px-2 py-2 text-center">No. Kisi-kisi</th>
+                    <th className="w-[6%] border-b border-[var(--border)] px-2 py-2 text-center">NO</th>
                     <th className="w-[20%] border-b border-[var(--border)] px-2 py-2">CP / Elemen</th>
                     <th className="w-[20%] border-b border-[var(--border)] px-2 py-2">Tujuan Pembelajaran</th>
                     <th className="w-[12%] border-b border-[var(--border)] px-2 py-2">Materi</th>
@@ -927,10 +927,10 @@ function KisiKisiNumberBadge({ slotNumber, connected, questionContent }: { slotN
         aria-describedby={connected && questionContent ? tooltipId : undefined}
         title={connected ? "Terhubung ke soal" : "Belum terhubung ke soal"}
         className={cn(
-          "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[11px] font-bold text-white shadow-sm transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2",
+          "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[11px] font-black text-white shadow-sm ring-1 ring-white/60 transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2",
           connected
-            ? "bg-[var(--success)] focus-visible:ring-[var(--success)]/40"
-            : "bg-[var(--destructive)] focus-visible:ring-[var(--destructive)]/40"
+            ? "bg-emerald-600 shadow-emerald-900/15 focus-visible:ring-emerald-500/40"
+            : "bg-rose-600 shadow-rose-900/15 focus-visible:ring-rose-500/40"
         )}
       >
         {slotNumber}
