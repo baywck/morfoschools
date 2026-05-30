@@ -190,7 +190,7 @@ func (a *App) loadAgentBlueprintSlotSummaryByPosition(ctx context.Context, tenan
 		       NULLIF(TRIM(COALESCE(s.indikator_soal, s.indikator, '')), '') AS indikator,
 		       NULLIF(TRIM(s.capaian_pembelajaran), '') AS capaian_pembelajaran,
 		       NULLIF(TRIM(s.tujuan_pembelajaran), '') AS tujuan_pembelajaran,
-		       s.question_id IS NOT NULL AS connected
+		       EXISTS(SELECT 1 FROM exam_questions eq WHERE eq.blueprint_slot_id=s.id) AS connected
 		FROM exam_blueprint_slots s
 		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id
 		WHERE (NULLIF($1,'')::uuid IS NULL OR b.tenant_id=NULLIF($1,'')::uuid) AND b.exam_id=$2 AND s.position=$3
@@ -225,7 +225,7 @@ func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID st
 		       NULLIF(TRIM(COALESCE(s.indikator_soal, s.indikator, '')), '') AS indikator,
 		       NULLIF(TRIM(s.capaian_pembelajaran), '') AS capaian_pembelajaran,
 		       NULLIF(TRIM(s.tujuan_pembelajaran), '') AS tujuan_pembelajaran,
-		       s.question_id IS NOT NULL AS connected
+		       EXISTS(SELECT 1 FROM exam_questions eq WHERE eq.blueprint_slot_id=s.id) AS connected
 		FROM exam_blueprint_slots s
 		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id
 		WHERE (NULLIF($1,'')::uuid IS NULL OR b.tenant_id=NULLIF($1,'')::uuid) AND b.exam_id=$2
