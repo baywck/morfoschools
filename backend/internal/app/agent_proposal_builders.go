@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -38,7 +39,10 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 	if r.Context().Err() != nil {
 		return true
 	}
-	if fromMemory && a.createBlueprintSlotEditProposalFromExistingPositions(w, r, tenantID, userID, sessionID, req, args) {
+	// ALWAYS check for existing positions — not just when fromMemory.
+	// If LLM generates slots that overlap existing positions (e.g. audit repair),
+	// split into edit-existing + create-new proposals.
+	if handled := a.handleMixedEditOrCreateBlueprintSlots(w, r, tenantID, userID, sessionID, req, args); handled {
 		a.markLatestBlueprintDraftStatus(r.Context(), tenantID, sessionID, deriveScopeKey(req.Shadow.ActiveEntities), "proposal_created")
 		return true
 	}
@@ -79,58 +83,11 @@ func (a *App) blueprintSlotsArgsFromApprovedMemory(ctx context.Context, tenantID
 	return agentCreateBlueprintSlotsArgs{ExamID: examID, Topic: "Draft kisi-kisi yang sudah disetujui", Slots: slots, Warnings: warnings, CPStatus: ctxResp.Status, CPSource: ctxResp.Source, Confirmable: true}, true
 }
 
-func (a *App) createBlueprintSlotEditProposalFromExistingPositions(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, args agentCreateBlueprintSlotsArgs) bool {
-	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
-	if examID == "" || len(args.Slots) == 0 {
-		return false
+func ptrIntVal(p *int) int {
+	if p == nil {
+		return 0
 	}
-	items := make([]agentEditBlueprintSlotArgs, 0, len(args.Slots))
-	previews := make([]string, 0, len(args.Slots))
-	for _, slot := range args.Slots {
-		if slot.Position <= 0 {
-			return false
-		}
-		slotID, err := a.findExamBlueprintSlotIDByPosition(r.Context(), tenantID, examID, slot.Position)
-		if err != nil || slotID == "" {
-			return false
-		}
-		before, err := a.loadSlotPayload(r.Context(), "exam_blueprint_slots", slotID)
-		if err != nil {
-			return false
-		}
-		after := slotPayloadFromBlueprintDraft(slot)
-		merged := mergeSlotPayload(before, after)
-		diff := buildBlueprintSlotAIDiff(before, merged)
-		if len(diff) == 0 {
-			continue
-		}
-		items = append(items, agentEditBlueprintSlotArgs{SlotID: slotID, Instruction: req.Message, Before: before, After: merged})
-		previews = append(previews, "Slot "+strconv.Itoa(slot.Position)+"\n"+buildBlueprintSlotEditPreview(diff, a.blueprintSlotEditWarnings(r.Context(), slotID)))
-	}
-	if len(items) == 0 {
-		return false
-	}
-	workflow := agentWorkflowEditBlueprintSlot
-	raw, _ := json.Marshal(items[0])
-	if len(items) > 1 {
-		workflow = agentWorkflowEditBlueprintSlots
-		raw, _ = json.Marshal(agentEditBlueprintSlotsArgs{Items: items})
-	}
-	preview := strings.Join(previews, "\n\n---\n\n")
-	proposalID, err := a.createAgentProposal(r, tenantID, userID, sessionID, workflow, raw, preview)
-	if err != nil {
-		writeErrorJSON(w, http.StatusInternalServerError, "proposal_failed", "Could not create proposal", r)
-		return true
-	}
-	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, preview)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"message":    map[string]string{"role": "assistant", "content": preview},
-		"sessionId":  sessionID,
-		"tokens":     0,
-		"proposalId": proposalID,
-		"proposal":   map[string]any{"id": proposalID, "proposalId": proposalID, "workflow": string(workflow), "toolName": string(workflow), "preview": preview, "confirmationText": preview},
-	})
-	return true
+	return *p
 }
 
 func slotPayloadFromBlueprintDraft(slot agentBlueprintSlotDraft) slotPayload {
@@ -188,6 +145,111 @@ func repairMemoryBlueprintSlots(args agentCreateBlueprintSlotsArgs) agentCreateB
 		}
 	}
 	return args
+}
+
+// handleMixedEditOrCreateBlueprintSlots checks ALL generated slots against existing
+// DB positions. Existing positions become edit proposals; truly new positions become
+// create proposals. Returns true if any proposals were created.
+// This prevents the LLM from accidentally creating duplicate slots when it should
+// be editing existing ones (e.g. audit repair generating slots 1-50 when 1-25 exist).
+func (a *App) handleMixedEditOrCreateBlueprintSlots(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, args agentCreateBlueprintSlotsArgs) bool {
+	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
+	if examID == "" || len(args.Slots) == 0 {
+		return false
+	}
+
+	var editItems []agentEditBlueprintSlotArgs
+	var editPreviews []string
+	var createSlots []agentBlueprintSlotDraft
+
+	for _, slot := range args.Slots {
+		if slot.Position <= 0 {
+			createSlots = append(createSlots, slot)
+			continue
+		}
+		slotID, err := a.findExamBlueprintSlotIDByPosition(r.Context(), tenantID, examID, slot.Position)
+		if err != nil || slotID == "" {
+			// Position doesn't exist yet — it's a new slot
+			createSlots = append(createSlots, slot)
+			continue
+		}
+		// Position exists — build edit item
+		before, err := a.loadSlotPayload(r.Context(), "exam_blueprint_slots", slotID)
+		if err != nil {
+			createSlots = append(createSlots, slot)
+			continue
+		}
+		after := slotPayloadFromBlueprintDraft(slot)
+		merged := mergeSlotPayload(before, after)
+		diff := buildBlueprintSlotAIDiff(before, merged)
+		if len(diff) == 0 {
+			continue
+		}
+		editItems = append(editItems, agentEditBlueprintSlotArgs{SlotID: slotID, Instruction: req.Message, Before: before, After: merged})
+		editPreviews = append(editPreviews, buildBlueprintSlotEditPreview(diff, a.blueprintSlotEditWarnings(r.Context(), slotID)))
+	}
+
+	if len(editItems) == 0 && len(createSlots) == 0 {
+		return false
+	}
+
+	proposalIDs := make([]string, 0, 2)
+	var combinedPreview strings.Builder
+
+	// Create edit proposal for existing positions
+	if len(editItems) > 0 {
+		workflow := agentWorkflowEditBlueprintSlot
+		raw, _ := json.Marshal(editItems[0])
+		if len(editItems) > 1 {
+			workflow = agentWorkflowEditBlueprintSlots
+			raw, _ = json.Marshal(agentEditBlueprintSlotsArgs{Items: editItems})
+		}
+		var previewBuilder strings.Builder
+		if len(editItems) == 1 {
+			previewBuilder.WriteString(fmt.Sprintf("✏️ Edit slot %d\n", ptrIntVal(editItems[0].Before.Position)))
+		} else {
+			previewBuilder.WriteString(fmt.Sprintf("✏️ Edit %d slot kisi-kisi\n", len(editItems)))
+		}
+		for i, p := range editPreviews {
+			previewBuilder.WriteString("\nSlot " + strconv.Itoa(ptrIntVal(editItems[i].Before.Position)) + ": " + p)
+		}
+		editPreview := previewBuilder.String()
+		pid, err := a.createAgentProposal(r, tenantID, userID, sessionID, workflow, raw, editPreview)
+		if err == nil {
+			proposalIDs = append(proposalIDs, pid)
+			combinedPreview.WriteString(editPreview)
+		}
+	}
+
+	// Create create proposal for truly new positions
+	if len(createSlots) > 0 {
+		cleanArgs, _ := json.Marshal(agentCreateBlueprintSlotsArgs{ExamID: examID, Topic: args.Topic, Slots: createSlots, Warnings: args.Warnings, CPStatus: args.CPStatus, CPSource: args.CPSource, Confirmable: true})
+		createPreview := a.buildAgentCreateBlueprintSlotsPreview(r.Context(), tenantID, agentCreateBlueprintSlotsArgs{ExamID: examID, Topic: args.Topic, Slots: createSlots})
+		pid, err := a.createAgentProposal(r, tenantID, userID, sessionID, agentWorkflowCreateBlueprintSlots, cleanArgs, createPreview)
+		if err == nil {
+			proposalIDs = append(proposalIDs, pid)
+			if combinedPreview.Len() > 0 {
+				combinedPreview.WriteString("\n\n---\n\n")
+			}
+			combinedPreview.WriteString(createPreview)
+		}
+	}
+
+	if len(proposalIDs) == 0 {
+		return false
+	}
+
+	finalPreview := combinedPreview.String()
+	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, finalPreview)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message":     map[string]string{"role": "assistant", "content": finalPreview},
+		"sessionId":   sessionID,
+		"tokens":      0,
+		"proposalId":  proposalIDs[0],
+		"proposalIds": proposalIDs,
+		"proposal":    map[string]any{"id": proposalIDs[0], "proposalId": proposalIDs[0]},
+	})
+	return true
 }
 
 func (a *App) createAgentProposalFromClassifiedIntent(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, classification agentTurnClassification) bool {

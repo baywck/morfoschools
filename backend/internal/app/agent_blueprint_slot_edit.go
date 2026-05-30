@@ -265,13 +265,23 @@ func strPtrValue(p *string) string {
 
 func buildBlueprintSlotEditPreview(diff []blueprintSlotAIDiff, warnings []string) string {
 	var b strings.Builder
-	b.WriteString("Proposal: ubah slot kisi-kisi\n")
-	for _, w := range warnings {
-		b.WriteString("\n⚠️ " + w)
-	}
+	changed := make([]string, 0, len(diff))
 	for _, d := range diff {
-		b.WriteString("\n\n" + d.Label + "\nBefore: " + d.Before + "\nAfter: " + d.After)
+		label := d.Label
+		before := d.Before
+		after := d.After
+		if len(before) > 40 {
+			before = before[:37] + "..."
+		}
+		if len(after) > 40 {
+			after = after[:37] + "..."
+		}
+		changed = append(changed, label+": "+before+" → "+after)
 	}
+	for _, w := range warnings {
+		b.WriteString("⚠️ " + w + "\n")
+	}
+	b.WriteString(strings.Join(changed, " | "))
 	return b.String()
 }
 

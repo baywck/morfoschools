@@ -42,12 +42,12 @@ func (r *auditBlueprintSlotsRunner) RunBatch(ctx context.Context, app *App, tena
 	}
 	rows, err := app.db.QueryContext(ctx, `
 		SELECT s.position,
-		       NULLIF(TRIM(s.elemen_cp), ''),
-		       NULLIF(TRIM(s.tujuan_pembelajaran), ''),
-		       NULLIF(TRIM(COALESCE(s.materi_pokok, s.materi, '')), ''),
-		       NULLIF(TRIM(COALESCE(s.indikator_soal, s.indikator, '')), ''),
-		       NULLIF(TRIM(s.cognitive_level), ''),
-		       NULLIF(TRIM(s.question_type), ''),
+		       COALESCE(NULLIF(TRIM(s.elemen_cp), ''), ''),
+		       COALESCE(NULLIF(TRIM(s.tujuan_pembelajaran), ''), ''),
+		       COALESCE(NULLIF(TRIM(COALESCE(s.materi_pokok, s.materi, '')), ''), ''),
+		       COALESCE(NULLIF(TRIM(COALESCE(s.indikator_soal, s.indikator, '')), ''), ''),
+		       COALESCE(NULLIF(TRIM(s.cognitive_level), ''), ''),
+		       COALESCE(NULLIF(TRIM(s.question_type), ''), ''),
 		       EXISTS(SELECT 1 FROM exam_questions eq WHERE eq.blueprint_slot_id=s.id)
 		FROM exam_blueprint_slots s
 		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id

@@ -4,7 +4,7 @@ set -euo pipefail
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
 EMAIL="${EMAIL:-admin@morfoschools.local}"
 PASSWORD="${PASSWORD:-admin123}"
-EXAM_ID="${EXAM_ID:-148ba6ec-a7ef-4c41-8a31-a4652e36b506}"
+EXAM_ID="${EXAM_ID:-188e909b-7386-4cf0-8f93-9a7033e12e5d}"
 
 cookie_jar=$(mktemp)
 trap 'rm -f "$cookie_jar"' EXIT
