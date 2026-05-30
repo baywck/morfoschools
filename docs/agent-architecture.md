@@ -59,3 +59,29 @@ Implement only `create_exam` with tests:
 - confirming with `usesKisiKisi=true` creates empty blueprint
 - missing subject/title produces clarification/validation
 - workflow requires authenticated user, tenant, CSRF, and `exams:write`
+
+## Kisi-kisi execution planner
+
+For larger kisi-kisi work, the agent can use the action plan layer.
+
+Current supported backend runners:
+
+- `audit_blueprint_slots`
+- `repair_kisi_kisi_slots`
+- `complete_kisi_kisi_slots`
+
+Current supported plan APIs:
+
+- `GET /api/v1/ai/action-plans/current?examId=...`
+- `GET /api/v1/ai/action-plans/current/summary?examId=...`
+- `GET /api/v1/ai/action-plans/{planId}`
+- `POST /api/v1/ai/action-plans`
+- `POST /api/v1/ai/action-plans/{planId}/run-next`
+
+Behavior:
+
+- Small 1-5 slot actions can stay proposal-first.
+- Large audit/repair/completion actions can use plan-first execution.
+- Failed batches can be retried without losing prior completed batches.
+- Plan status can reactivate when user requests retry.
+- Plan summary now exposes domain-specific kisi-kisi health: totalSlots, missingTP, missingMateri, missingIndikator, disconnected.
