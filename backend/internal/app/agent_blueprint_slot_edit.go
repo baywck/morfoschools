@@ -209,7 +209,7 @@ func slotPayloadHasEditableValue(p slotPayload) bool {
 
 func (a *App) callBlueprintSlotEditLLMJSON(ctx context.Context, provider resolvedAIProvider, prompt, userMessage string) (string, error) {
 	extra := map[string]any{"response_format": map[string]string{"type": "json_object"}}
-	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}}, 0.2, 3000, extra)
+	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}}, 0.2, 6000, extra)
 	if err != nil {
 		return "", err
 	}

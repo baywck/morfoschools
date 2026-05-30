@@ -157,7 +157,7 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID
 	if err != nil {
 		return "", 0, err
 	}
-	resp, err := a.callLLMWithProviderOptions(ctx, provider, messages, 0.35, 5000, nil)
+	resp, err := a.callLLMWithProviderOptions(ctx, provider, messages, 0.35, 12000, nil)
 	if err != nil {
 		return "", 0, err
 	}

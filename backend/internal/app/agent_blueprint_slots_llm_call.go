@@ -9,7 +9,7 @@ import (
 func (a *App) callBlueprintSlotsLLMJSON(ctx context.Context, provider resolvedAIProvider, prompt, userMessage string) (string, error) {
 	extra := map[string]any{"response_format": map[string]string{"type": "json_object"}}
 	// 8000 tokens: enough for ~15-20 slots with full CP/TP/materi/indikator content
-	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}}, 0.2, 8000, extra)
+	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: prompt}, {Role: "user", Content: userMessage}}, 0.2, 12000, extra)
 	if err != nil {
 		return "", err
 	}

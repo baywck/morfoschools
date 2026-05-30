@@ -40,7 +40,7 @@ Rules:
 		user = req.Goal
 	}
 	extra := map[string]any{"response_format": map[string]string{"type": "json_object"}}
-	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, 0.2, 2400, extra)
+	resp, err := a.callLLMWithProviderOptions(ctx, provider, []llmMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, 0.2, 4000, extra)
 	if err != nil {
 		return agentPlannedAction{}, err
 	}
