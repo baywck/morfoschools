@@ -344,7 +344,7 @@ function cleanSlotMarkdown(line: string) {
 }
 
 function isBlueprintSlotHeader(line: string) {
-  return cleanSlotMarkdown(line).match(/^(?:slot\s*)?(\d+)\s*[·\-–—:]\s*(.+)$/i);
+  return cleanSlotMarkdown(line).match(/^(?:slot\s*)?(\d+)\s*[·\-–—:.]\s*(.+)$/i);
 }
 
 function splitBlueprintSlotBlocks(text: string) {
