@@ -207,6 +207,11 @@ func (a *App) loadAgentBlueprintSlotSummaryByPosition(ctx context.Context, tenan
 }
 
 func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID string) agentContextBlueprint {
+	defer func() {
+		if r := recover(); r != nil {
+			a.logger.Error("loadAgentBlueprintContext recovered", "panic", r)
+		}
+	}()
 	bp := agentContextBlueprint{ByElement: map[string]int{}, ByCognitiveLevel: map[string]int{}, ByQuestionType: map[string]int{}}
 	if a.db == nil || examID == "" {
 		return bp
@@ -228,6 +233,7 @@ func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID st
 		LIMIT 80
 	`, tenantID, examID)
 	if err != nil {
+		a.logger.Error("loadAgentBlueprintContext query failed", "tenantID", tenantID, "examID", examID, "error", err)
 		return bp
 	}
 	defer rows.Close()
