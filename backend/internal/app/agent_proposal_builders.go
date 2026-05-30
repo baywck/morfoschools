@@ -10,6 +10,12 @@ import (
 )
 
 func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, classification agentTurnClassification) bool {
+	// For large requests (>15 slots), use action plan with batched generation
+	totalRequested := requestedBlueprintSlotTotal(strings.ToLower(req.Message))
+	if totalRequested > maxBlueprintSlotsPerLLMCall && !isBlueprintDraftSaveRequest(strings.ToLower(req.Message)) {
+		return a.handleLargeBlueprintSlotsRequest(w, r, tenantID, userID, sessionID, req, totalRequested)
+	}
+
 	args, fromMemory := a.blueprintSlotsArgsFromApprovedMemory(r.Context(), tenantID, sessionID, req)
 	var err error
 	if !fromMemory {
@@ -81,6 +87,105 @@ func (a *App) blueprintSlotsArgsFromApprovedMemory(ctx context.Context, tenantID
 	}
 	slots := append([]agentBlueprintSlotDraft(nil), draft.Slots...)
 	return agentCreateBlueprintSlotsArgs{ExamID: examID, Topic: "Draft kisi-kisi yang sudah disetujui", Slots: slots, Warnings: warnings, CPStatus: ctxResp.Status, CPSource: ctxResp.Source, Confirmable: true}, true
+}
+
+// handleLargeBlueprintSlotsRequest handles requests for >15 slots by creating
+// an action plan with multiple batches, each generating up to 15 slots.
+func (a *App) handleLargeBlueprintSlotsRequest(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, totalRequested int) bool {
+	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
+	if examID == "" {
+		writeErrorJSON(w, http.StatusBadRequest, "missing_exam", "Exam ID diperlukan untuk generate kisi-kisi batch besar.", r)
+		return true
+	}
+
+	// Calculate batches
+	batchSize := maxBlueprintSlotsPerLLMCall
+	batchCount := (totalRequested + batchSize - 1) / batchSize
+	if batchCount > 10 {
+		batchCount = 10 // hard cap at 150 slots
+		totalRequested = batchCount * batchSize
+	}
+
+	// Build planned batches
+	type plannedBatch struct {
+		BatchIndex  int             `json:"batchIndex"`
+		ActionType  string          `json:"actionType"`
+		Workflow    string          `json:"workflow"`
+		TargetType  string          `json:"targetType"`
+		TargetIDs   []string        `json:"targetIds"`
+		ArgsJSON    json.RawMessage `json:"argsJson"`
+		Preview     string          `json:"preview"`
+	}
+	batches := make([]plannedBatch, 0, batchCount)
+	for i := 0; i < batchCount; i++ {
+		startPos := i*batchSize + 1
+		endPos := (i + 1) * batchSize
+		if endPos > totalRequested {
+			endPos = totalRequested
+		}
+		count := endPos - startPos + 1
+		batchArgs, _ := json.Marshal(map[string]any{
+			"examId": examID,
+			"count":  count,
+			"offset": startPos,
+			"message": fmt.Sprintf("Buat %d slot kisi-kisi posisi %d-%d", count, startPos, endPos),
+		})
+		batches = append(batches, plannedBatch{
+			BatchIndex: i + 1,
+			ActionType: "create",
+			Workflow:   "create_blueprint_slots",
+			TargetType: "blueprint_slots",
+			TargetIDs:  []string{examID},
+			ArgsJSON:   batchArgs,
+			Preview:    fmt.Sprintf("Generate slot %d-%d", startPos, endPos),
+		})
+	}
+
+	planJSON, _ := json.Marshal(map[string]any{"batches": batches})
+	goal := fmt.Sprintf("Generate %d kisi-kisi slot dalam %d batch", totalRequested, batchCount)
+
+	// Create the plan directly in DB (use RETURNING id like createAgentActionPlanFromLLM)
+	var planID string
+	err := a.db.QueryRowContext(r.Context(), `
+		INSERT INTO agent_action_plans (
+			tenant_id, user_id, exam_id, scope_type, source,
+			goal, intent_summary, plan_json, status, current_batch_index, total_batches, progress_percent
+		) VALUES ($1, $2, $3, 'exam', 'bulk_generate', $4, $5, $6, 'draft', 0, $7, 0)
+		RETURNING id::text
+	`, tenantID, userID, examID, goal, req.Message, string(planJSON), batchCount).Scan(&planID)
+	if err != nil {
+		a.logger.Error("failed to create bulk generate plan", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "plan_failed", "Gagal membuat rencana generate batch.", r)
+		return true
+	}
+
+	// Insert batches
+	for _, b := range batches {
+		_, _ = a.db.ExecContext(r.Context(), `
+			INSERT INTO agent_action_plan_batches (
+				plan_id, batch_index, action_type, workflow, target_type,
+				target_ids, args_json, preview, status, progress_units, completed_units
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',1,0)
+		`, planID, b.BatchIndex, b.ActionType, b.Workflow, b.TargetType,
+			b.TargetIDs, b.ArgsJSON, b.Preview)
+	}
+
+	// Return message to user
+	content := fmt.Sprintf("📦 Request %d slot terlalu besar untuk 1 kali generate. Saya buat rencana %d batch (masing-masing %d slot).\n\n", totalRequested, batchCount, batchSize)
+	content += fmt.Sprintf("Action plan: %s\nBatch: 0/%d\n", goal, batchCount)
+	for _, b := range batches {
+		content += fmt.Sprintf("Batch %d [%s] %s\n", b.BatchIndex, "pending", b.Preview)
+	}
+	content += "\nKetik `jalankan batch berikutnya` untuk mulai."
+
+	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message":   map[string]string{"role": "assistant", "content": content},
+		"sessionId": sessionID,
+		"planId":    planID,
+		"tokens":    0,
+	})
+	return true
 }
 
 func ptrIntVal(p *int) int {

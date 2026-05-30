@@ -74,9 +74,21 @@ func requestedBlueprintSlotCount(message string) int {
 	return 0
 }
 
+// maxBlueprintSlotsPerLLMCall is the maximum number of slots generated in a single LLM call.
+// Beyond this, the request should be split into action plan batches.
+const maxBlueprintSlotsPerLLMCall = 15
+
 func blueprintSlotCountOrDefault(message string) int {
 	if n := requestedBlueprintSlotCount(message); n > 0 {
+		if n > maxBlueprintSlotsPerLLMCall {
+			return maxBlueprintSlotsPerLLMCall
+		}
 		return n
 	}
 	return 5
+}
+
+// requestedBlueprintSlotTotal returns the full requested count without capping.
+func requestedBlueprintSlotTotal(message string) int {
+	return requestedBlueprintSlotCount(message)
 }
