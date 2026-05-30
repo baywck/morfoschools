@@ -11,13 +11,12 @@
  * The card itself is sortable in its parent context (root or section).
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
   GripVertical,
   Layers,
-  Loader2,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -29,17 +28,24 @@ import {
 } from "@/lib/modules-api";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { RenderedContent, stripHtmlPreview } from "@/components/ui/rendered-content";
-import { StimulusPicker } from "@/components/exams/stimulus-picker";
-import { cn } from "@/lib/cn";
+import { stripHtmlPreview } from "@/components/ui/rendered-content";
+import { StimulusEditorPanel } from "@/components/exams/stimulus-editor-panel";
+import { normalizeRichTextForEditor } from "@/lib/rich-text";
+import { InlineMagicPopover } from "@/components/ai/inline-magic-popover";
 
 export interface GroupCardProps {
   group: ExamQuestionGroup;
   /** Total questions in this group (rendered as the count badge). */
   questionCount: number;
+  /** Human-visible question number range for questions inside this group, e.g. 1-2. */
+  questionRange?: string;
   /** Children render slot — usually <SortableContext> + <QuestionAccordion>s. */
   children: React.ReactNode;
   canEdit: boolean;
+  /** Exam ID needed for the inline magic AI popover. Passed down
+   *  from ExamCanvas so the AI knows the parent exam without
+   *  another lookup. */
+  examId?: string;
   /** Add-question handler scoped to this group. */
   onAddQuestion: () => void;
   /** Called after stimulus update / delete to trigger parent reload. */
@@ -53,18 +59,44 @@ export interface GroupCardProps {
 export function GroupCard({
   group,
   questionCount,
+  questionRange,
   children,
   canEdit,
+  examId,
   onAddQuestion,
   onChange,
   dragHandleProps,
 }: GroupCardProps) {
   const { toast } = useToast();
   const [stimulusOpen, setStimulusOpen] = useState(false);
-  const [bodyOpen, setBodyOpen] = useState(true);
+  const [bodyOpen, setBodyOpen] = useState(false);
   const [savingStim, setSavingStim] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Inline editor state — lets the user edit the group's stimulus
+  // snapshot directly without round-tripping through the master
+  // stimuli row. Library import via StimulusPicker is still available
+  // as an explicit action for power users.
+  const [editTitle, setEditTitle] = useState(group.stimulusTitleSnapshot ?? "");
+  const [editBody, setEditBody] = useState(
+    normalizeRichTextForEditor(group.stimulusBodySnapshot)
+  );
+  const [showLibrary, setShowLibrary] = useState(false);
+
+  // Sync editor state when the group prop changes (after parent
+  // refetch following save). Without this the editor keeps showing
+  // stale values when the canonical group data is refreshed.
+  useEffect(() => {
+    setEditTitle(group.stimulusTitleSnapshot ?? "");
+    setEditBody(normalizeRichTextForEditor(group.stimulusBodySnapshot));
+  }, [group.stimulusTitleSnapshot, group.stimulusBodySnapshot, group.id]);
+
+  // When the group body is collapsed, also hide the stimulus editor
+  // so the user has one consistent way to fold the entire group.
+  useEffect(() => {
+    if (!bodyOpen) setStimulusOpen(false);
+  }, [bodyOpen]);
 
   async function handleSelectStimulus(s: Stimulus) {
     setSavingStim(true);
@@ -79,6 +111,37 @@ export function GroupCard({
       return;
     }
     toast({ tone: "success", title: "Stimulus terikat ke group" });
+    setStimulusOpen(false);
+    onChange();
+  }
+
+  // saveToLibrary checkbox state. Initialized true when the group is
+  // already linked to a shared stimulus (so the toggle reflects current
+  // status); otherwise false (default exam_scoped per Opsi B).
+  const isCurrentlyShared = group.stimulusId != null && group.groupType === "stimulus" && (group as { stimulusLifecycle?: string }).stimulusLifecycle === "shared";
+  const [saveToLibrary, setSaveToLibrary] = useState(isCurrentlyShared);
+
+  async function handleSaveSnapshot() {
+    setSavingStim(true);
+    const res = await updateQuestionGroup(group.id, {
+      titleSnapshot: editTitle,
+      bodySnapshot: editBody,
+      saveToLibrary,
+    });
+    setSavingStim(false);
+    if (res.error) {
+      toast({
+        tone: "error",
+        title: "Gagal simpan stimulus",
+        description: res.error.message,
+      });
+      return;
+    }
+    toast({
+      tone: "success",
+      title: "Stimulus disimpan",
+      description: saveToLibrary ? "Tersimpan juga ke library bersama." : undefined,
+    });
     setStimulusOpen(false);
     onChange();
   }
@@ -138,47 +201,44 @@ export function GroupCard({
             <GripVertical size={13} />
           </button>
         )}
+        <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-[var(--brand-soft)] px-1.5 font-mono text-[10.5px] font-semibold text-[var(--brand)]">
+          {questionRange || "-"}
+        </span>
         <button
           type="button"
           onClick={() => setBodyOpen((v) => !v)}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+          className="shrink-0 text-[var(--muted-foreground)] transition-colors"
           aria-label={bodyOpen ? "Collapse group" : "Expand group"}
           aria-expanded={bodyOpen}
         >
           {bodyOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--brand-soft)] text-[var(--brand)]">
-          <Layers size={11} />
-        </div>
-        <div className="flex-1 min-w-0">
+        <button type="button" onClick={() => setBodyOpen((v) => !v)} className="flex-1 min-w-0 text-left">
           <p className="text-[12px] font-semibold text-[var(--foreground)]">
             {stimulusTitle ?? "Stimulus group"}
           </p>
-          <p className="text-[10px] text-[var(--muted-foreground)] truncate">
-            {stimulusTitle
-              ? stimulusBody
-                ? stripHtmlPreview(stimulusBody, 90)
-                : "Tanpa isi"
-              : "Belum ada stimulus — klik untuk pilih"}
-            {" · "}
-            {questionCount} soal
-          </p>
-        </div>
+          <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 text-[9.5px] font-medium text-[var(--muted-foreground)]">
+              GROUP
+            </span>
+            <span className="text-[10px] text-[var(--muted-foreground)]">
+              {questionCount} soal
+            </span>
+            {stimulusTitle && stimulusBody && (
+              <span className="rounded-md bg-[var(--accent)] px-1.5 py-0.5 text-[9.5px] font-medium text-[var(--muted-foreground)] truncate max-w-[56%]">
+                Stim: {stripHtmlPreview(stimulusBody, 90)}
+              </span>
+            )}
+          </div>
+        </button>
         {canEdit && (
           <>
-            <button
-              type="button"
-              onClick={() => setStimulusOpen((v) => !v)}
-              className={cn(
-                "inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10.5px] font-medium transition-colors",
-                stimulusTitle
-                  ? "border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                  : "bg-[var(--brand-soft)] text-[var(--brand)] hover:opacity-90",
-              )}
-            >
-              {savingStim && <Loader2 size={10} className="animate-spin" />}
-              {stimulusTitle ? "Edit stimulus" : "+ Tambah stimulus"}
-            </button>
+            <InlineMagicPopover
+              entityKind="group"
+              entityId={group.id}
+              examId={examId}
+              className="shrink-0"
+            />
             <button
               type="button"
               onClick={() => setConfirmDelete(true)}
@@ -191,24 +251,34 @@ export function GroupCard({
         )}
       </div>
 
-      {/* Stimulus picker (collapsible inline) */}
-      {stimulusOpen && canEdit && (
-        <div className="border-b border-[var(--border)] bg-[var(--background)] p-3">
-          <StimulusPicker
-            value={group.stimulusId ?? null}
+      {canEdit && bodyOpen && (
+        <div className="border-b border-[var(--border)] bg-[var(--background)] p-2">
+          <StimulusEditorPanel
+            canEdit={canEdit}
+            open={stimulusOpen}
+            stimulusId={group.stimulusId ?? null}
+            title={editTitle}
+            body={editBody}
+            saving={savingStim}
+            saveToLibrary={saveToLibrary}
+            showLibrary={showLibrary}
+            deleteLabel="Hapus stimulus"
+            onToggle={() => setStimulusOpen((v) => !v)}
+            onTitleChange={setEditTitle}
+            onBodyChange={setEditBody}
+            onSaveToLibraryChange={setSaveToLibrary}
+            onSave={handleSaveSnapshot}
+            onDelete={handleClearStimulus}
             onSelect={handleSelectStimulus}
-            onClear={group.stimulusId ? handleClearStimulus : undefined}
+            onClear={handleClearStimulus}
+            onOpenLibrary={() => setShowLibrary(true)}
+            onCloseLibrary={() => setShowLibrary(false)}
+            onSelectLibrary={(s) => {
+              setShowLibrary(false);
+              setEditTitle(s.title);
+              setEditBody(normalizeRichTextForEditor(s.content));
+            }}
           />
-          {stimulusBody && group.stimulusId && (
-            <details className="mt-2 rounded-md border border-[var(--border)] bg-[var(--card)] p-2 text-[11.5px] leading-relaxed text-[var(--foreground)]">
-              <summary className="cursor-pointer text-[10.5px] font-semibold text-[var(--muted-foreground)]">
-                Snapshot saat ini (preview)
-              </summary>
-              <div className="mt-1">
-                <RenderedContent html={stimulusBody} />
-              </div>
-            </details>
-          )}
         </div>
       )}
 

@@ -7,9 +7,20 @@ export interface AuthUser {
   isPlatformAdmin: boolean;
 }
 
+export interface EffectiveTenant {
+  id: string;
+  name: string;
+  code: string;
+  logoUrl: string | null;
+  schoolType: "sd" | "smp" | "sma" | "smk" | "mixed";
+  enabledPhases: string[];
+  includeVocationalSubjects: boolean;
+}
+
 export interface AuthSession {
   user: AuthUser;
   effectiveTenantId: string | null;
+  effectiveTenant: EffectiveTenant | null;
   roles: string[];
   permissions: string[];
 }

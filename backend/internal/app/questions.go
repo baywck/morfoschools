@@ -14,7 +14,7 @@ import (
 
 // Exam Questions — the core authoring surface. Supports four types:
 //
-//   multiple_choice : 1+ correct options, 2-10 total
+//   multiple_choice : exactly 1 correct option, minimum 2 total (5 is UI default)
 //   true_false      : two options, exactly one correct
 //   short_answer    : free-text, optional reference answer for manual grading
 //   essay           : free-text, no auto-grading
@@ -63,8 +63,8 @@ type questionStimulusRef struct {
 }
 
 type questionGroupRef struct {
-	ID             string  `json:"id"`
-	StimulusTitle  *string `json:"stimulusTitle,omitempty"`
+	ID            string  `json:"id"`
+	StimulusTitle *string `json:"stimulusTitle,omitempty"`
 }
 
 type questionRow struct {
@@ -101,30 +101,37 @@ type questionSlotRef struct {
 	CompetencyCode        *string `json:"competencyCode,omitempty"`
 	CompetencyDescription *string `json:"competencyDescription,omitempty"`
 	Materi                *string `json:"materi,omitempty"`
-	Indikator      *string `json:"indikator,omitempty"`
-	CognitiveLevel *string `json:"cognitiveLevel,omitempty"`
-	Difficulty     *string `json:"difficulty,omitempty"`
-	QuestionType   *string `json:"questionType,omitempty"`
-	Points         float64 `json:"points"`
-	// Phase 9.8 — AKM dimensions surface inline alongside the rest of
-	// the slot summary so the question accordion can render them when
-	// blueprint_type is AKM.
-	AkmKonten   *string `json:"akmKonten,omitempty"`
-	AkmKonteks  *string `json:"akmKonteks,omitempty"`
-	AkmProses   *string `json:"akmProses,omitempty"`
-	AkmLevel    *int    `json:"akmLevel,omitempty"`
+	Indikator             *string `json:"indikator,omitempty"`
+	CPElementID           *string `json:"cpElementId,omitempty"`
+	CapaianPembelajaran   *string `json:"capaianPembelajaran,omitempty"`
+	ElemenCP              *string `json:"elemenCp,omitempty"`
+	TujuanPembelajaran    *string `json:"tujuanPembelajaran,omitempty"`
+	MateriPokok           *string `json:"materiPokok,omitempty"`
+	Kelas                 *string `json:"kelas,omitempty"`
+	Semester              *string `json:"semester,omitempty"`
+	IndikatorSoal         *string `json:"indikatorSoal,omitempty"`
+	CognitiveLevel        *string `json:"cognitiveLevel,omitempty"`
+	Difficulty            *string `json:"difficulty,omitempty"`
+	QuestionType          *string `json:"questionType,omitempty"`
+	Points                float64 `json:"points"`
 	// Set when the parent blueprint was cloned from a template. The
 	// frontend uses this signal to lock metadata edits on the slot
 	// (template-locked vs auto-blueprint).
 	FromTemplate bool `json:"fromTemplate"`
 }
 
-// hashContent normalizes question text before hashing: lowercase, trim, and
-// collapse internal whitespace. This makes the dedup robust against the most
-// common LLM variations ("  hello world  " vs "hello  world\n").
+// HashContent is the exported alias for tools that need it (e.g. the
+// one-shot normalize-questions cmd). Mirrors hashContent.
+func HashContent(s string) string { return hashContent(s) }
+
+// hashContent normalizes question text before hashing using
+// normalizeQuestionContent() (Phase 9.13). The normalize step strips
+// HTML, LaTeX wrappers, punctuation, polite prefixes, and collapses
+// whitespace so paraphrase duplicates collide on hash. The hash is
+// stored in content_hash; the same normalized form is also stored
+// in content_normalized for trigram similarity.
 func hashContent(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.Join(strings.Fields(s), " ")
+	s = normalizeQuestionContent(s)
 	if s == "" {
 		return ""
 	}
@@ -143,46 +150,8 @@ func (a *App) handleListQuestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	examID := r.PathValue("id")
-
-	// Gate enforcement: callers without exams:write are takers, not authors.
-	// They can only fetch questions while at least one gate window is open.
-	// Authors (exams:write) and platform admins always bypass the gate.
-	auth := AuthFromContext(r.Context())
-	if !hasPermission(auth, "exams:write") && (auth == nil || !auth.IsPlatformAdmin) {
-		var examStatus string
-		err := a.db.QueryRowContext(r.Context(),
-			`SELECT status FROM exams WHERE id = $1 AND tenant_id = $2`,
-			examID, tenantID,
-		).Scan(&examStatus)
-		if err != nil {
-			writeErrorJSON(w, http.StatusNotFound, "not_found", "Exam not found", r)
-			return
-		}
-		if examStatus != "published" {
-			writeErrorJSON(w, http.StatusForbidden, "exam_not_open", "This exam is not currently available", r)
-			return
-		}
-		var gateCount int
-		_ = a.db.QueryRowContext(r.Context(),
-			`SELECT COUNT(*) FROM exam_gate_windows WHERE exam_id = $1 AND tenant_id = $2`,
-			examID, tenantID,
-		).Scan(&gateCount)
-		if gateCount > 0 {
-			var isOpen bool
-			_ = a.db.QueryRowContext(r.Context(), `
-				SELECT EXISTS(
-				    SELECT 1 FROM exam_gate_windows
-				     WHERE exam_id = $1 AND tenant_id = $2
-				       AND now() BETWEEN opens_at AND closes_at
-				)`,
-				examID, tenantID,
-			).Scan(&isOpen)
-			if !isOpen {
-				writeErrorJSON(w, http.StatusForbidden, "exam_not_open",
-					"This exam is not currently within an open window", r)
-				return
-			}
-		}
+	if !a.requireExamAccess(w, r, examID, ActionRead) {
+		return
 	}
 
 	// One round-trip per exam: questions with their options nested via
@@ -196,8 +165,8 @@ func (a *App) handleListQuestions(w http.ResponseWriter, r *http.Request) {
 		       q.shuffle_options_override, q.correct_count, q.created_at,
 		       q.blueprint_slot_id::text, q.stimulus_id::text,
 		       s.position, s.competency_code, s.competency_description, s.materi, s.indikator,
-		       s.cognitive_level, s.difficulty, s.question_type, s.points,
-		       s.akm_konten, s.akm_konteks, s.akm_proses, s.akm_level,
+		       s.cp_element_id::text, s.capaian_pembelajaran, s.elemen_cp, s.tujuan_pembelajaran,
+		       s.materi_pokok, s.kelas, s.semester, s.indikator_soal,
 		       b.source_template_id::text,
 		       st.title,
 		       g.stimulus_title_snapshot,
@@ -239,10 +208,9 @@ func (a *App) handleListQuestions(w http.ResponseWriter, r *http.Request) {
 		var groupID, slotID, stimulusID sql.NullString
 		var slotPos sql.NullInt64
 		var slotCompCode, slotCompDesc, slotMateri, slotIndikator sql.NullString
+		var slotCPElementID, slotCapaian, slotElemen, slotTP, slotMateriPokok, slotKelas, slotSemester, slotIndikatorSoal sql.NullString
 		var slotCog, slotDiff, slotQType sql.NullString
 		var slotPoints sql.NullFloat64
-		var slotAkmKonten, slotAkmKonteks, slotAkmProses sql.NullString
-		var slotAkmLevel sql.NullInt64
 		var slotTemplateID sql.NullString
 		var stimulusTitle sql.NullString
 		var groupStimulusTitle sql.NullString
@@ -253,8 +221,8 @@ func (a *App) handleListQuestions(w http.ResponseWriter, r *http.Request) {
 			&q.ShuffleOpts, &q.CorrectCount, &q.CreatedAt,
 			&slotID, &stimulusID,
 			&slotPos, &slotCompCode, &slotCompDesc, &slotMateri, &slotIndikator,
-			&slotCog, &slotDiff, &slotQType, &slotPoints,
-			&slotAkmKonten, &slotAkmKonteks, &slotAkmProses, &slotAkmLevel,
+			&slotCPElementID, &slotCapaian, &slotElemen, &slotTP,
+			&slotMateriPokok, &slotKelas, &slotSemester, &slotIndikatorSoal,
 			&slotTemplateID,
 			&stimulusTitle,
 			&groupStimulusTitle,
@@ -299,6 +267,38 @@ func (a *App) handleListQuestions(w http.ResponseWriter, r *http.Request) {
 				v := slotIndikator.String
 				slot.Indikator = &v
 			}
+			if slotCPElementID.Valid {
+				v := slotCPElementID.String
+				slot.CPElementID = &v
+			}
+			if slotCapaian.Valid {
+				v := slotCapaian.String
+				slot.CapaianPembelajaran = &v
+			}
+			if slotElemen.Valid {
+				v := slotElemen.String
+				slot.ElemenCP = &v
+			}
+			if slotTP.Valid {
+				v := slotTP.String
+				slot.TujuanPembelajaran = &v
+			}
+			if slotMateriPokok.Valid {
+				v := slotMateriPokok.String
+				slot.MateriPokok = &v
+			}
+			if slotKelas.Valid {
+				v := slotKelas.String
+				slot.Kelas = &v
+			}
+			if slotSemester.Valid {
+				v := slotSemester.String
+				slot.Semester = &v
+			}
+			if slotIndikatorSoal.Valid {
+				v := slotIndikatorSoal.String
+				slot.IndikatorSoal = &v
+			}
 			if slotCog.Valid {
 				v := slotCog.String
 				slot.CognitiveLevel = &v
@@ -313,22 +313,6 @@ func (a *App) handleListQuestions(w http.ResponseWriter, r *http.Request) {
 			}
 			if slotPoints.Valid {
 				slot.Points = slotPoints.Float64
-			}
-			if slotAkmKonten.Valid {
-				v := slotAkmKonten.String
-				slot.AkmKonten = &v
-			}
-			if slotAkmKonteks.Valid {
-				v := slotAkmKonteks.String
-				slot.AkmKonteks = &v
-			}
-			if slotAkmProses.Valid {
-				v := slotAkmProses.String
-				slot.AkmProses = &v
-			}
-			if slotAkmLevel.Valid {
-				v := int(slotAkmLevel.Int64)
-				slot.AkmLevel = &v
 			}
 			slot.FromTemplate = slotTemplateID.Valid && slotTemplateID.String != ""
 			q.Slot = &slot
@@ -461,10 +445,14 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 		Indikator             *string `json:"indikator"`
 		CognitiveLevel        *string `json:"cognitiveLevel"`
 		Difficulty            *string `json:"difficulty"`
-		AkmKonten      *string `json:"akmKonten"`
-		AkmKonteks     *string `json:"akmKonteks"`
-		AkmProses      *string `json:"akmProses"`
-		AkmLevel       *int    `json:"akmLevel"`
+		CPElementID           *string `json:"cpElementId"`
+		CapaianPembelajaran   *string `json:"capaianPembelajaran"`
+		ElemenCP              *string `json:"elemenCp"`
+		TujuanPembelajaran    *string `json:"tujuanPembelajaran"`
+		MateriPokok           *string `json:"materiPokok"`
+		Kelas                 *string `json:"kelas"`
+		Semester              *string `json:"semester"`
+		IndikatorSoal         *string `json:"indikatorSoal"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid request body", r)
@@ -472,6 +460,23 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs := validateQuestionPayload(req.QuestionType, req.Content, req.ScoringMode, req.Options); len(errs) > 0 {
+		writeValidationError(w, errs, r)
+		return
+	}
+	if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, slotPayload{
+		CPElementID:         req.CPElementID,
+		CapaianPembelajaran: req.CapaianPembelajaran,
+		ElemenCP:            req.ElemenCP,
+		TujuanPembelajaran:  req.TujuanPembelajaran,
+		MateriPokok:         req.MateriPokok,
+		Kelas:               req.Kelas,
+		Semester:            req.Semester,
+		IndikatorSoal:       req.IndikatorSoal,
+		CognitiveLevel:      req.CognitiveLevel,
+		Difficulty:          req.Difficulty,
+		QuestionType:        &req.QuestionType,
+		Points:              req.Points,
+	}); len(errs) > 0 {
 		writeValidationError(w, errs, r)
 		return
 	}
@@ -566,9 +571,12 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 	if req.SortOrder != nil {
 		sortOrder = *req.SortOrder
 	} else {
-		_ = a.db.QueryRowContext(r.Context(),
-			`SELECT COALESCE(MAX(sort_order), -1) + 1 FROM exam_questions WHERE exam_id = $1`, examID,
-		).Scan(&sortOrder)
+		sortOrder = resolveQuestionPosition(
+			r.Context(), a.db,
+			examID,
+			ptrToString(req.SectionID),
+			ptrToString(req.GroupID),
+		)
 	}
 	contentHash := hashContent(req.Content)
 
@@ -610,18 +618,18 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		newSlotID, serr := a.appendBlueprintSlot(r.Context(), tx, blueprintID, slotPayload{
-			CompetencyCode:        req.CompetencyCode,
-			CompetencyDescription: req.CompetencyDescription,
-			Materi:                req.Materi,
-			Indikator:             req.Indikator,
-			CognitiveLevel:        req.CognitiveLevel,
-			Difficulty:            req.Difficulty,
-			QuestionType:          &req.QuestionType,
-			Points:                &points,
-			AkmKonten:             req.AkmKonten,
-			AkmKonteks:            req.AkmKonteks,
-			AkmProses:             req.AkmProses,
-			AkmLevel:              req.AkmLevel,
+			CPElementID:         req.CPElementID,
+			CapaianPembelajaran: req.CapaianPembelajaran,
+			ElemenCP:            req.ElemenCP,
+			TujuanPembelajaran:  req.TujuanPembelajaran,
+			MateriPokok:         req.MateriPokok,
+			Kelas:               req.Kelas,
+			Semester:            req.Semester,
+			IndikatorSoal:       req.IndikatorSoal,
+			CognitiveLevel:      req.CognitiveLevel,
+			Difficulty:          req.Difficulty,
+			QuestionType:        &req.QuestionType,
+			Points:              &points,
 		})
 		if serr != nil {
 			a.logger.Error("append blueprint slot failed", "error", serr)
@@ -636,17 +644,17 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 		INSERT INTO exam_questions (
 		    tenant_id, exam_id, section_id, question_type, content, explanation,
 		    correct_answer, rubric, points, sort_order, scoring_mode,
-		    wrong_penalty_pct, shuffle_options_override, content_hash, created_by,
+		    wrong_penalty_pct, shuffle_options_override, content_hash, content_normalized, created_by,
 		    blueprint_slot_id, stimulus_id, group_id
 		) VALUES (
 		    $1, $2, NULLIF($3,'')::uuid, $4, $5, NULLIF($6,''),
 		    NULLIF($7,''), NULLIF($8,'')::jsonb, $9, $10, $11,
-		    $12, $13, NULLIF($14,''), $15,
-		    NULLIF($16,'')::uuid, NULLIF($17,'')::uuid, NULLIF($18,'')::uuid
+		    $12, $13, NULLIF($14,''), NULLIF($15,''), $16,
+		    NULLIF($17,'')::uuid, NULLIF($18,'')::uuid, NULLIF($19,'')::uuid
 		) RETURNING id`,
 		tenantID, examID, ptrToString(req.SectionID), req.QuestionType, req.Content, req.Explanation,
 		req.CorrectAnswer, string(req.Rubric), points, sortOrder, scoringMode,
-		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, auth.UserID,
+		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, normalizeQuestionContent(req.Content), auth.UserID,
 		slotIDForInsert,
 		ptrToString(req.StimulusID), ptrToString(req.GroupID),
 	).Scan(&id)
@@ -676,16 +684,16 @@ func (a *App) handleCreateQuestion(w http.ResponseWriter, r *http.Request) {
 	// frontend gates whether the inputs are editable.
 	if req.BlueprintSlotID != nil && *req.BlueprintSlotID != "" {
 		inlinePatch := slotPayload{
-			CompetencyCode:        req.CompetencyCode,
-			CompetencyDescription: req.CompetencyDescription,
-			Materi:                req.Materi,
-			Indikator:             req.Indikator,
-			CognitiveLevel:        req.CognitiveLevel,
-			Difficulty:            req.Difficulty,
-			AkmKonten:             req.AkmKonten,
-			AkmKonteks:            req.AkmKonteks,
-			AkmProses:             req.AkmProses,
-			AkmLevel:              req.AkmLevel,
+			CPElementID:         req.CPElementID,
+			CapaianPembelajaran: req.CapaianPembelajaran,
+			ElemenCP:            req.ElemenCP,
+			TujuanPembelajaran:  req.TujuanPembelajaran,
+			MateriPokok:         req.MateriPokok,
+			Kelas:               req.Kelas,
+			Semester:            req.Semester,
+			IndikatorSoal:       req.IndikatorSoal,
+			CognitiveLevel:      req.CognitiveLevel,
+			Difficulty:          req.Difficulty,
 		}
 		if slotPayloadHasMeta(inlinePatch) {
 			q, args := buildSlotUpdateSQL("exam_blueprint_slots", *req.BlueprintSlotID, inlinePatch)
@@ -745,17 +753,14 @@ func validateQuestionPayload(qType, content, scoringMode string, options []quest
 		if len(options) < 2 {
 			errs["options"] = "Multiple choice requires at least 2 options"
 		}
-		if len(options) > 10 {
-			errs["options"] = "Multiple choice supports at most 10 options"
-		}
 		correct := 0
 		for _, o := range options {
 			if o.IsCorrect {
 				correct++
 			}
 		}
-		if correct == 0 {
-			errs["options"] = "Mark at least one option as correct"
+		if correct != 1 {
+			errs["options"] = "Multiple choice must have exactly one correct option"
 		}
 		if scoringMode != "" && scoringMode != "correct_all" && scoringMode != "correct_one" && scoringMode != "percentage" {
 			errs["scoringMode"] = "Invalid scoring mode"
@@ -823,12 +828,12 @@ func (a *App) ensureExamBlueprint(ctx context.Context, tx *sql.Tx, tenantID, exa
 		return "", err
 	}
 
-	// Pick a curriculum default. We default to k13 because that's the
-	// most common Indonesian school context; admins who use Merdeka
-	// will swap by loading a Merdeka template later.
+	// Pick a Kurikulum Merdeka default. New kisi-kisi/blueprint flows are
+	// Merdeka-first; legacy K13 rows remain readable only for historical
+	// compatibility.
 	var curriculumID string
 	if err := tx.QueryRowContext(ctx,
-		`SELECT id::text FROM curricula WHERE code = 'k13' LIMIT 1`,
+		`SELECT id::text FROM curricula WHERE code = 'merdeka' LIMIT 1`,
 	).Scan(&curriculumID); err != nil {
 		return "", err
 	}
@@ -892,13 +897,13 @@ func (a *App) appendBlueprintSlot(ctx context.Context, tx *sql.Tx, blueprintID s
 // slot payload are non-empty. Used to decide whether handleUpdate /
 // handleCreate question handlers should write through to the slot.
 func slotPayloadHasMeta(p slotPayload) bool {
-	if p.CompetencyCode != nil || p.CompetencyDescription != nil || p.Materi != nil || p.Indikator != nil {
+	if p.CPElementID != nil || p.CapaianPembelajaran != nil || p.ElemenCP != nil || p.TujuanPembelajaran != nil {
+		return true
+	}
+	if p.MateriPokok != nil || p.Kelas != nil || p.Semester != nil || p.IndikatorSoal != nil {
 		return true
 	}
 	if p.CognitiveLevel != nil || p.Difficulty != nil {
-		return true
-	}
-	if p.AkmKonten != nil || p.AkmKonteks != nil || p.AkmProses != nil || p.AkmLevel != nil {
 		return true
 	}
 	return false
@@ -1007,8 +1012,9 @@ func (a *App) validateSlotForExam(
 // same transaction.
 //
 // Body: { slotId, content, explanation?, correctAnswer?, rubric?,
-//         points?, scoringMode?, wrongPenaltyPct?, options?,
-//         questionType? (override; defaults to slot's), forceLink? }
+//
+//	points?, scoringMode?, wrongPenaltyPct?, options?,
+//	questionType? (override; defaults to slot's), forceLink? }
 func (a *App) handleCreateQuestionFromSlot(w http.ResponseWriter, r *http.Request) {
 	if !a.RequirePermission(w, r, "exams:write") {
 		return
@@ -1114,6 +1120,14 @@ func (a *App) handleCreateQuestionFromSlot(w http.ResponseWriter, r *http.Reques
 		`SELECT COALESCE(MAX(sort_order), -1) + 1 FROM exam_questions WHERE exam_id = $1`, examID,
 	).Scan(&sortOrder)
 
+	// Override with section-unified position so the new slot-bound
+	// question appends after the last existing block in its section
+	// (groups + standalones interleaved), not after the last question
+	// across the entire exam.
+	if req.SectionID != nil && *req.SectionID != "" {
+		sortOrder = nextSectionPosition(r.Context(), a.db, *req.SectionID)
+	}
+
 	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		writeErrorJSON(w, http.StatusInternalServerError, "create_failed", "Could not create question", r)
@@ -1136,16 +1150,16 @@ func (a *App) handleCreateQuestionFromSlot(w http.ResponseWriter, r *http.Reques
 		INSERT INTO exam_questions (
 		    tenant_id, exam_id, section_id, question_type, content, explanation,
 		    correct_answer, rubric, points, sort_order, scoring_mode,
-		    wrong_penalty_pct, shuffle_options_override, content_hash, created_by,
+		    wrong_penalty_pct, shuffle_options_override, content_hash, content_normalized, created_by,
 		    blueprint_slot_id
 		) VALUES (
 		    $1, $2, NULLIF($3,'')::uuid, $4, $5, NULLIF($6,''),
 		    NULLIF($7,''), NULLIF($8,'')::jsonb, $9, $10, $11,
-		    $12, $13, NULLIF($14,''), $15, $16
+		    $12, $13, NULLIF($14,''), NULLIF($15,''), $16, $17
 		) RETURNING id`,
 		tenantID, examID, ptrToString(req.SectionID), qType, req.Content, req.Explanation,
 		req.CorrectAnswer, string(req.Rubric), points, sortOrder, scoringMode,
-		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, auth.UserID,
+		req.WrongPenaltyPct, req.ShuffleOpts, contentHash, normalizeQuestionContent(req.Content), auth.UserID,
 		req.SlotID,
 	).Scan(&id)
 	if err != nil {
@@ -1225,13 +1239,34 @@ func (a *App) handleUpdateQuestion(w http.ResponseWriter, r *http.Request) {
 		Indikator             *string `json:"indikator"`
 		CognitiveLevel        *string `json:"cognitiveLevel"`
 		Difficulty            *string `json:"difficulty"`
-		AkmKonten      *string `json:"akmKonten"`
-		AkmKonteks     *string `json:"akmKonteks"`
-		AkmProses      *string `json:"akmProses"`
-		AkmLevel       *int    `json:"akmLevel"`
+		CPElementID           *string `json:"cpElementId"`
+		CapaianPembelajaran   *string `json:"capaianPembelajaran"`
+		ElemenCP              *string `json:"elemenCp"`
+		TujuanPembelajaran    *string `json:"tujuanPembelajaran"`
+		MateriPokok           *string `json:"materiPokok"`
+		Kelas                 *string `json:"kelas"`
+		Semester              *string `json:"semester"`
+		IndikatorSoal         *string `json:"indikatorSoal"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid request body", r)
+		return
+	}
+	if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, slotPayload{
+		CPElementID:         req.CPElementID,
+		CapaianPembelajaran: req.CapaianPembelajaran,
+		ElemenCP:            req.ElemenCP,
+		TujuanPembelajaran:  req.TujuanPembelajaran,
+		MateriPokok:         req.MateriPokok,
+		Kelas:               req.Kelas,
+		Semester:            req.Semester,
+		IndikatorSoal:       req.IndikatorSoal,
+		CognitiveLevel:      req.CognitiveLevel,
+		Difficulty:          req.Difficulty,
+		QuestionType:        req.QuestionType,
+		Points:              req.Points,
+	}); len(errs) > 0 {
+		writeValidationError(w, errs, r)
 		return
 	}
 
@@ -1454,6 +1489,7 @@ func (a *App) handleUpdateQuestion(w http.ResponseWriter, r *http.Request) {
 	if req.Content != nil {
 		add("content", *req.Content)
 		add("content_hash", hashContent(*req.Content))
+		add("content_normalized", normalizeQuestionContent(*req.Content))
 	}
 	if req.Explanation != nil {
 		if *req.Explanation == "" {
@@ -1517,10 +1553,9 @@ func (a *App) handleUpdateQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(args) == 0 && req.Options == nil && req.SectionID == nil && req.BlueprintSlotID == nil && req.StimulusID == nil && req.GroupID == nil &&
-		req.CompetencyCode == nil && req.CompetencyDescription == nil &&
-		req.Materi == nil && req.Indikator == nil &&
-		req.CognitiveLevel == nil && req.Difficulty == nil &&
-		req.AkmKonten == nil && req.AkmKonteks == nil && req.AkmProses == nil && req.AkmLevel == nil {
+		req.CPElementID == nil && req.CapaianPembelajaran == nil && req.ElemenCP == nil && req.TujuanPembelajaran == nil &&
+		req.MateriPokok == nil && req.Kelas == nil && req.Semester == nil && req.IndikatorSoal == nil &&
+		req.CognitiveLevel == nil && req.Difficulty == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"id": qid, "status": "no_change"})
 		return
 	}
@@ -1594,16 +1629,16 @@ func (a *App) handleUpdateQuestion(w http.ResponseWriter, r *http.Request) {
 	// (request override or current binding) before the commit so the
 	// audit trail reflects the right target.
 	slotPatch := slotPayload{
-		CompetencyCode:        req.CompetencyCode,
-		CompetencyDescription: req.CompetencyDescription,
-		Materi:                req.Materi,
-		Indikator:             req.Indikator,
-		CognitiveLevel:        req.CognitiveLevel,
-		Difficulty:            req.Difficulty,
-		AkmKonten:             req.AkmKonten,
-		AkmKonteks:            req.AkmKonteks,
-		AkmProses:             req.AkmProses,
-		AkmLevel:              req.AkmLevel,
+		CPElementID:         req.CPElementID,
+		CapaianPembelajaran: req.CapaianPembelajaran,
+		ElemenCP:            req.ElemenCP,
+		TujuanPembelajaran:  req.TujuanPembelajaran,
+		MateriPokok:         req.MateriPokok,
+		Kelas:               req.Kelas,
+		Semester:            req.Semester,
+		IndikatorSoal:       req.IndikatorSoal,
+		CognitiveLevel:      req.CognitiveLevel,
+		Difficulty:          req.Difficulty,
 	}
 	if slotPayloadHasMeta(slotPatch) {
 		effectiveSlotID := ""
@@ -1681,8 +1716,8 @@ func (a *App) handleDeleteQuestion(w http.ResponseWriter, r *http.Request) {
 
 // validateOptionsAfterMutation simulates the option set after a CRUD
 // mutation and runs validateQuestionPayload to catch invariant breaks.
-// E.g. cannot add an 11th option to MCQ, cannot mark both true/false
-// options correct, cannot delete down to 1 option for MCQ.
+// E.g. cannot reduce MCQ below 2 options or away from 1 correct option,
+// cannot mark both true/false options correct.
 //
 // `simulated` is the post-mutation option list. The function loads the
 // parent question type/content/scoringMode and validates against it.

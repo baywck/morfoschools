@@ -12,8 +12,9 @@
  * preservation so line breaks survive.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
+import katex from "katex";
 import "katex/dist/katex.min.css";
 import { cn } from "@/lib/cn";
 
@@ -120,13 +121,47 @@ export function isHtmlContent(s: string): boolean {
 }
 
 export function RenderedContent({ html, className }: RenderedContentProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const sanitized = useMemo(() => {
     if (!html) return "";
-    const source = isHtmlContent(html)
-      ? html
-      : `<p style="white-space: pre-wrap;">${escapeHtml(html)}</p>`;
-    return DOMPurify.sanitize(source, SANITIZER_CONFIG as DomPurifyConfig);
+    // Plain text path: escape HTML first, THEN run LaTeX preprocess so
+    // dollar delimiters survive escaping (\$ stays \$ in the escaped
+    // string). Wrapping in <p style=pre-wrap> preserves user newlines
+    // for prose paragraphs.
+    const prepared = isHtmlContent(html)
+      ? preprocessLatexDelimiters(html)
+      : preprocessLatexDelimiters(
+          `<p style="white-space: pre-wrap;">${escapeHtml(html)}</p>`,
+        );
+    return DOMPurify.sanitize(prepared, SANITIZER_CONFIG as DomPurifyConfig);
   }, [html]);
+
+  // After the sanitized HTML mounts, walk every math-node span and
+  // render KaTeX into it. The math extension only renders inside
+  // the TipTap editor (NodeViewRenderer); for read-only consumers we
+  // need a one-shot render here so the saved HTML displays properly.
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    const nodes = root.querySelectorAll<HTMLSpanElement>('span[data-type="inlineMath"][data-latex]');
+    nodes.forEach((node) => {
+      if (node.dataset.katexRendered === "1") return;
+      const latex = node.getAttribute("data-latex") ?? "";
+      const display = node.getAttribute("data-display") === "yes";
+      try {
+        katex.render(latex, node, {
+          displayMode: display,
+          throwOnError: false,
+          output: "html",
+        });
+        node.dataset.katexRendered = "1";
+      } catch {
+        // Leave latex source visible if KaTeX can't parse — better
+        // than blanking the slot silently.
+        node.textContent = display ? `$$${latex}$$` : `$${latex}$`;
+      }
+    });
+  }, [sanitized]);
 
   if (!sanitized) {
     return (
@@ -138,6 +173,7 @@ export function RenderedContent({ html, className }: RenderedContentProps) {
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "prose prose-sm max-w-none text-[13px] leading-relaxed text-[var(--foreground)]",
         "[&_p]:my-1 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:mt-2 [&_h3]:mb-1",
@@ -150,6 +186,43 @@ export function RenderedContent({ html, className }: RenderedContentProps) {
       dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );
+}
+
+/**
+ * Pre-render raw `$...$` / `$$...$$` LaTeX delimiters into the math
+ * node span shape used by @aarkue/tiptap-math-extension. Mirror of the
+ * preprocessor in rich-editor.tsx so saved + raw content display
+ * identically.
+ */
+function preprocessLatexDelimiters(html: string): string {
+  if (!html || !html.includes("$")) return html;
+  if (html.includes('data-type="inlineMath"')) return html;
+  const guardRe = /(<code\b[^>]*>[\s\S]*?<\/code>|<pre\b[^>]*>[\s\S]*?<\/pre>|<span\b[^>]*data-type="inlineMath"[^>]*>[\s\S]*?<\/span>)/gi;
+  const escapeAttr = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const transformChunk = (chunk: string): string => {
+    chunk = chunk.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
+      const trimmed = latex.trim();
+      if (!trimmed) return `$$${latex}$$`;
+      return `<span data-type="inlineMath" data-latex="${escapeAttr(trimmed)}" data-display="yes"></span>`;
+    });
+    chunk = chunk.replace(/(?<![\\$])\$(?!\s)([^\n$]+?)(?<!\s)\$(?!\$)/g, (_, latex: string) => {
+      const trimmed = latex.trim();
+      if (!trimmed) return `$${latex}$`;
+      return `<span data-type="inlineMath" data-latex="${escapeAttr(trimmed)}" data-display="no"></span>`;
+    });
+    return chunk;
+  };
+  const out: string[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = guardRe.exec(html)) !== null) {
+    if (m.index > last) out.push(transformChunk(html.slice(last, m.index)));
+    out.push(m[0]);
+    last = m.index + m[0].length;
+  }
+  if (last < html.length) out.push(transformChunk(html.slice(last)));
+  return out.join("");
 }
 
 function escapeHtml(s: string): string {

@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-	"database/sql"
 	"net/http"
 	"strings"
 )
@@ -146,21 +144,27 @@ func (a *App) handleCloneBlueprintToExam(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Snapshot slots. INSERT ... SELECT preserves all field values
-	// including stimulus_id (live FK to library, not copied content).
+	// Snapshot slots. INSERT ... SELECT preserves all Merdeka fields
+	// and stimulus_id (live FK to library, not copied content). Legacy
+	// compatibility columns remain copied as dormant fallbacks, but new
+	// product flow reads CP/Elemen CP/TP/Materi Pokok/Indikator Soal.
 	if _, err := tx.ExecContext(r.Context(), `
 		INSERT INTO exam_blueprint_slots (
 		    exam_blueprint_id, position,
 		    competency_id, competency_code, competency_description,
 		    materi, indikator, cognitive_level, difficulty,
 		    question_type, points, stimulus_id,
-		    akm_konten, akm_konteks, akm_proses, akm_level
+		    cp_element_id, capaian_pembelajaran, elemen_cp,
+		    tujuan_pembelajaran, materi_pokok, kelas,
+		    semester, indikator_soal
 		)
 		SELECT $1, position,
 		       competency_id, competency_code, competency_description,
 		       materi, indikator, cognitive_level, difficulty,
 		       question_type, points, stimulus_id,
-		       akm_konten, akm_konteks, akm_proses, akm_level
+		       cp_element_id, capaian_pembelajaran, elemen_cp,
+		       tujuan_pembelajaran, materi_pokok, kelas,
+		       semester, indikator_soal
 		  FROM blueprint_template_slots
 		 WHERE template_id = $2
 		 ORDER BY position`,
@@ -189,7 +193,7 @@ func (a *App) handleCloneBlueprintToExam(w http.ResponseWriter, r *http.Request)
 	// blueprint_slot_id FK; question_type and points are copied from
 	// the slot at create time so the canvas can render an editable row
 	// pre-filled with type/points without round-tripping. Slot's
-	// kisi-kisi metadata (KD/materi/indikator/etc.) lives on the slot
+	// kisi-kisi metadata (CP/Elemen CP/TP/Materi Pokok/Indikator Soal/etc.) lives on the slot
 	// row and is read through the FK — no need to denormalize.
 	//
 	// Place all auto-created questions in the exam's first section
@@ -263,18 +267,6 @@ func (a *App) handleCloneBlueprintToExam(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// AKM auto-grouping (ADR-0012). When the cloned blueprint is AKM,
-	// scan the cloned slots for stimulus_id references and pre-create
-	// exam_question_groups for each unique stimulus. This is best-effort
-	// — templates without stimulus pre-assignments fall through silently
-	// and the user creates groups manually from the canvas toolbar.
-	if blueprintType == "akm_literasi" || blueprintType == "akm_numerasi" {
-		if err := a.autoCreateAkmGroups(r.Context(), tx, tenantID, examID, newBlueprintID); err != nil {
-			a.logger.Error("akm auto-grouping failed (non-fatal)", "error", err)
-			// Non-fatal: clone succeeds even if grouping fails.
-		}
-	}
-
 	if err := tx.Commit(); err != nil {
 		writeErrorJSON(w, http.StatusInternalServerError, "clone_failed",
 			"Could not commit clone", r)
@@ -292,70 +284,6 @@ func (a *App) handleCloneBlueprintToExam(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// autoCreateAkmGroups scans the just-cloned exam_blueprint_slots for
-// stimulus_id references, dedupes, and creates one
-// exam_question_groups row per unique stimulus. The questions that
-// will eventually fill those slots can attach to the matching group.
-//
-// Best-effort: failures are logged at the call site and the clone
-// commits regardless. Templates without stimulus pre-assignments fall
-// through silently — callers handle the empty case (no groups
-// created, user creates manually). Documented in ADR-0012.
-func (a *App) autoCreateAkmGroups(
-	ctx context.Context, tx *sql.Tx, tenantID, examID, blueprintID string,
-) error {
-	rows, err := tx.QueryContext(ctx, `
-		SELECT DISTINCT s.stimulus_id::text
-		  FROM exam_blueprint_slots s
-		 WHERE s.exam_blueprint_id = $1
-		   AND s.stimulus_id IS NOT NULL`,
-		blueprintID,
-	)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var stimulusIDs []string
-	for rows.Next() {
-		var sid string
-		if err := rows.Scan(&sid); err == nil && sid != "" {
-			stimulusIDs = append(stimulusIDs, sid)
-		}
-	}
-	if len(stimulusIDs) == 0 {
-		return nil
-	}
-
-	nextOrder := 0
-	_ = tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(display_order), -1) + 1 FROM exam_question_groups WHERE exam_id = $1 AND tenant_id = $2`,
-		examID, tenantID,
-	).Scan(&nextOrder)
-
-	for _, sid := range stimulusIDs {
-		var title, body string
-		if err := tx.QueryRowContext(ctx,
-			`SELECT title, content FROM stimuli WHERE id = $1 AND tenant_id = $2`,
-			sid, tenantID,
-		).Scan(&title, &body); err != nil {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO exam_question_groups (
-			    tenant_id, exam_id, stimulus_id,
-			    stimulus_title_snapshot, stimulus_body_snapshot,
-			    group_type, display_order
-			) VALUES ($1, $2, $3::uuid, $4, $5, 'stimulus', $6)`,
-			tenantID, examID, sid, title, body, nextOrder,
-		); err != nil {
-			return err
-		}
-		nextOrder++
-	}
-	return nil
-}
-
 // handleExportExamBlueprintToTemplate (Phase 9.10) — reverse of
 // handleCloneBlueprintToExam: takes the exam's current
 // exam_blueprint_slots snapshot and materializes a NEW
@@ -364,9 +292,9 @@ func (a *App) autoCreateAkmGroups(
 // kisi-kisi inside a sandbox exam and want to lift the result back to
 // the library for reuse.
 //
-//   POST /api/v1/exams/{id}/blueprint/export
-//   Body: { "title": string, "description"?: string,
-//           "subjectCode"?: string, "gradeOrPhase"?: string }
+//	POST /api/v1/exams/{id}/blueprint/export
+//	Body: { "title": string, "description"?: string,
+//	        "subjectCode"?: string, "gradeOrPhase"?: string }
 //
 // The new template inherits curriculum / blueprint_type /
 // strict_coverage from the source exam blueprint; everything else can
@@ -408,9 +336,9 @@ func (a *App) handleExportExamBlueprintToTemplate(w http.ResponseWriter, r *http
 	// Resolve source exam_blueprint and inherit curriculum + type +
 	// strictness. If the exam has no blueprint, refuse with a hint.
 	var (
-		srcID                                              string
-		curriculumID, blueprintType, srcSubject, srcGrade  string
-		strictCoverage                                     bool
+		srcID                                             string
+		curriculumID, blueprintType, srcSubject, srcGrade string
+		strictCoverage                                    bool
 	)
 	err := a.db.QueryRowContext(r.Context(), `
 		SELECT id::text, curriculum_id::text, blueprint_type,
@@ -464,21 +392,25 @@ func (a *App) handleExportExamBlueprintToTemplate(w http.ResponseWriter, r *http
 	}
 
 	// Mirror exam_blueprint_slots into blueprint_template_slots. Same
-	// columns minus the FK direction. Position is preserved so the
-	// template ordering matches the exam.
+	// columns minus the FK direction. Position and all Merdeka metadata
+	// are preserved so the template ordering/content matches the exam.
 	if _, err := tx.ExecContext(r.Context(), `
 		INSERT INTO blueprint_template_slots (
 		    template_id, position,
 		    competency_id, competency_code, competency_description,
 		    materi, indikator, cognitive_level, difficulty,
 		    question_type, points, stimulus_id,
-		    akm_konten, akm_konteks, akm_proses, akm_level
+		    cp_element_id, capaian_pembelajaran, elemen_cp,
+		    tujuan_pembelajaran, materi_pokok, kelas,
+		    semester, indikator_soal
 		)
 		SELECT $1, position,
 		       competency_id, competency_code, competency_description,
 		       materi, indikator, cognitive_level, difficulty,
 		       question_type, points, stimulus_id,
-		       akm_konten, akm_konteks, akm_proses, akm_level
+		       cp_element_id, capaian_pembelajaran, elemen_cp,
+		       tujuan_pembelajaran, materi_pokok, kelas,
+		       semester, indikator_soal
 		  FROM exam_blueprint_slots
 		 WHERE exam_blueprint_id = $2
 		 ORDER BY position`,

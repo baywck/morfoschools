@@ -36,9 +36,9 @@ func TestCreateQuestion_AutoCreatesBlueprintWhenKisiKisiOnAndNoBlueprintYet(t *t
 	// the auto-created slot can hold the inline kisi-kisi metadata.
 	want := []string{
 		"CompetencyCode", "Materi", "Indikator",
-		"CognitiveLevel", "Difficulty",
-		"AkmKonten", "AkmKonteks", "AkmProses", "AkmLevel",
-		"QuestionType", "Points",
+		"CPElementID", "CapaianPembelajaran", "ElemenCP", "TujuanPembelajaran",
+		"MateriPokok", "Kelas", "Semester", "IndikatorSoal",
+		"CognitiveLevel", "Difficulty", "QuestionType", "Points",
 	}
 	p := slotPayload{}
 	_ = p // exhaustive-field check happens at compile time below
@@ -47,9 +47,9 @@ func TestCreateQuestion_AutoCreatesBlueprintWhenKisiKisiOnAndNoBlueprintYet(t *t
 	for _, field := range want {
 		switch field {
 		case "CompetencyCode", "Materi", "Indikator",
-			"CognitiveLevel", "Difficulty",
-			"AkmKonten", "AkmKonteks", "AkmProses", "AkmLevel",
-			"QuestionType", "Points":
+			"CPElementID", "CapaianPembelajaran", "ElemenCP", "TujuanPembelajaran",
+			"MateriPokok", "Kelas", "Semester", "IndikatorSoal",
+			"CognitiveLevel", "Difficulty", "QuestionType", "Points":
 			// ok
 		default:
 			t.Errorf("missing slotPayload field %q", field)
@@ -112,8 +112,8 @@ func TestSlotPayloadHasMeta_EmptyShortCircuits(t *testing.T) {
 	if !slotPayloadHasMeta(slotPayload{CognitiveLevel: &one}) {
 		t.Errorf("setting cognitive level alone must trigger slot writeback")
 	}
-	akm := 3
-	if !slotPayloadHasMeta(slotPayload{AkmLevel: &akm}) {
-		t.Errorf("setting AKM level alone must trigger slot writeback")
+	tp := "Peserta didik mampu menganalisis fenomena sosial dengan data aktual."
+	if !slotPayloadHasMeta(slotPayload{TujuanPembelajaran: &tp}) {
+		t.Errorf("setting TP alone must trigger slot writeback")
 	}
 }

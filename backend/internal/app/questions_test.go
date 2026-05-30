@@ -41,15 +41,15 @@ func TestValidateQuestionPayload_MultipleChoice(t *testing.T) {
 	}{
 		{
 			name:    "valid mcq with one correct",
-			options: []questionOption{{Content: "A", IsCorrect: true}, {Content: "B"}},
+			options: []questionOption{{Content: "A", IsCorrect: true}, {Content: "B"}, {Content: "C"}, {Content: "D"}, {Content: "E"}},
 			mode:    "correct_all",
 			wantErr: "",
 		},
 		{
-			name:    "valid mcq with multiple correct",
-			options: []questionOption{{Content: "A", IsCorrect: true}, {Content: "B", IsCorrect: true}, {Content: "C"}},
+			name:    "multiple correct is invalid",
+			options: []questionOption{{Content: "A", IsCorrect: true}, {Content: "B", IsCorrect: true}, {Content: "C"}, {Content: "D"}, {Content: "E"}},
 			mode:    "percentage",
-			wantErr: "",
+			wantErr: "options",
 		},
 		{
 			name:    "too few options",
@@ -59,13 +59,13 @@ func TestValidateQuestionPayload_MultipleChoice(t *testing.T) {
 		{
 			name: "no correct option",
 			options: []questionOption{
-				{Content: "A"}, {Content: "B"}, {Content: "C"},
+				{Content: "A"}, {Content: "B"}, {Content: "C"}, {Content: "D"}, {Content: "E"},
 			},
 			wantErr: "options",
 		},
 		{
 			name:    "invalid scoring mode",
-			options: []questionOption{{Content: "A", IsCorrect: true}, {Content: "B"}},
+			options: []questionOption{{Content: "A", IsCorrect: true}, {Content: "B"}, {Content: "C"}, {Content: "D"}, {Content: "E"}},
 			mode:    "weird_mode",
 			wantErr: "scoringMode",
 		},

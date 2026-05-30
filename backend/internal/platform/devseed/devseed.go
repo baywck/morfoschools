@@ -368,10 +368,10 @@ var masterSubjects = []struct {
 	Description string
 }{
 	{"matematika", "Matematika", "Mata pelajaran Matematika."},
-	{"pkn", "Pendidikan Pancasila dan Kewarganegaraan", "Mata pelajaran PPKn / PKN."},
+	{"pendidikan-pancasila", "Pendidikan Pancasila", "Mata pelajaran Pendidikan Pancasila."},
 	{"bahasa-indonesia", "Bahasa Indonesia", "Mata pelajaran Bahasa Indonesia."},
-	{"ipa", "Ilmu Pengetahuan Alam", "Mata pelajaran IPA."},
-	{"ips", "Ilmu Pengetahuan Sosial", "Mata pelajaran IPS."},
+	{"ilmu-pengetahuan-alam", "Ilmu Pengetahuan Alam", "Mata pelajaran IPA."},
+	{"ilmu-pengetahuan-sosial", "Ilmu Pengetahuan Sosial", "Mata pelajaran IPS."},
 }
 
 func seedSubjects(ctx context.Context, db *sql.DB, tenantID string) error {
@@ -381,7 +381,8 @@ func seedSubjects(ctx context.Context, db *sql.DB, tenantID string) error {
 			VALUES ($1, $2, $3, $4, 'active')
 			ON CONFLICT (tenant_id, code) DO UPDATE SET
 				name = EXCLUDED.name,
-				description = EXCLUDED.description`,
+				description = EXCLUDED.description,
+				status = CASE WHEN subjects.status = 'archived' THEN 'active' ELSE subjects.status END`,
 			tenantID, s.Code, s.Name, s.Description,
 		)
 		if err != nil {

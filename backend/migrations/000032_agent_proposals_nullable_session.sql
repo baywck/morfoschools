@@ -1,0 +1,1 @@
+ALTER TABLE agent_proposals ALTER COLUMN session_id DROP NOT NULL;

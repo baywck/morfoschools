@@ -13,8 +13,10 @@
 }
 ```
 
+`code` is an internal compatibility slug. Product UI should show/select subjects by name, not ask users to type subject codes.
+
 ## POST /api/v1/subjects
-**Body:** `{ "code": "required", "name": "required", "description?" }`
+**Body:** `{ "name": "required", "description?", "code?": "optional internal slug" }`
 
 ## PATCH /api/v1/subjects/{id}
 **Body:** `{ "name?", "description?", "status?": "active|inactive|archived" }`

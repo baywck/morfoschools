@@ -60,12 +60,12 @@ func (a *App) registerCollaboratorRoutes(mux *http.ServeMux) {
 // resourceSpec captures the bits that differ between exam / course /
 // blueprint collaboration. Everything else is shared.
 type resourceSpec struct {
-	label             string // user-facing noun
-	parentTable       string // exams, courses, blueprint_templates
-	collabTable       string // exam_collaborators, ...
-	parentFKColumn    string // exam_id, course_id, template_id
-	auditPrefix       string // "exams", "courses", "blueprint_templates"
-	requireAccess     func(w http.ResponseWriter, r *http.Request, parentID string, action AccessAction) bool
+	label                 string // user-facing noun
+	parentTable           string // exams, courses, blueprint_templates
+	collabTable           string // exam_collaborators, ...
+	parentFKColumn        string // exam_id, course_id, template_id
+	auditPrefix           string // "exams", "courses", "blueprint_templates"
+	requireAccess         func(w http.ResponseWriter, r *http.Request, parentID string, action AccessAction) bool
 	resolveAccessByCollab func(ctx context.Context, collabID string) (parentID string, tenantID string, err error)
 }
 
@@ -156,10 +156,10 @@ func (a *App) listCollaborators(w http.ResponseWriter, r *http.Request, spec res
 		ID, UserID, DisplayName, Email string
 	}
 	var (
-		owner          *ownerRow
-		ownerNullID    sql.NullString
-		ownerName      sql.NullString
-		ownerEmail     sql.NullString
+		owner       *ownerRow
+		ownerNullID sql.NullString
+		ownerName   sql.NullString
+		ownerEmail  sql.NullString
 	)
 	ownerQuery := fmt.Sprintf(`
 		SELECT u.id::text, u.display_name, u.email

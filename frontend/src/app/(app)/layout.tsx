@@ -20,7 +20,8 @@ import {
   FileText,
   ClipboardCheck,
   ClipboardList,
-  Library,
+  LibraryBig,
+  Settings,
 } from "lucide-react";
 import type { NavItem } from "@/components/layout/sidebar";
 
@@ -49,6 +50,30 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function TenantBrandLogo() {
+  const { session } = useAuth();
+  const tenant = session?.effectiveTenant;
+  const logoUrl = tenant?.logoUrl;
+
+  if (!logoUrl) {
+    return <img src="/logo.png" alt="Morfoschools" className="h-7 w-7" />;
+  }
+
+  return (
+    <span className="flex h-9 w-9 items-center justify-center overflow-hidden p-1 ">
+      <img
+        src={logoUrl}
+        alt={tenant?.name ? `${tenant.name} logo` : "Tenant logo"}
+        className="h-full w-full object-contain"
+        onError={(event) => {
+          event.currentTarget.src = "/logo.png";
+          event.currentTarget.className = "h-7 w-7 object-contain";
+        }}
+      />
+    </span>
+  );
+}
+
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
 
@@ -70,14 +95,20 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           { label: "Courses", href: "/app/courses", icon: FileText },
           { label: "Exams", href: "/app/exams", icon: ClipboardCheck },
           { label: "Blueprints", href: "/app/blueprints", icon: ClipboardList },
-          { label: "Stimuli", href: "/app/stimuli", icon: Library },
+          { label: "Master CP", href: "/app/curriculum-cp", icon: LibraryBig },
+          // Stimuli library hidden from sidebar (Opsi B). Stimuli
+          // are inline by default — each one bound to its group via
+          // exam_question_groups snapshots. Power users can still
+          // hit /app/stimuli directly to manage shared library, but
+          // 90% of authoring happens inline so we don't promote it.
         ]
       : []),
+    { label: "Profile Settings", href: "/app/settings", icon: Settings },
   ];
 
   return (
     <AuthGuard>
-      <AppShell navigation={navigation}>
+      <AppShell navigation={navigation} brand={<TenantBrandLogo />}>
         {children}
       </AppShell>
     </AuthGuard>

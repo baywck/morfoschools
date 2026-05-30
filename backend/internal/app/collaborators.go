@@ -44,12 +44,12 @@ const (
 type CollabRole string
 
 const (
-	RoleOwner          CollabRole = "owner"
-	RoleEditor         CollabRole = "editor"
-	RoleViewer         CollabRole = "viewer"
+	RoleOwner           CollabRole = "owner"
+	RoleEditor          CollabRole = "editor"
+	RoleViewer          CollabRole = "viewer"
 	RoleSubjectFallback CollabRole = "subject_fallback"
-	RoleAdmin          CollabRole = "admin"
-	RoleNone           CollabRole = ""
+	RoleAdmin           CollabRole = "admin"
+	RoleNone            CollabRole = ""
 )
 
 // isTenantAdmin returns true when the auth context belongs to one of
@@ -73,9 +73,9 @@ func isTenantAdmin(auth *AuthContext) bool {
 // a given resource, plus a boolean per action it implies. Returned by
 // the resolver functions and consumed by the require* helpers.
 type ResourceAccess struct {
-	Role     CollabRole
-	CanRead  bool
-	CanWrite bool
+	Role      CollabRole
+	CanRead   bool
+	CanWrite  bool
 	CanManage bool
 	CanDelete bool
 }
@@ -347,44 +347,56 @@ func enforceAccess(
 func (a *App) canAccessExamReadBatch(
 	ctx context.Context, tenantID string, auth *AuthContext, examIDs []string,
 ) map[string]bool {
-	out := make(map[string]bool, len(examIDs))
+	access := a.examAccessBatch(ctx, tenantID, auth, examIDs)
+	out := make(map[string]bool, len(access))
+	for id, acc := range access {
+		out[id] = acc.CanRead
+	}
+	return out
+}
+
+func (a *App) examAccessBatch(
+	ctx context.Context, tenantID string, auth *AuthContext, examIDs []string,
+) map[string]ResourceAccess {
+	out := make(map[string]ResourceAccess, len(examIDs))
 	if len(examIDs) == 0 || auth == nil || auth.UserID == "" {
 		return out
 	}
 	if isTenantAdmin(auth) {
+		admin := roleAccess(RoleAdmin)
 		for _, id := range examIDs {
-			out[id] = true
+			out[id] = admin
 		}
 		return out
 	}
-	// Owner OR collaborator OR subject fallback. Single query, OR'd.
 	q := `
 		WITH ids AS (SELECT unnest($3::uuid[]) AS exam_id)
-		SELECT i.exam_id::text
+		SELECT i.exam_id::text,
+		       CASE
+		         WHEN e.owner_user_id = $1 THEN 'owner'
+		         WHEN c.role IS NOT NULL THEN c.role
+		         WHEN e.subject_id IS NOT NULL AND EXISTS (
+		           SELECT 1 FROM teacher_subjects ts
+		             JOIN teachers t ON t.id = ts.teacher_id
+		            WHERE t.user_id = $1 AND ts.tenant_id = $2
+		              AND ts.subject_id = e.subject_id
+		              AND ts.status = 'active' AND t.status = 'active'
+		         ) THEN 'subject_fallback'
+		         ELSE ''
+		       END AS role
 		  FROM ids i
 		  JOIN exams e ON e.id = i.exam_id AND e.tenant_id = $2
-		 WHERE e.owner_user_id = $1
-		    OR EXISTS (
-		        SELECT 1 FROM exam_collaborators c
-		         WHERE c.exam_id = e.id AND c.user_id = $1
-		    )
-		    OR (e.subject_id IS NOT NULL AND EXISTS (
-		        SELECT 1 FROM teacher_subjects ts
-		          JOIN teachers t ON t.id = ts.teacher_id
-		         WHERE t.user_id = $1 AND ts.tenant_id = $2
-		           AND ts.subject_id = e.subject_id
-		           AND ts.status = 'active' AND t.status = 'active'
-		    ))`
+		  LEFT JOIN exam_collaborators c ON c.exam_id = e.id AND c.user_id = $1`
 	rows, err := a.db.QueryContext(ctx, q, auth.UserID, tenantID, pgUUIDArray(examIDs))
 	if err != nil {
-		a.logger.Error("canAccessExamReadBatch query failed", "error", err)
+		a.logger.Error("examAccessBatch query failed", "error", err)
 		return out
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err == nil {
-			out[id] = true
+		var id, role string
+		if err := rows.Scan(&id, &role); err == nil && role != "" {
+			out[id] = roleAccess(CollabRole(role))
 		}
 	}
 	return out

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // Question moves + question groups (ADR-0012).
@@ -317,6 +318,12 @@ func (a *App) handleCreateQuestionGroup(w http.ResponseWriter, r *http.Request) 
 	displayOrder := 0
 	if req.SortOrder != nil {
 		displayOrder = *req.SortOrder
+	} else if req.SectionID != nil && *req.SectionID != "" {
+		// Section-unified: avoid colliding with standalone questions in
+		// the same section. Frontend canvas interleaves groups +
+		// standalones by their order field, so positions must be unique
+		// across both kinds.
+		displayOrder = nextSectionPosition(r.Context(), a.db, *req.SectionID)
 	} else {
 		_ = a.db.QueryRowContext(r.Context(),
 			`SELECT COALESCE(MAX(display_order), -1) + 1 FROM exam_question_groups WHERE exam_id = $1 AND tenant_id = $2`,
@@ -407,10 +414,18 @@ func (a *App) handleUpdateQuestionGroup(w http.ResponseWriter, r *http.Request) 
 	auth := AuthFromContext(r.Context())
 
 	var req struct {
-		SectionID  *string `json:"sectionId"`
-		StimulusID *string `json:"stimulusId"`
-		ResyncSnap bool    `json:"resyncSnapshot"`
-		SortOrder  *int    `json:"sortOrder"`
+		SectionID     *string `json:"sectionId"`
+		StimulusID    *string `json:"stimulusId"`
+		ResyncSnap    bool    `json:"resyncSnapshot"`
+		SortOrder     *int    `json:"sortOrder"`
+		TitleSnapshot *string `json:"titleSnapshot"`
+		BodySnapshot  *string `json:"bodySnapshot"`
+		// saveToLibrary=true: after applying any snapshot edits, create
+		// a new shared stimulus row from the resulting title+body and
+		// link this group to it. Lets users opt their group's passage
+		// into the cross-exam library without leaving the group editor.
+		// saveToLibrary=false: only update local snapshot, no library row.
+		SaveToLibrary bool `json:"saveToLibrary"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Invalid request body", r)
@@ -495,7 +510,21 @@ func (a *App) handleUpdateQuestionGroup(w http.ResponseWriter, r *http.Request) 
 		add("stimulus_body_snapshot", body)
 	}
 
-	if len(args) == 0 && req.StimulusID == nil && req.SectionID == nil {
+	// Direct snapshot edit — lets the user edit the group's stimulus
+	// content inline without round-tripping through the master stimuli
+	// row. Snapshot model already isolates this from other groups that
+	// reference the same master row, so it's safe.
+	if req.TitleSnapshot != nil {
+		add("stimulus_title_snapshot", *req.TitleSnapshot)
+	}
+	if req.BodySnapshot != nil {
+		add("stimulus_body_snapshot", *req.BodySnapshot)
+		// If the user is writing inline body without a master stimulus,
+		// flip group_type to 'stimulus' so it shows the stimulus header.
+		parts = append(parts, "group_type = 'stimulus'")
+	}
+
+	if len(args) == 0 && req.StimulusID == nil && req.SectionID == nil && req.TitleSnapshot == nil && req.BodySnapshot == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"id": groupID, "status": "no_change"})
 		return
 	}
@@ -509,8 +538,61 @@ func (a *App) handleUpdateQuestionGroup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Optional library promotion. After snapshot is committed, read it
+	// back, create a shared stimulus row, and link the group to it. This
+	// is the explicit 'masukkan ke library' opt-in path. Idempotent: if
+	// already linked to a shared stimulus we update the master row
+	// instead of duplicating.
+	var libraryStimulusID *string
+	if req.SaveToLibrary {
+		var curTitle, curBody string
+		var curStimulusID sql.NullString
+		var curLifecycle sql.NullString
+		_ = a.db.QueryRowContext(r.Context(), `
+			SELECT COALESCE(g.stimulus_title_snapshot,''), COALESCE(g.stimulus_body_snapshot,''), g.stimulus_id, s.lifecycle
+			  FROM exam_question_groups g
+			  LEFT JOIN stimuli s ON s.id = g.stimulus_id
+			 WHERE g.id = $1 AND g.tenant_id = $2`,
+			groupID, tenantID,
+		).Scan(&curTitle, &curBody, &curStimulusID, &curLifecycle)
+		if strings.TrimSpace(curTitle) == "" || strings.TrimSpace(curBody) == "" {
+			writeErrorJSON(w, http.StatusBadRequest, "invalid_request",
+				"Stimulus title + body harus diisi sebelum dimasukkan ke library", r)
+			return
+		}
+		if curStimulusID.Valid && curLifecycle.String == "shared" {
+			// Already in library — update master row in place.
+			_, _ = a.db.ExecContext(r.Context(),
+				`UPDATE stimuli SET title=$1, content=$2, updated_at=now() WHERE id=$3 AND tenant_id=$4`,
+				curTitle, curBody, curStimulusID.String, tenantID)
+			libraryStimulusID = &curStimulusID.String
+		} else {
+			// Create new shared stimulus + relink group.
+			var newStimID string
+			if err := a.db.QueryRowContext(r.Context(), `
+				INSERT INTO stimuli (tenant_id, owner_user_id, type, title, content, lifecycle)
+				VALUES ($1, $2, 'text', $3, $4, 'shared')
+				RETURNING id::text`,
+				tenantID, auth.UserID, curTitle, curBody,
+			).Scan(&newStimID); err != nil {
+				writeErrorJSON(w, http.StatusInternalServerError, "library_promote_failed",
+					"Could not create shared stimulus", r)
+				return
+			}
+			_, _ = a.db.ExecContext(r.Context(),
+				`UPDATE exam_question_groups SET stimulus_id = $1, group_type = 'stimulus', updated_at = now()
+				 WHERE id = $2 AND tenant_id = $3`,
+				newStimID, groupID, tenantID)
+			libraryStimulusID = &newStimID
+		}
+	}
+
 	a.audit(r.Context(), &tenantID, auth.UserID, "groups.update", "exam_question_group", groupID, r)
-	writeJSON(w, http.StatusOK, map[string]any{"id": groupID, "status": "updated"})
+	resp := map[string]any{"id": groupID, "status": "updated"}
+	if libraryStimulusID != nil {
+		resp["libraryStimulusId"] = *libraryStimulusID
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // DELETE /api/v1/groups/{groupId}

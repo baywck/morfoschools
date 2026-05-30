@@ -21,9 +21,9 @@
  *     subsection. Pure content + options + stimulus.
  *
  *   - usesKisiKisi=true (with or without template): the question
- *     accordion adds a "Kisi-Kisi" subsection with KD / materi /
- *     indikator / cognitive level / difficulty (or AKM dimensions
- *     when blueprint_type is AKM). The backend auto-mints a slot
+ *     accordion adds a Kurikulum Merdeka subsection with CP / Elemen CP /
+ *     TP / Materi Pokok / Kelas-Semester / Indikator Soal /
+ *     cognitive level / difficulty. The backend auto-mints a slot
  *     per question on save, so the canvas no longer forces a
  *     "load template first" step.
  *
@@ -56,7 +56,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Loader2, Plus } from "lucide-react";
+import { FileQuestion, Loader2, Plus, Sparkles } from "lucide-react";
 import {
   listQuestions,
   listExamSections,
@@ -83,6 +83,7 @@ import { QuestionAccordion } from "@/components/exams/question-accordion";
 import { GroupCard } from "@/components/exams/group-card";
 import { SectionCard } from "@/components/exams/section-card";
 import { cn } from "@/lib/cn";
+import { questionTypeLabel } from "@/lib/question-labels";
 
 export interface ExamCanvasProps {
   exam: Exam;
@@ -605,9 +606,6 @@ export function ExamCanvas({
     );
   }
 
-  const isAkm =
-    blueprint?.blueprintType === "akm_literasi" ||
-    blueprint?.blueprintType === "akm_numerasi";
   const sourceTemplateId = slotsResp?.sourceTemplateId ?? null;
 
 
@@ -630,7 +628,7 @@ export function ExamCanvas({
                 </h3>
                 <span className="rounded-md bg-[var(--accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
                   {blueprint.curriculumCode.toUpperCase()} \u00b7{" "}
-                  {blueprint.blueprintType.replace("akm_", "AKM ")}
+                  Kurikulum Merdeka · CP/TP
                 </span>
               </div>
             </div>
@@ -685,7 +683,6 @@ export function ExamCanvas({
                         openId={openId}
                         draft={draft}
                         usesKisiKisi={exam.usesKisiKisi}
-                        isAkm={isAkm}
                         sourceTemplateId={sourceTemplateId}
                         onToggle={(id) =>
                           setOpenId((p) => (p === id ? null : id))
@@ -721,7 +718,6 @@ export function ExamCanvas({
                         canEdit={canEdit}
                         isOpen={openId === b.question.id}
                         usesKisiKisi={exam.usesKisiKisi}
-                        isAkm={isAkm}
                         sourceTemplateId={sourceTemplateId}
                         onToggle={() =>
                           setOpenId((p) =>
@@ -763,7 +759,6 @@ export function ExamCanvas({
                         index={Object.keys(questionNumber).length + 1}
                         defaultSectionId={section.id}
                         usesKisiKisi={exam.usesKisiKisi}
-                        isAkm={isAkm}
                         slotLockedFromTemplate={false}
                       />
                     )}
@@ -772,6 +767,36 @@ export function ExamCanvas({
             </SectionDropTarget>
           );
         })}
+
+        {sections.length === 1 && questions.length === 0 && groups.length === 0 && canEdit && (
+          <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--accent)] px-4 py-7 text-center">
+            <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]">
+              <FileQuestion size={20} />
+            </div>
+            <h3 className="text-[14px] font-bold text-[var(--foreground)]">
+              Questions Manager masih kosong
+            </h3>
+            <p className="mx-auto mt-1 max-w-md text-[12px] leading-relaxed text-[var(--muted-foreground)]">
+              Mulai dengan menambah soal manual, membuat group untuk stimulus, atau minta AI membuat section dari chat.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleAddQuestion({ sectionId: sections[0]?.id })}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] shadow-sm transition-all hover:opacity-90 active:scale-[0.97]"
+              >
+                <Plus size={13} /> Tambah Soal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddGroup(sections[0]?.id)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-[12px] font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
+              >
+                <Sparkles size={13} /> Buat Group Stimulus
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Add-section CTA (full-width dashed) */}
         {canEdit && (
@@ -815,7 +840,6 @@ function SortableQuestionRow(props: {
   canEdit: boolean;
   isOpen: boolean;
   usesKisiKisi: boolean;
-  isAkm: boolean;
   sourceTemplateId: string | null;
   onToggle: () => void;
   onSaved: () => void;
@@ -856,7 +880,6 @@ function SortableQuestionRow(props: {
         index={props.index}
         isInsideGroup={props.isInsideGroup}
         usesKisiKisi={props.usesKisiKisi}
-        isAkm={props.isAkm}
         slotLockedFromTemplate={slotLocked}
       />
     </div>
@@ -871,7 +894,6 @@ function GroupBlock(props: {
   openId: string | null;
   draft: { id: string; groupId?: string | null; sectionId?: string | null } | null;
   usesKisiKisi: boolean;
-  isAkm: boolean;
   sourceTemplateId: string | null;
   onToggle: (id: string) => void;
   onAddDraft: () => void;
@@ -890,7 +912,6 @@ function GroupBlock(props: {
     openId,
     draft,
     usesKisiKisi,
-    isAkm,
     sourceTemplateId,
     onToggle,
     onAddDraft,
@@ -909,6 +930,15 @@ function GroupBlock(props: {
     opacity: sortable.isDragging ? 0 : 1,
   };
   const drop = useDroppable({ id: `drop-group:${group.id}` });
+  const numbers = questions
+    .map((q) => questionNumber[q.id])
+    .filter((n): n is number => typeof n === "number" && n > 0)
+    .sort((a, b) => a - b);
+  const questionRange = numbers.length === 0
+    ? undefined
+    : numbers.length === 1
+    ? String(numbers[0])
+    : `${numbers[0]}-${numbers[numbers.length - 1]}`;
 
   return (
     <div ref={sortable.setNodeRef} style={style}>
@@ -922,7 +952,9 @@ function GroupBlock(props: {
         <GroupCard
           group={group}
           questionCount={questions.length}
+          questionRange={questionRange}
           canEdit={canEdit}
+          examId={examId}
           onAddQuestion={onAddDraft}
           onChange={onChange}
           dragHandleProps={
@@ -943,7 +975,6 @@ function GroupBlock(props: {
                 canEdit={canEdit}
                 isOpen={openId === q.id}
                 usesKisiKisi={usesKisiKisi}
-                isAkm={isAkm}
                 sourceTemplateId={sourceTemplateId}
                 onToggle={() => onToggle(q.id)}
                 onSaved={onSaved}
@@ -967,7 +998,6 @@ function GroupBlock(props: {
                 defaultGroupId={group.id}
                 defaultSectionId={draft.sectionId ?? undefined}
                 usesKisiKisi={usesKisiKisi}
-                isAkm={isAkm}
                 slotLockedFromTemplate={false}
               />
             )}
@@ -1059,7 +1089,7 @@ function DragPreview({
       <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-[12px] text-[var(--foreground)] shadow-[0_12px_32px_rgba(0,0,0,0.18)] max-w-[640px]">
         <div className="flex items-center gap-2">
           <span className="rounded-md bg-[var(--muted)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted-foreground)]">
-            {q.questionType.replace("_", " ")}
+            {questionTypeLabel(q.questionType)}
           </span>
           <span className="truncate flex-1">{preview || "(soal kosong)"}</span>
         </div>

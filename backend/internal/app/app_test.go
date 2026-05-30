@@ -48,8 +48,8 @@ func TestSecurityHeaders(t *testing.T) {
 
 	headers := map[string]string{
 		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":       "DENY",
-		"Referrer-Policy":       "strict-origin-when-cross-origin",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "strict-origin-when-cross-origin",
 	}
 	for key, expected := range headers {
 		if got := w.Header().Get(key); got != expected {
@@ -59,18 +59,20 @@ func TestSecurityHeaders(t *testing.T) {
 }
 
 func TestCORSPreflight(t *testing.T) {
-	a := newTestApp()
-	req := httptest.NewRequest(http.MethodOptions, "/api/v1/anything", nil)
-	req.Header.Set("Origin", "http://localhost:1666")
-	w := httptest.NewRecorder()
+	for _, origin := range []string{"http://localhost:1666", "http://localhost:3000", "http://localhost:3001"} {
+		a := newTestApp()
+		req := httptest.NewRequest(http.MethodOptions, "/api/v1/anything", nil)
+		req.Header.Set("Origin", origin)
+		w := httptest.NewRecorder()
 
-	a.Handler().ServeHTTP(w, req)
+		a.Handler().ServeHTTP(w, req)
 
-	if w.Code != http.StatusNoContent {
-		t.Errorf("expected 204, got %d", w.Code)
-	}
-	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:1666" {
-		t.Errorf("expected allowed origin, got %q", got)
+		if w.Code != http.StatusNoContent {
+			t.Errorf("%s: expected 204, got %d", origin, w.Code)
+		}
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != origin {
+			t.Errorf("%s: expected allowed origin, got %q", origin, got)
+		}
 	}
 }
 

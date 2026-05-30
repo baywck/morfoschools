@@ -214,7 +214,7 @@ export function LoadKisiKisiSheet({
               <OptionCard
                 icon={<Layers size={14} />}
                 title={hasBlueprint ? "Pilih template lain" : "Pilih dari Template"}
-                description="Browse blueprint published. Slot, kompetensi, dan AKM dimensions auto-clone."
+                description="Browse blueprint published. Slot CP, Elemen CP, TP, Materi Pokok, dan indikator soal ikut dicloning."
                 onClick={() => setView("templates")}
               />
               <p className="px-1 pt-1 text-[10.5px] text-[var(--muted-foreground)]">
@@ -363,7 +363,7 @@ function TemplateList({
               </p>
               <p className="mt-0.5 text-[10.5px] text-[var(--muted-foreground)]">
                 {t.curriculumCode.toUpperCase()} ·{" "}
-                {t.blueprintType.replace("akm_", "AKM ")} · {t.totalSlots} slot
+                Kurikulum Merdeka · {t.totalSlots} slot
                 · {t.totalPoints} pts
                 {t.strictCoverage ? " · strict" : ""}
               </p>
