@@ -95,6 +95,8 @@ Reviewer audit (2026-05-19) flagged BLOCKERS in both. Neither is merge-ready.
   - [x] frontend kisi-kisi plan progress banner
   - [x] frontend API helpers for action plan summary + run-next
   - [x] Go integration test scaffold for action plan endpoints
+  - [x] explicit frontend trigger for audit semua kisi-kisi action plan
+  - [x] smoke script for explicit audit semua kisi-kisi flow
   - [x] unused legacy agent code cleanup (partial)
 
 ## Completed
