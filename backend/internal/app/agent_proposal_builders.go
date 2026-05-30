@@ -150,7 +150,7 @@ func (a *App) handleLargeBlueprintSlotsRequest(w http.ResponseWriter, r *http.Re
 		INSERT INTO agent_action_plans (
 			tenant_id, user_id, exam_id, scope_type, source,
 			goal, intent_summary, plan_json, status, current_batch_index, total_batches, progress_percent
-		) VALUES ($1, $2, $3, 'exam', 'bulk_generate', $4, $5, $6, 'draft', 0, $7, 0)
+		) VALUES ($1, $2, $3, 'exam', 'bulk', $4, $5, $6, 'draft', 0, $7, 0)
 		RETURNING id::text
 	`, tenantID, userID, examID, goal, req.Message, string(planJSON), batchCount).Scan(&planID)
 	if err != nil {
