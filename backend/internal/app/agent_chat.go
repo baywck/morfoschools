@@ -59,22 +59,17 @@ func (a *App) resolveOrCreateSession(ctx context.Context, suppliedID, tenantID, 
 			return id, nil
 		}
 	}
+	// If the client does not supply a session id, always start a fresh
+	// conversation. Do not resurrect the most recent scoped session here:
+	// after the user clears chat history, frontend intentionally removes
+	// its local session id, and reusing an older scoped session makes old
+	// messages appear again after reload.
 	var id string
-	err := a.db.QueryRowContext(ctx,
-		`SELECT id FROM ai_sessions WHERE tenant_id=NULLIF($1,'')::uuid AND user_id=$2 AND scope_key=$3 ORDER BY last_active_at DESC LIMIT 1`,
-		tenantID, userID, scopeKey,
-	).Scan(&id)
-	if err == nil && id != "" {
-		return id, nil
-	}
-	if err != nil && err != sql.ErrNoRows {
-		return "", err
-	}
 	title := "Chat"
 	if strings.HasPrefix(scopeKey, "exam:") {
 		title = "Exam chat"
 	}
-	err = a.db.QueryRowContext(ctx,
+	err := a.db.QueryRowContext(ctx,
 		`INSERT INTO ai_sessions (tenant_id, user_id, title, scope_key) VALUES (NULLIF($1,'')::uuid, $2, $3, $4) RETURNING id`,
 		tenantID, userID, title, scopeKey,
 	).Scan(&id)
