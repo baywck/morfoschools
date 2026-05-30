@@ -27,13 +27,26 @@ type agentContextExam struct {
 }
 
 type agentContextBlueprint struct {
-	ExistingSlotCount      int            `json:"existingSlotCount"`
-	ByElement              map[string]int `json:"byElement,omitempty"`
-	ByCognitiveLevel       map[string]int `json:"byCognitiveLevel,omitempty"`
-	ByQuestionType         map[string]int `json:"byQuestionType,omitempty"`
-	RecentMaterials        []string       `json:"recentMaterials,omitempty"`
-	RecentIndicators       []string       `json:"recentIndicators,omitempty"`
-	PotentialDuplicateHint []string       `json:"potentialDuplicateHints,omitempty"`
+	ExistingSlotCount      int                       `json:"existingSlotCount"`
+	ByElement              map[string]int            `json:"byElement,omitempty"`
+	ByCognitiveLevel       map[string]int            `json:"byCognitiveLevel,omitempty"`
+	ByQuestionType         map[string]int            `json:"byQuestionType,omitempty"`
+	Slots                  []agentContextSlotSummary `json:"slots,omitempty"`
+	RecentMaterials        []string                  `json:"recentMaterials,omitempty"`
+	RecentIndicators       []string                  `json:"recentIndicators,omitempty"`
+	PotentialDuplicateHint []string                  `json:"potentialDuplicateHints,omitempty"`
+}
+
+type agentContextSlotSummary struct {
+	Position            int    `json:"position"`
+	ElemenCP            string `json:"elemenCp,omitempty"`
+	CapaianPembelajaran string `json:"capaianPembelajaran,omitempty"`
+	TujuanPembelajaran  string `json:"tujuanPembelajaran,omitempty"`
+	MateriPokok         string `json:"materiPokok,omitempty"`
+	CognitiveLevel      string `json:"cognitiveLevel,omitempty"`
+	QuestionType        string `json:"questionType,omitempty"`
+	IndikatorSoal       string `json:"indikatorSoal,omitempty"`
+	Connected           bool   `json:"connected"`
 }
 
 type agentContextMessage struct {
@@ -111,21 +124,33 @@ func (a *App) loadAgentRecentMessages(ctx context.Context, sessionID string, lim
 	return out
 }
 
+func truncateNullStringForPrompt(value sql.NullString, maxChars int) string {
+	if !value.Valid {
+		return ""
+	}
+	return truncateForPrompt(strings.TrimSpace(value.String), maxChars)
+}
+
 func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID string) agentContextBlueprint {
 	bp := agentContextBlueprint{ByElement: map[string]int{}, ByCognitiveLevel: map[string]int{}, ByQuestionType: map[string]int{}}
 	if a.db == nil || examID == "" {
 		return bp
 	}
 	rows, err := a.db.QueryContext(ctx, `
-		SELECT COALESCE(NULLIF(TRIM(s.elemen_cp), ''), 'unknown') AS elemen_cp,
+		SELECT s.position,
+		       COALESCE(NULLIF(TRIM(s.elemen_cp), ''), 'unknown') AS elemen_cp,
 		       COALESCE(NULLIF(TRIM(s.cognitive_level), ''), 'unknown') AS cognitive_level,
 		       COALESCE(NULLIF(TRIM(s.question_type), ''), 'unknown') AS question_type,
 		       NULLIF(TRIM(COALESCE(s.materi_pokok, s.materi, '')), '') AS materi,
-		       NULLIF(TRIM(COALESCE(s.indikator_soal, s.indikator, '')), '') AS indikator
+		       NULLIF(TRIM(COALESCE(s.indikator_soal, s.indikator, '')), '') AS indikator,
+		       NULLIF(TRIM(s.capaian_pembelajaran), '') AS capaian_pembelajaran,
+		       NULLIF(TRIM(s.tujuan_pembelajaran), '') AS tujuan_pembelajaran,
+		       s.question_id IS NOT NULL AS connected
 		FROM exam_blueprint_slots s
 		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id
 		WHERE b.tenant_id=$1 AND b.exam_id=$2
 		ORDER BY s.position ASC
+		LIMIT 80
 	`, tenantID, examID)
 	if err != nil {
 		return bp
@@ -134,15 +159,18 @@ func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID st
 	seenMaterial := map[string]bool{}
 	seenIndicator := map[string]bool{}
 	for rows.Next() {
+		var position int
 		var element, level, qType string
-		var material, indicator sql.NullString
-		if err := rows.Scan(&element, &level, &qType, &material, &indicator); err != nil {
+		var material, indicator, cp, tp sql.NullString
+		var connected bool
+		if err := rows.Scan(&position, &element, &level, &qType, &material, &indicator, &cp, &tp, &connected); err != nil {
 			continue
 		}
 		bp.ExistingSlotCount++
 		bp.ByElement[element]++
 		bp.ByCognitiveLevel[level]++
 		bp.ByQuestionType[qType]++
+		bp.Slots = append(bp.Slots, agentContextSlotSummary{Position: position, ElemenCP: element, CapaianPembelajaran: truncateNullStringForPrompt(cp, 360), TujuanPembelajaran: truncateNullStringForPrompt(tp, 280), MateriPokok: truncateNullStringForPrompt(material, 160), CognitiveLevel: level, QuestionType: qType, IndikatorSoal: truncateNullStringForPrompt(indicator, 320), Connected: connected})
 		if material.Valid {
 			m := strings.TrimSpace(material.String)
 			key := strings.ToLower(m)

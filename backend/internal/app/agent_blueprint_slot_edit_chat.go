@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var chatBlueprintSlotEditRe = regexp.MustCompile(`(?i)\b(?:slot|nomor)\s*(\d+)(?:\s*[-–]\s*(\d+))?\b`)
+var chatBlueprintSlotEditRe = regexp.MustCompile(`(?i)\b(?:slot|nomor|nomer|no\.?)\s*(\d+)(?:\s*[-–]\s*(\d+))?\b`)
 
 func (a *App) tryCreateChatBlueprintSlotEditProposal(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest) bool {
 	if !isBlueprintSlotEditChatRequest(req) {
@@ -88,7 +88,7 @@ func isBlueprintSlotEditChatRequest(req aiChatRequest) bool {
 	if !strings.Contains(req.Shadow.Route, "/kisi-kisi") {
 		return false
 	}
-	if !(strings.Contains(lower, "slot") || strings.Contains(lower, "nomor")) {
+	if !(strings.Contains(lower, "slot") || strings.Contains(lower, "nomor") || strings.Contains(lower, "nomer") || strings.Contains(lower, "no ") || strings.Contains(lower, "no.")) {
 		return false
 	}
 	return strings.Contains(lower, "ubah") || strings.Contains(lower, "perbaiki") || strings.Contains(lower, "edit") || strings.Contains(lower, "revisi") || strings.Contains(lower, "tp") || strings.Contains(lower, "tujuan pembelajaran") || strings.Contains(lower, "indikator") || strings.Contains(lower, "condition") || strings.Contains(lower, "degree")
