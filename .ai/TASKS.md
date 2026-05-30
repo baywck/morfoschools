@@ -83,7 +83,7 @@ Reviewer audit (2026-05-19) flagged BLOCKERS in both. Neither is merge-ready.
 - [ ] AI Phase 3: task states for long workflows (50 exam questions)
 
 ## In Progress
-- [ ] Execution planner kisi-kisi-first: universal action plan, kisi-kisi audit/repair/completion runners, plan progress summary, retry-friendly batch runner, smoke tests, deeper legacy cleanup (partial)
+- [ ] Execution planner kisi-kisi-first: universal action plan, kisi-kisi audit/repair/completion runners, plan progress summary, retry-friendly batch runner, smoke tests, frontend progress surface, integration test scaffold, deeper legacy cleanup (partial)
   - [x] universal action plan tables + plan loader
   - [x] kisi-kisi audit runner
   - [x] kisi-kisi repair runner
@@ -92,6 +92,9 @@ Reviewer audit (2026-05-19) flagged BLOCKERS in both. Neither is merge-ready.
   - [x] retry-friendly next-batch runner
   - [x] integration smoke script for kisi-kisi action plan
   - [x] fail + retry smoke script for batch recovery
+  - [x] frontend kisi-kisi plan progress banner
+  - [x] frontend API helpers for action plan summary + run-next
+  - [x] Go integration test scaffold for action plan endpoints
   - [x] unused legacy agent code cleanup (partial)
 
 ## Completed
