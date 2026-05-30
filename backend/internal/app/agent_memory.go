@@ -73,10 +73,55 @@ func (a *App) rememberAssistantBlueprintDraft(ctx context.Context, tenantID, ses
 
 func (a *App) latestBlueprintDraft(ctx context.Context, tenantID, sessionID, scopeKey string) (agentBlueprintDraftMemo, bool) {
 	mem := a.loadAgentSessionMemory(ctx, tenantID, sessionID, scopeKey)
+	if draft, ok := latestUsableBlueprintDraft(mem); ok {
+		return draft, true
+	}
+	if recovered, ok := a.recoverLatestBlueprintDraftFromMessages(ctx, tenantID, sessionID, scopeKey); ok {
+		return recovered, true
+	}
+	return agentBlueprintDraftMemo{}, false
+}
+
+func latestUsableBlueprintDraft(mem agentSessionMemory) (agentBlueprintDraftMemo, bool) {
 	for i := len(mem.Drafts) - 1; i >= 0; i-- {
 		if len(mem.Drafts[i].Slots) > 0 && mem.Drafts[i].Status != "saved" && mem.Drafts[i].Status != "rejected" {
 			return mem.Drafts[i], true
 		}
+	}
+	return agentBlueprintDraftMemo{}, false
+}
+
+func (a *App) recoverLatestBlueprintDraftFromMessages(ctx context.Context, tenantID, sessionID, scopeKey string) (agentBlueprintDraftMemo, bool) {
+	if a.db == nil || sessionID == "" {
+		return agentBlueprintDraftMemo{}, false
+	}
+	rows, err := a.db.QueryContext(ctx, `
+		SELECT content FROM ai_messages
+		WHERE session_id=$1 AND role='assistant'
+		ORDER BY created_at DESC
+		LIMIT 8
+	`, sessionID)
+	if err != nil {
+		return agentBlueprintDraftMemo{}, false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var content string
+		if err := rows.Scan(&content); err != nil {
+			continue
+		}
+		slots := extractBlueprintDraftSlotsFromText(content)
+		if len(slots) == 0 {
+			continue
+		}
+		draft := agentBlueprintDraftMemo{DraftID: "draft_" + strconv.FormatInt(time.Now().UnixNano(), 36), Range: inferDraftRange(slots), Status: "discussed", Source: "assistant_message_recovered", Slots: slots, CreatedAt: time.Now().UTC().Format(time.RFC3339)}
+		mem := a.loadAgentSessionMemory(ctx, tenantID, sessionID, scopeKey)
+		mem.Drafts = append(mem.Drafts, draft)
+		if len(mem.Drafts) > 12 {
+			mem.Drafts = mem.Drafts[len(mem.Drafts)-12:]
+		}
+		a.saveAgentSessionMemory(ctx, tenantID, sessionID, scopeKey, mem)
+		return draft, true
 	}
 	return agentBlueprintDraftMemo{}, false
 }
@@ -93,7 +138,7 @@ func (a *App) markLatestBlueprintDraftStatus(ctx context.Context, tenantID, sess
 }
 
 var blueprintSlotHeaderRe = regexp.MustCompile(`(?i)^\s*(?:slot\s*)?(\d+)\s*[\).:-]?\s*$`)
-var blueprintSlotInlineHeaderRe = regexp.MustCompile(`(?i)^\s*slot\s*(\d+)\s*[·\-–—:]\s*(.+)$`)
+var blueprintSlotInlineHeaderRe = regexp.MustCompile(`(?i)^\s*\*{0,2}slot\s*(\d+)\*{0,2}\s*[·\-–—:]\s*(.+)$`)
 
 func extractBlueprintDraftSlotsFromText(content string) []agentBlueprintSlotDraft {
 	lines := strings.Split(content, "\n")
@@ -112,7 +157,7 @@ func extractBlueprintDraftSlotsFromText(content string) []agentBlueprintSlotDraf
 		current = agentBlueprintSlotDraft{}
 	}
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(strings.Trim(line, "-*• "))
+		trimmed := cleanDraftLine(line)
 		if trimmed == "" {
 			continue
 		}
@@ -186,6 +231,13 @@ func parseBlueprintInlineHeader(line string, slot *agentBlueprintSlotDraft) {
 			slot.QuestionType = "short_answer"
 		}
 	}
+}
+
+func cleanDraftLine(line string) string {
+	trimmed := strings.TrimSpace(strings.Trim(line, "-*• "))
+	trimmed = strings.ReplaceAll(trimmed, "**", "")
+	trimmed = strings.ReplaceAll(trimmed, "__", "")
+	return strings.TrimSpace(trimmed)
 }
 
 func splitBlueprintHeaderParts(value string) []string {

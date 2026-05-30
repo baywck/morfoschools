@@ -3,7 +3,7 @@ package app
 import "testing"
 
 func TestExtractBlueprintDraftSlotsFromNarrativeFormat(t *testing.T) {
-	content := `Slot 16 · UUD 1945 · C5 · Esai
+	content := `**Slot 16** · UUD 1945 · C5 · Esai
 
 Materi: Pelanggaran hak dan pengingkaran kewajiban warga negara
 

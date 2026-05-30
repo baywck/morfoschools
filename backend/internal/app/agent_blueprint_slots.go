@@ -46,11 +46,15 @@ func appendBlueprintSlotQualityWarnings(args agentCreateBlueprintSlotsArgs) agen
 		seen[warning] = true
 	}
 	for i, slot := range args.Slots {
+		slotNumber := slot.Position
+		if slotNumber <= 0 {
+			slotNumber = i + 1
+		}
 		for _, issue := range validateKurikulumMerdekaBlueprintSlot(slot) {
 			if issue.Severity != curriculumIssueWarning {
 				continue
 			}
-			msg := fmt.Sprintf("Slot %d: %s", i+1, issue.Message)
+			msg := fmt.Sprintf("Slot %d: %s", slotNumber, issue.Message)
 			if !seen[msg] {
 				args.Warnings = append(args.Warnings, msg)
 				seen[msg] = true
