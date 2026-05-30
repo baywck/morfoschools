@@ -16,6 +16,14 @@ type agentIntentResponse struct {
 
 func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest) bool {
 	lower := strings.ToLower(req.Message)
+
+	// Check if user wants to run an action plan batch
+	if examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"]); examID != "" {
+		if isActionPlanRunRequest(lower) {
+			return a.tryRunActiveActionPlanBatch(w, r, tenantID, userID, sessionID, examID)
+		}
+	}
+
 	if isAgentExamDeleteIntent(lower) {
 		content := a.askLLMForErrorMessage(r.Context(), tenantID, userID, "User ingin menghapus ujian melalui chat", "AI tidak memiliki izin untuk menghapus ujian. Penghapusan harus dilakukan langsung oleh user dari halaman Exams.")
 		if content == "" {
@@ -260,6 +268,90 @@ func (a *App) handleAgentPlanRequestFromIntent(w http.ResponseWriter, r *http.Re
 		"sessionId": sessionID,
 		"planId":    detail.ID,
 		"plan":      detail,
+	})
+	return true
+}
+
+// isActionPlanRunRequest checks if the user message is requesting to run an action plan batch.
+func isActionPlanRunRequest(lower string) bool {
+	runKeywords := []string{"jalankan", "eksekusi", "lakukan", "mulai", "batch", "run", "start"}
+	for _, kw := range runKeywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// tryRunActiveActionPlanBatch attempts to run the next batch of an active action plan.
+func (a *App) tryRunActiveActionPlanBatch(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID, examID string) bool {
+	plan, err := a.loadActiveAgentActionPlanForExam(r.Context(), examID, false)
+	if err != nil || plan.ID == "" || (plan.Status != agentActionPlanActive && plan.Status != agentActionPlanDraft && plan.Status != agentActionPlanFailed) {
+		return false // no active plan, let normal flow handle it
+	}
+
+	// Find next pending or failed batch
+	var nextBatch *agentActionPlanBatch
+	for i := range plan.Batches {
+		b := &plan.Batches[i]
+		if b.Status == agentBatchPending || b.Status == agentBatchFailed {
+			nextBatch = b
+			break
+		}
+	}
+	if nextBatch == nil {
+		return false // no pending batch
+	}
+
+	// Activate plan if draft
+	if plan.Status == agentActionPlanDraft || plan.Status == agentActionPlanFailed {
+		_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_action_plans SET status=$2, updated_at=now() WHERE id=$1`, plan.ID, agentActionPlanActive)
+	}
+
+	// Reset failed batch
+	if nextBatch.Status == agentBatchFailed {
+		_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_action_plan_batches SET status=$3, error='', updated_at=now() WHERE id=$1 AND status=$2`, nextBatch.ID, agentBatchFailed, agentBatchPending)
+		nextBatch.Status = agentBatchPending
+	}
+
+	// Set batch to running
+	_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_action_plan_batches SET status=$3, updated_at=now() WHERE id=$1 AND status=$2`, nextBatch.ID, nextBatch.Status, agentBatchRunning)
+
+	// Execute the batch
+	result, execErr := a.runAgentActionPlanBatch(r.Context(), tenantID, userID, plan, *nextBatch)
+	if execErr != nil {
+		_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_action_plan_batches SET status='failed', error=$2, updated_at=now() WHERE id=$1`, nextBatch.ID, execErr.Error())
+		_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_action_plans SET status='failed', updated_at=now() WHERE id=$1`, plan.ID)
+		content := a.askLLMForErrorMessage(r.Context(), tenantID, userID, "Batch execution failed", execErr.Error())
+		if content == "" {
+			content = "Batch execution failed: " + execErr.Error()
+		}
+		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID})
+		return true
+	}
+
+	// Update batch as completed
+	resultJSON := mustJSONRaw(result)
+	_, _ = a.db.ExecContext(r.Context(), `UPDATE agent_action_plan_batches SET status='confirmed', completed_units=progress_units, result_json=$2, updated_at=now() WHERE id=$1`, nextBatch.ID, resultJSON)
+
+	// Refresh plan progress
+	_ = a.refreshAgentActionPlanProgress(r.Context(), plan.ID)
+
+	// Reload plan
+	updatedPlan, _ := a.loadAgentActionPlan(r.Context(), plan.ID)
+
+	// Generate message
+	content := a.summarizeActionPlanBatchResultWithLLM(r.Context(), tenantID, userID, *nextBatch, result)
+	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message":    map[string]string{"role": "assistant", "content": content},
+		"sessionId":  sessionID,
+		"planId":     plan.ID,
+		"batchIndex": nextBatch.BatchIndex,
+		"result":     result,
+		"plan":       updatedPlan,
 	})
 	return true
 }
