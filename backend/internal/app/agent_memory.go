@@ -138,7 +138,7 @@ func (a *App) markLatestBlueprintDraftStatus(ctx context.Context, tenantID, sess
 }
 
 var blueprintSlotHeaderRe = regexp.MustCompile(`(?i)^\s*(?:slot\s*)?(\d+)\s*[\).:-]?\s*$`)
-var blueprintSlotInlineHeaderRe = regexp.MustCompile(`(?i)^\s*\*{0,2}slot\s*(\d+)\*{0,2}\s*[·\-–—:]\s*(.+)$`)
+var blueprintSlotInlineHeaderRe = regexp.MustCompile(`(?i)^\s*\*{0,2}(?:slot\s*)?(\d+)\*{0,2}\s*[·\-–—:]\s*(.+)$`)
 
 func extractBlueprintDraftSlotsFromText(content string) []agentBlueprintSlotDraft {
 	lines := strings.Split(content, "\n")

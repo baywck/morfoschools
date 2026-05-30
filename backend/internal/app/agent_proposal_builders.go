@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -27,18 +26,7 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 	}
 	args = appendBlueprintSlotQualityWarnings(args)
 	if fields := a.validateAgentCreateBlueprintSlotsArgs(r.Context(), tenantID, userID, args); len(fields) > 0 {
-		badSlots := 0
-		for k := range fields {
-			if strings.HasPrefix(k, "slots.") {
-				badSlots++
-			}
-		}
-		var content string
-		if badSlots > 0 {
-			content = fmt.Sprintf("Saya sudah menyusun draft, tapi %d slot belum memenuhi aturan Kurikulum Merdeka (TP harus ABCD dengan KKO terukur, indikator harus berbasis stimulus 'Disajikan ...'). Coba minta lagi dengan jumlah lebih kecil atau topik lebih spesifik, lalu saya susun ulang.", badSlots)
-		} else {
-			content = buildAgentProposalValidationMessage(fields)
-		}
+		content := buildAgentProposalValidationMessage(fields)
 		if r.Context().Err() != nil {
 			return true
 		}

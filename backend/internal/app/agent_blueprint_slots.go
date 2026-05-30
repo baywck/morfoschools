@@ -31,12 +31,6 @@ func (a *App) validateAgentCreateBlueprintSlotsArgs(ctx context.Context, tenantI
 	if len(args.Slots) > 100 {
 		fields["slots"] = "Maksimal 100 slot dalam satu proposal"
 	}
-	for i, slot := range args.Slots {
-		issues := validateKurikulumMerdekaBlueprintSlot(slot)
-		if hasBlockingCurriculumIssues(issues) {
-			fields[fmt.Sprintf("slots.%d", i)] = "Slot kisi-kisi belum memenuhi aturan Kurikulum Merdeka"
-		}
-	}
 	return fields
 }
 
@@ -51,9 +45,6 @@ func appendBlueprintSlotQualityWarnings(args agentCreateBlueprintSlotsArgs) agen
 			slotNumber = i + 1
 		}
 		for _, issue := range validateKurikulumMerdekaBlueprintSlot(slot) {
-			if issue.Severity != curriculumIssueWarning {
-				continue
-			}
 			msg := fmt.Sprintf("Slot %d: %s", slotNumber, issue.Message)
 			if !seen[msg] {
 				args.Warnings = append(args.Warnings, msg)

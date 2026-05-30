@@ -11,7 +11,7 @@ TP: Peserta didik dapat mengevaluasi solusi penanganan kasus pelanggaran hak war
 
 Indikator: Disajikan studi kasus pelanggaran hak sipil warga negara yang belum terselesaikan, peserta didik dapat mengevaluasi kelemahan solusi yang diajukan pemerintah berdasarkan UUD 1945 dengan menyertakan minimal dua kriteria evaluasi.
 
-Slot 17 · NKRI · C3 · Benar/Salah
+17 · NKRI · C3 · Benar/Salah
 
 Materi: Bentuk negara dan bentuk pemerintahan Indonesia
 

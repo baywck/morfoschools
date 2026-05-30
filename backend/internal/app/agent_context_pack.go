@@ -8,13 +8,14 @@ import (
 )
 
 type agentContextPack struct {
-	SessionID string                `json:"sessionId,omitempty"`
-	ExamID    string                `json:"examId,omitempty"`
-	Exam      agentContextExam      `json:"exam,omitempty"`
-	Blueprint agentContextBlueprint `json:"blueprint,omitempty"`
-	Memory    agentSessionMemory    `json:"memory,omitempty"`
-	Recent    []agentContextMessage `json:"recentMessages,omitempty"`
-	Notes     []string              `json:"notes,omitempty"`
+	SessionID     string                `json:"sessionId,omitempty"`
+	ExamID        string                `json:"examId,omitempty"`
+	Exam          agentContextExam      `json:"exam,omitempty"`
+	Blueprint     agentContextBlueprint `json:"blueprint,omitempty"`
+	Memory        agentSessionMemory    `json:"memory,omitempty"`
+	QualityRubric []string              `json:"qualityRubric,omitempty"`
+	Recent        []agentContextMessage `json:"recentMessages,omitempty"`
+	Notes         []string              `json:"notes,omitempty"`
 }
 
 type agentContextExam struct {
@@ -47,6 +48,7 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 	}
 	scopeKey := deriveScopeKey(active)
 	pack.Memory = a.loadAgentSessionMemory(ctx, tenantID, sessionID, scopeKey)
+	pack.QualityRubric = agentBlueprintQualityRubric()
 	pack.Recent = a.loadAgentRecentMessages(ctx, sessionID, 16, 2200)
 	if pack.ExamID != "" {
 		if ctxResp, err := a.ensureExamCurriculumContext(ctx, tenantID, pack.ExamID); err == nil {
@@ -58,6 +60,19 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 		pack.Blueprint = a.loadAgentBlueprintContext(ctx, tenantID, pack.ExamID)
 	}
 	return pack
+}
+
+func agentBlueprintQualityRubric() []string {
+	return []string{
+		"Kurikulum Merdeka: gunakan CP/Elemen CP/TP; jangan gunakan KD/SK.",
+		"Setiap slot wajib punya ABCD: Audience=peserta didik, Behavior=KKO terukur, Condition=stimulus/konteks yang disajikan, Degree=kriteria keberhasilan eksplisit.",
+		"Indikator wajib berbasis stimulus dan operasional: awali konteks seperti Disajikan wacana/studi kasus/data/diagram/tabel/infografik/skenario, lalu tugas peserta didik.",
+		"KKO harus selaras dengan level: C1 mengingat, C2 memahami/menjelaskan, C3 menerapkan/menentukan, C4 menganalisis, C5 mengevaluasi, C6 merumuskan/merancang/mencipta.",
+		"Degree harus eksplisit: misalnya dengan tepat, minimal dua, berdasarkan prinsip/kriteria tertentu, aspek tertentu, atau alasan logis.",
+		"Satu indikator = satu soal; hindari dua tugas besar dalam satu indikator.",
+		"Untuk HOTS C4-C6, stimulus harus bermakna dan menuntut penalaran, bukan trivia/hafalan dangkal.",
+		"Materi/indikator harus sesuai subject, kelas/fase, CP, dan tidak menduplikasi slot yang sudah ada.",
+	}
 }
 
 func (a *App) agentContextPackJSON(ctx context.Context, tenantID, sessionID string, active map[string]string) string {
