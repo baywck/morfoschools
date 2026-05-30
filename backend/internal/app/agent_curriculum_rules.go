@@ -66,11 +66,14 @@ func validateKurikulumMerdekaBlueprintSlot(slot agentBlueprintSlotDraft) []curri
 	}
 	if level != "" {
 		if !containsKKOForLevel(slot.TujuanPembelajaran, level) {
-			issues = append(issues, curriculumIssue{Code: "tp_kko_mismatch", Severity: curriculumIssueWarning, Field: "tujuanPembelajaran", Message: "KKO pada TP belum tampak selaras dengan level " + level})
+			issues = append(issues, curriculumIssue{Code: "tp_kko_mismatch", Severity: curriculumIssueError, Field: "tujuanPembelajaran", Message: "KKO pada TP harus selaras dengan level " + level})
 		}
 		if !containsKKOForLevel(slot.IndikatorSoal, level) {
-			issues = append(issues, curriculumIssue{Code: "indicator_kko_mismatch", Severity: curriculumIssueWarning, Field: "indikatorSoal", Message: "KKO pada indikator belum tampak selaras dengan level " + level})
+			issues = append(issues, curriculumIssue{Code: "indicator_kko_mismatch", Severity: curriculumIssueError, Field: "indikatorSoal", Message: "KKO pada indikator harus selaras dengan level " + level})
 		}
+	}
+	if strings.TrimSpace(slot.TujuanPembelajaran) != "" && !hasTPDegree(slot.TujuanPembelajaran) {
+		issues = append(issues, curriculumIssue{Code: "tp_missing_degree", Severity: curriculumIssueError, Field: "tujuanPembelajaran", Message: "TP wajib memuat Degree/kriteria keberhasilan yang eksplisit, misalnya 'dengan tepat', 'minimal dua', atau 'berdasarkan kriteria ...'"})
 	}
 	if hasMultipleCompetencyConjunctions(slot.TujuanPembelajaran) {
 		issues = append(issues, curriculumIssue{Code: "tp_multiple_competencies", Severity: curriculumIssueWarning, Field: "tujuanPembelajaran", Message: "Satu TP sebaiknya hanya memuat satu kompetensi; pecah TP bila ada beberapa KKO utama"})
@@ -116,6 +119,21 @@ func containsKKOForLevel(text, level string) bool {
 	lower := strings.ToLower(text)
 	for _, verb := range verbs {
 		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTPDegree(tp string) bool {
+	lower := strings.ToLower(tp)
+	markers := []string{
+		"dengan tepat", "secara tepat", "dengan benar", "secara benar", "dengan logis", "secara logis",
+		"dengan kritis", "secara kritis", "minimal ", "paling ", "secara efektif", "yang efektif",
+		"berdasarkan kriteria", "berdasarkan prinsip", "berdasarkan nilai", "berdasarkan indikator", "sesuai kriteria", "sesuai prinsip", "sesuai konteks",
+	}
+	for _, marker := range markers {
+		if strings.Contains(lower, marker) {
 			return true
 		}
 	}

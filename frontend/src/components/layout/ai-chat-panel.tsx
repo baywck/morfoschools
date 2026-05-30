@@ -579,7 +579,7 @@ const MessageBubble = memo(function MessageBubble({
   return (
     <div className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
       <div className={cn(
-        "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[12px] leading-relaxed",
+        "max-w-[95%] rounded-2xl px-3.5 py-2.5 text-[12px] leading-relaxed",
         msg.role === "user"
           ? "rounded-tr-md bg-[var(--brand)] text-white"
           : "rounded-tl-md bg-[var(--shell-input-bg)] border border-[var(--shell-input-border)] text-[var(--shell-foreground)]"
@@ -848,8 +848,8 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
         });
       } catch (err) {
         const msg = err instanceof DOMException && err.name === "AbortError"
-          ? "AI agent terlalu lama merespons. Coba lagi dengan permintaan lebih kecil atau ulangi setelah beberapa detik."
-          : `Tidak bisa terhubung ke backend AI (${API_BASE}). Pastikan backend berjalan dan refresh halaman.`;
+          ? "AI agent terlalu lama merespons atau koneksi request dibatalkan. Coba lagi dengan permintaan lebih kecil."
+          : `Request AI gagal terkirim ke ${API_BASE}. Cek koneksi/browser console; backend belum tentu mati.`;
         throw new Error(msg);
       } finally {
         window.clearTimeout(timeoutId);
@@ -857,7 +857,8 @@ export function AiChatPanel({ open, onClose }: AiChatPanelProps) {
 
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.message?.content) {
-        throw new Error(data?.error?.message || data?.error || "AI agent belum bisa merespons.");
+        const serverMessage = data?.error?.message || data?.error || "AI agent belum bisa merespons.";
+        throw new Error(`AI backend merespons error: ${serverMessage}`);
       }
 
       if (data.sessionId) {

@@ -37,6 +37,25 @@ func TestValidateKurikulumMerdekaBlueprintSlotAcceptsAlignedStimulusIndicator(t 
 	}
 }
 
+func TestValidateKurikulumMerdekaBlueprintSlotBlocksDegreeAndKKOMismatch(t *testing.T) {
+	slot := agentBlueprintSlotDraft{
+		CapaianPembelajaran: "Peserta didik mampu menganalisis fenomena sesuai konteks pembelajaran.",
+		ElemenCP:            "Elemen CP",
+		TujuanPembelajaran:  "Peserta didik dapat merumuskan solusi berdasarkan studi kasus",
+		MateriPokok:         "Materi kontekstual",
+		CognitiveLevel:      "C3",
+		IndikatorSoal:       "Disajikan studi kasus, peserta didik dapat merumuskan solusi berdasarkan data yang tersedia.",
+		QuestionType:        "essay",
+	}
+	issues := validateKurikulumMerdekaBlueprintSlot(slot)
+	if !hasBlockingCurriculumIssues(issues) {
+		t.Fatalf("expected blocking issues, got %#v", issues)
+	}
+	if !hasCurriculumIssue(issues, "tp_kko_mismatch") || !hasCurriculumIssue(issues, "indicator_kko_mismatch") || !hasCurriculumIssue(issues, "tp_missing_degree") {
+		t.Fatalf("expected KKO mismatch and missing degree issues, got %#v", issues)
+	}
+}
+
 func TestValidateAgentQuestionQualityBlocksHOTSWithoutStimulus(t *testing.T) {
 	slot := agentBlueprintSlotDraft{CognitiveLevel: "C4", QuestionType: "multiple_choice", IndikatorSoal: "Peserta didik dapat menganalisis pelanggaran HAM"}
 	q := agentQuestionDraft{Content: "Apa pengertian HAM?", QuestionType: "multiple_choice", Options: []agentQuestionOptionDraft{{Text: "Hak dasar", IsCorrect: true}, {Text: "Kewajiban", IsCorrect: false}}}
