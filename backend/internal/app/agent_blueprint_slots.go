@@ -40,6 +40,26 @@ func (a *App) validateAgentCreateBlueprintSlotsArgs(ctx context.Context, tenantI
 	return fields
 }
 
+func appendBlueprintSlotQualityWarnings(args agentCreateBlueprintSlotsArgs) agentCreateBlueprintSlotsArgs {
+	seen := map[string]bool{}
+	for _, warning := range args.Warnings {
+		seen[warning] = true
+	}
+	for i, slot := range args.Slots {
+		for _, issue := range validateKurikulumMerdekaBlueprintSlot(slot) {
+			if issue.Severity != curriculumIssueWarning {
+				continue
+			}
+			msg := fmt.Sprintf("Slot %d: %s", i+1, issue.Message)
+			if !seen[msg] {
+				args.Warnings = append(args.Warnings, msg)
+				seen[msg] = true
+			}
+		}
+	}
+	return args
+}
+
 func (a *App) buildAgentCreateBlueprintSlotsPreview(ctx context.Context, tenantID string, args agentCreateBlueprintSlotsArgs) string {
 	var title string
 	_ = a.db.QueryRowContext(ctx, `SELECT title FROM exams WHERE id=$1 AND tenant_id=$2`, args.ExamID, tenantID).Scan(&title)

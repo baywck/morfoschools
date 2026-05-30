@@ -37,7 +37,7 @@ func TestValidateKurikulumMerdekaBlueprintSlotAcceptsAlignedStimulusIndicator(t 
 	}
 }
 
-func TestValidateKurikulumMerdekaBlueprintSlotBlocksDegreeAndKKOMismatch(t *testing.T) {
+func TestValidateKurikulumMerdekaBlueprintSlotWarnsDegreeAndKKOMismatch(t *testing.T) {
 	slot := agentBlueprintSlotDraft{
 		CapaianPembelajaran: "Peserta didik mampu menganalisis fenomena sesuai konteks pembelajaran.",
 		ElemenCP:            "Elemen CP",
@@ -48,11 +48,11 @@ func TestValidateKurikulumMerdekaBlueprintSlotBlocksDegreeAndKKOMismatch(t *test
 		QuestionType:        "essay",
 	}
 	issues := validateKurikulumMerdekaBlueprintSlot(slot)
-	if !hasBlockingCurriculumIssues(issues) {
-		t.Fatalf("expected blocking issues, got %#v", issues)
+	if hasBlockingCurriculumIssues(issues) {
+		t.Fatalf("did not expect pedagogical warnings to block proposal, got %#v", issues)
 	}
 	if !hasCurriculumIssue(issues, "tp_kko_mismatch") || !hasCurriculumIssue(issues, "indicator_kko_mismatch") || !hasCurriculumIssue(issues, "tp_missing_degree") {
-		t.Fatalf("expected KKO mismatch and missing degree issues, got %#v", issues)
+		t.Fatalf("expected KKO mismatch and missing degree warnings, got %#v", issues)
 	}
 }
 

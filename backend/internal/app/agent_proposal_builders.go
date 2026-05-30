@@ -25,6 +25,7 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 	if fromMemory {
 		args = repairMemoryBlueprintSlots(args)
 	}
+	args = appendBlueprintSlotQualityWarnings(args)
 	if fields := a.validateAgentCreateBlueprintSlotsArgs(r.Context(), tenantID, userID, args); len(fields) > 0 {
 		badSlots := 0
 		for k := range fields {
