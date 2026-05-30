@@ -82,6 +82,9 @@ Reviewer audit (2026-05-19) flagged BLOCKERS in both. Neither is merge-ready.
 - [ ] Consolidate `ToolRegistry` and `CapabilityRegistry`
 - [ ] AI Phase 3: task states for long workflows (50 exam questions)
 
+## In Progress
+- [ ] Execution planner kisi-kisi-first: universal action plan, kisi-kisi audit/repair runner, deeper legacy cleanup
+
 ## Completed
 - [x] Phase 0: .ai/ memory files, ADRs, AGENTS.md, standards
 - [x] Phase 1: Docker Compose (6 services), migrations (6), backend skeleton, frontend skeleton

@@ -120,10 +120,6 @@ func agentBlueprintQualityRubric() []string {
 	}
 }
 
-func (a *App) agentContextPackJSON(ctx context.Context, tenantID, sessionID string, active map[string]string) string {
-	return mustJSON(a.buildAgentContextPack(ctx, tenantID, sessionID, active))
-}
-
 func (a *App) agentContextPackJSONForTurn(ctx context.Context, tenantID, sessionID string, active map[string]string, userMessage string) string {
 	return mustJSON(a.buildAgentContextPack(ctx, tenantID, sessionID, active, userMessage))
 }
