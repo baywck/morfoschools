@@ -50,6 +50,8 @@ func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Re
 		if !isAgentExamMutationCandidate(lower) {
 			return false
 		}
+	} else if classification.Mode == "plan_request" {
+		return a.handleAgentPlanRequestFromIntent(w, r, tenantID, userID, sessionID, req, classification)
 	} else if classification.Mode != "proposal_request" {
 		return false
 	} else if agentWorkflow(classification.Workflow) == "" && isBlueprintPageRequest(req) {
@@ -215,4 +217,42 @@ func isAgentExamDeleteIntent(lower string) bool {
 		}
 	}
 	return false
+}
+
+func (a *App) handleAgentPlanRequestFromIntent(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest, classification agentTurnClassification) bool {
+	examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"])
+	if examID == "" {
+		writeErrorJSON(w, http.StatusBadRequest, "invalid_request", "Saya butuh examId aktif sebelum membuat rencana eksekusi kisi-kisi.", r)
+		return true
+	}
+	request := agentActionPlanRequest{
+		ScopeType: "exam",
+		ExamID:    examID,
+		Source:    "chat",
+		Goal:      strings.TrimSpace(classification.Reason),
+	}
+	if request.Goal == "" {
+		request.Goal = strings.TrimSpace(req.Message)
+	}
+	planned, err := a.generateAgentActionPlanFromLLM(r.Context(), tenantID, userID, request, req.Message)
+	if err != nil {
+		a.logger.Error("agent intent plan generation failed", "error", err)
+		writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa menyusun rencana eksekusi kisi-kisi dari permintaan ini.", r)
+		return true
+	}
+	detail, err := a.createAgentActionPlanFromLLM(r.Context(), tenantID, userID, sessionID, request, planned)
+	if err != nil {
+		a.logger.Error("agent intent plan creation failed", "error", err)
+		writeErrorJSON(w, http.StatusInternalServerError, "plan_failed", "Gagal menyimpan rencana eksekusi kisi-kisi.", r)
+		return true
+	}
+	content := a.summarizeAgentActionPlanCreation(detail)
+	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message":   map[string]string{"role": "assistant", "content": content},
+		"sessionId": sessionID,
+		"planId":    detail.ID,
+		"plan":      detail,
+	})
+	return true
 }
