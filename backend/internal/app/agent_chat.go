@@ -15,7 +15,6 @@ func (a *App) registerAIChatRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/ai/sessions", a.handleListAISessions)
 	mux.HandleFunc("GET /api/v1/ai/sessions/{id}/messages", a.handleGetAISessionMessages)
 	mux.HandleFunc("DELETE /api/v1/ai/sessions/{id}", a.handleDeleteAISession)
-	mux.HandleFunc("GET /api/v1/ai/debug/context", a.handleAIDebugContext)
 }
 
 type aiChatRequest struct {
@@ -166,21 +165,11 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID
 		return "", resp.Usage.TotalTokens, fmt.Errorf("empty LLM response")
 	}
 	out := strings.TrimSpace(resp.Choices[0].Message.Content)
-	if prefix := buildDiagnosticsPrefix(pack, userMessage); prefix != "" {
-		out = prefix + "\n\n" + out
-	}
 	return out, resp.Usage.TotalTokens, nil
 }
 
 func normalizeForComparison(s string) string {
 	return strings.TrimSpace(strings.ToLower(s))
-}
-
-func buildDiagnosticsPrefix(pack agentContextPack, userMessage string) string {
-	if normalizeForComparison(userMessage) != normalizeForComparison("coba lagi, kamu harusnya sekarang punya tools untuk lookup existing kisi-kisi") {
-		return ""
-	}
-	return fmt.Sprintf("[DIAGNOSTICS] examID=%s existingSlotCount=%d requestedSlotCount=%d blueprintSlots=%d memoryDraftCount=%d recentCount=%d", pack.ExamID, pack.Blueprint.ExistingSlotCount, len(pack.Blueprint.RequestedSlots), len(pack.Blueprint.Slots), len(pack.Memory.Drafts), len(pack.Recent))
 }
 
 func staleBlueprintContextClaim(content string) bool {
@@ -547,27 +536,4 @@ func (a *App) handleDeleteAISession(w http.ResponseWriter, r *http.Request) {
 		a.audit(r.Context(), &tenantID, auth.UserID, "ai.session.delete", "ai_session", sessionID, r)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": sessionID})
-}
-
-func (a *App) handleAIDebugContext(w http.ResponseWriter, r *http.Request) {
-	if !a.RequireCSRF(w, r) {
-		return
-	}
-	sessionID := strings.TrimSpace(r.URL.Query().Get("sessionId"))
-	examID := strings.TrimSpace(r.URL.Query().Get("examId"))
-	tenantID := ""
-	if auth := AuthFromContext(r.Context()); auth != nil {
-		if auth.EffectiveTenantID != nil {
-			tenantID = *auth.EffectiveTenantID
-		}
-	}
-	pack := a.buildAgentContextPack(r.Context(), tenantID, sessionID, map[string]string{"examId": examID}, "debug")
-	writeJSON(w, http.StatusOK, map[string]any{
-		"examID":             pack.ExamID,
-		"existingSlotCount":  pack.Blueprint.ExistingSlotCount,
-		"blueprintSlots":     len(pack.Blueprint.Slots),
-		"requestedSlotCount": len(pack.Blueprint.RequestedSlots),
-		"recentCount":        len(pack.Recent),
-		"memoryDraftCount":   len(pack.Memory.Drafts),
-	})
 }
