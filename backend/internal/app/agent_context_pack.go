@@ -148,7 +148,7 @@ func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID st
 		       s.question_id IS NOT NULL AS connected
 		FROM exam_blueprint_slots s
 		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id
-		WHERE b.tenant_id=$1 AND b.exam_id=$2
+		WHERE ($1 = '' OR b.tenant_id=$1) AND b.exam_id=$2
 		ORDER BY s.position ASC
 		LIMIT 80
 	`, tenantID, examID)
