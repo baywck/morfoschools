@@ -72,7 +72,7 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 	}
 	pack.Memory = a.loadAgentSessionMemory(ctx, tenantID, sessionID, scopeKey)
 	pack.QualityRubric = agentBlueprintQualityRubric()
-	pack.Recent = a.loadAgentRecentMessages(ctx, sessionID, 16, 2200)
+	pack.Recent = a.loadAgentRecentMessages(ctx, sessionID, 20, 4000)
 	if pack.ExamID != "" {
 		if ctxResp, err := a.ensureExamCurriculumContext(ctx, tenantID, pack.ExamID); err == nil {
 			pack.Exam = agentContextExam{SubjectName: ctxResp.SubjectName, GradeLevel: ctxResp.GradeLevel, Phase: ctxResp.Phase, CPStatus: ctxResp.Status, CPSource: ctxResp.Source}
