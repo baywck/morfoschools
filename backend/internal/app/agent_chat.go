@@ -314,38 +314,6 @@ func isNaturalApprovalReply(normalized string) bool {
 	return false
 }
 
-func looksLikeTopicAdvice(message string) bool {
-	m := strings.ToLower(message)
-	return (strings.Contains(m, "topik") || strings.Contains(m, "materi") || strings.Contains(m, "bab")) &&
-		(strings.Contains(m, "tepat") || strings.Contains(m, "cocok") || strings.Contains(m, "sesuai") || strings.Contains(m, "semester") || strings.Contains(m, "kelas") || strings.Contains(m, "rekomendasi") || strings.Contains(m, "sarankan"))
-}
-
-func looksLikeFollowupRecommendation(message string) bool {
-	m := strings.ToLower(strings.TrimSpace(message))
-	return strings.Contains(m, "rekomendasi lain") ||
-		strings.Contains(m, "ada rekomendasi") ||
-		strings.Contains(m, "yang lain") ||
-		strings.Contains(m, "lainnya") ||
-		strings.Contains(m, "alternatif") ||
-		strings.Contains(m, "opsi lain")
-}
-
-func looksLikeSequenceSeriesMaterial(message string) bool {
-	m := strings.ToLower(message)
-	return (strings.Contains(m, "barisan") || strings.Contains(m, "deret")) &&
-		(strings.Contains(m, "materi") || strings.Contains(m, "bahas") || strings.Contains(m, "tentang") || strings.Contains(m, "cocok") || strings.Contains(m, "apa saja"))
-}
-
-func looksLikeGreeting(message string) bool {
-	m := strings.ToLower(strings.TrimSpace(message))
-	return m == "hai" || m == "hay" || m == "halo" || m == "hello" || m == "hi"
-}
-
-func looksLikeComplaint(message string) bool {
-	m := strings.ToLower(message)
-	return strings.Contains(m, "ngga nyambung") || strings.Contains(m, "nggak nyambung") || strings.Contains(m, "ga nyambung") || strings.Contains(m, "gak nyambung") || strings.Contains(m, "tidak nyambung") || strings.Contains(m, "work apanya")
-}
-
 func (a *App) handleListAISessions(w http.ResponseWriter, r *http.Request) {
 	auth := AuthFromContext(r.Context())
 	if auth == nil || auth.UserID == "" {

@@ -1,12 +1,14 @@
 package app
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 )
 
 func (a *App) registerAgentActionPlanRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/ai/action-plans/current", a.handleGetCurrentAgentActionPlan)
+	mux.HandleFunc("GET /api/v1/ai/action-plans/current/summary", a.handleGetCurrentAgentActionPlanSummary)
 	mux.HandleFunc("GET /api/v1/ai/action-plans/{planId}", a.handleGetAgentActionPlan)
 	mux.HandleFunc("POST /api/v1/ai/action-plans", a.handleCreateAgentActionPlan)
 	mux.HandleFunc("POST /api/v1/ai/action-plans/{planId}/run-next", a.handleRunNextAgentActionPlanBatch)
@@ -104,6 +106,56 @@ func (a *App) handleCreateAgentActionPlan(w http.ResponseWriter, r *http.Request
 	})
 }
 
+func (a *App) handleGetCurrentAgentActionPlanSummary(w http.ResponseWriter, r *http.Request) {
+	auth := AuthFromContext(r.Context())
+	if auth == nil || auth.UserID == "" {
+		writeErrorJSON(w, http.StatusUnauthorized, "unauthorized", "Not authenticated", r)
+		return
+	}
+	examID := strings.TrimSpace(r.URL.Query().Get("examId"))
+	if examID == "" {
+		writeValidationError(w, map[string]string{"examId": "examId is required"}, r)
+		return
+	}
+	plan, err := a.loadActiveAgentActionPlanForExam(r.Context(), examID)
+	if err != nil {
+		writeErrorJSON(w, http.StatusNotFound, "not_found", "No active action plan found", r)
+		return
+	}
+	summary := activePlanSummary(plan)
+	issues := map[string]any{}
+	for _, batch := range plan.Batches {
+		if batch.ResultJSON == nil {
+			continue
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal(*batch.ResultJSON, &parsed); err == nil {
+			if childResult, ok := parsed["childResult"].(map[string]any); ok {
+				for key, val := range childResult {
+					if key == "examId" {
+						continue
+					}
+					issues[key] = val
+				}
+			} else {
+				for key, val := range parsed {
+					if key == "examId" {
+						continue
+					}
+					issues[key] = val
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"planId":        plan.ID,
+		"status":        string(plan.Status),
+		"summary":       summary,
+		"domainSummary": issues,
+		"batches":       plan.Batches,
+	})
+}
+
 func (a *App) handleRunNextAgentActionPlanBatch(w http.ResponseWriter, r *http.Request) {
 	auth := AuthFromContext(r.Context())
 	if auth == nil || auth.UserID == "" {
@@ -130,7 +182,7 @@ func (a *App) handleRunNextAgentActionPlanBatch(w http.ResponseWriter, r *http.R
 	var nextBatch *agentActionPlanBatch
 	for i := range plan.Batches {
 		batch := plan.Batches[i]
-		if batch.Status == agentBatchPending || batch.Status == agentBatchProposed || batch.Status == agentBatchRunning {
+		if batch.Status == agentBatchPending || batch.Status == agentBatchProposed || batch.Status == agentBatchRunning || batch.Status == agentBatchFailed {
 			nextBatch = &batch
 			break
 		}
@@ -139,11 +191,18 @@ func (a *App) handleRunNextAgentActionPlanBatch(w http.ResponseWriter, r *http.R
 		writeErrorJSON(w, http.StatusConflict, "no_next_batch", "No pending batch to run", r)
 		return
 	}
-	if plan.Status == agentActionPlanDraft {
+	if plan.Status == agentActionPlanDraft || plan.Status == agentActionPlanFailed {
 		if _, err := a.db.ExecContext(r.Context(), `UPDATE agent_action_plans SET status=$2, updated_at=now() WHERE id=$1`, planID, agentActionPlanActive); err != nil {
 			writeErrorJSON(w, http.StatusInternalServerError, "plan_update_failed", "Could not activate action plan", r)
 			return
 		}
+	}
+	if nextBatch.Status == agentBatchFailed {
+		if _, err := a.db.ExecContext(r.Context(), `UPDATE agent_action_plan_batches SET status=$3, error='', updated_at=now() WHERE id=$1 AND status=$2`, nextBatch.ID, agentBatchFailed, agentBatchPending); err != nil {
+			writeErrorJSON(w, http.StatusInternalServerError, "batch_update_failed", "Could not reset failed batch", r)
+			return
+		}
+		nextBatch.Status = agentBatchPending
 	}
 	if _, err := a.db.ExecContext(r.Context(), `UPDATE agent_action_plan_batches SET status=$3, updated_at=now() WHERE id=$1 AND status=$2`, nextBatch.ID, nextBatch.Status, agentBatchRunning); err != nil {
 		writeErrorJSON(w, http.StatusInternalServerError, "batch_update_failed", "Could not start batch", r)
