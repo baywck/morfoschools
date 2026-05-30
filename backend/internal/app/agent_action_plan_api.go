@@ -124,7 +124,7 @@ func (a *App) handleGetCurrentAgentActionPlanSummary(w http.ResponseWriter, r *h
 		writeValidationError(w, map[string]string{"examId": "examId is required"}, r)
 		return
 	}
-	plan, err := a.loadActiveAgentActionPlanForExam(r.Context(), examID)
+	plan, err := a.loadActiveAgentActionPlanForExam(r.Context(), examID, true)
 	if err != nil {
 		writeErrorJSON(w, http.StatusNotFound, "not_found", "No active action plan found", r)
 		return

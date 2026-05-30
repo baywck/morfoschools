@@ -29,11 +29,24 @@ func (a *App) runAgentActionPlanBatch(ctx context.Context, tenantID, userID stri
 	return runner.RunBatch(ctx, a, tenantID, userID, plan, batch)
 }
 
-func (a *App) loadActiveAgentActionPlanForExam(ctx context.Context, examID string) (agentActionPlanDetail, error) {
+func (a *App) loadActiveAgentActionPlanForExam(ctx context.Context, examID string, latest ...bool) (agentActionPlanDetail, error) {
 	if examID == "" || a.db == nil {
 		return agentActionPlanDetail{}, fmt.Errorf("examId is required")
 	}
 	var planID string
+	if len(latest) > 0 && latest[0] {
+		err := a.db.QueryRowContext(ctx, `
+			SELECT id::text
+			  FROM agent_action_plans
+			 WHERE exam_id=$1
+			 ORDER BY updated_at DESC
+			 LIMIT 1
+		`, examID).Scan(&planID)
+		if err != nil {
+			return agentActionPlanDetail{}, err
+		}
+		return a.loadAgentActionPlan(ctx, planID)
+	}
 	err := a.db.QueryRowContext(ctx, `
 		SELECT id::text
 		  FROM agent_action_plans
