@@ -21,10 +21,9 @@ func (a *App) tryCreateChatBlueprintSlotEditProposal(w http.ResponseWriter, r *h
 	}
 	positions := extractBlueprintSlotPositions(req.Message)
 	if len(positions) == 0 {
-		content := "Slot mana yang ingin diubah? Sebutkan nomor slotnya, misalnya: `ubah TP di slot 2 agar mengikuti ABCD` atau `perbaiki slot 2-5`."
-		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
-		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
-		return true
+		// Do not let backend author semantic clarification text. Fall through to the
+		// LLM discussion/classifier path so the agent, not hardcoded BE copy, handles it.
+		return false
 	}
 	items := []agentEditBlueprintSlotArgs{}
 	previews := []string{}
