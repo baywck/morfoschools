@@ -1601,10 +1601,29 @@ export function runNextAgentActionPlanBatch(planId: string) {
 
 export function createAuditActionPlan(examId: string) {
   return post<{ planId: string }>(`/api/v1/ai/action-plans`, {
+    sessionId: "",
     message: "Audit semua kisi-kisi yang tersedia",
     scopeType: "exam",
     source: "audit",
     goal: "Audit semua kisi-kisi yang tersedia",
     examId,
+    planned: {
+      scopeType: "exam",
+      source: "audit",
+      goal: "Audit semua kisi-kisi yang tersedia",
+      intentSummary: "audit kisi-kisi",
+      batches: [
+        {
+          batchIndex: 1,
+          actionType: "audit",
+          workflow: "audit_blueprint_slots",
+          targetType: "blueprint_slot",
+          targetIds: [examId],
+          argsJson: { examId },
+          preview: "Audit semua kisi-kisi",
+          progressUnits: 1,
+        },
+      ],
+    },
   });
 }
