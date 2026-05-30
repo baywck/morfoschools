@@ -169,7 +169,7 @@ func (a *App) loadAgentBlueprintSlotSummaryByPosition(ctx context.Context, tenan
 		       s.question_id IS NOT NULL AS connected
 		FROM exam_blueprint_slots s
 		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id
-		WHERE ($1 = '' OR b.tenant_id=$1) AND b.exam_id=$2 AND s.position=$3
+		WHERE (NULLIF($1,'')::uuid IS NULL OR b.tenant_id=NULLIF($1,'')::uuid) AND b.exam_id=$2 AND s.position=$3
 		LIMIT 1
 	`, tenantID, examID, position).Scan(&slot.Position, &slot.ElemenCP, &slot.CognitiveLevel, &slot.QuestionType, &material, &indicator, &cp, &tp, &slot.Connected)
 	if err != nil {
@@ -199,7 +199,7 @@ func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID st
 		       s.question_id IS NOT NULL AS connected
 		FROM exam_blueprint_slots s
 		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id
-		WHERE ($1 = '' OR b.tenant_id=$1) AND b.exam_id=$2
+		WHERE (NULLIF($1,'')::uuid IS NULL OR b.tenant_id=NULLIF($1,'')::uuid) AND b.exam_id=$2
 		ORDER BY s.position ASC
 		LIMIT 80
 	`, tenantID, examID)

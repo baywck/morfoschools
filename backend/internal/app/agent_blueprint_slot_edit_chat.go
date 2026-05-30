@@ -127,7 +127,7 @@ func (a *App) findExamBlueprintSlotIDByPosition(ctx context.Context, tenantID, e
 		SELECT s.id::text
 		  FROM exam_blueprint_slots s
 		  JOIN exam_blueprints b ON b.id=s.exam_blueprint_id
-		 WHERE ($1 = '' OR b.tenant_id=$1) AND b.exam_id=$2 AND s.position=$3
+		 WHERE (NULLIF($1,'')::uuid IS NULL OR b.tenant_id=NULLIF($1,'')::uuid) AND b.exam_id=$2 AND s.position=$3
 		 LIMIT 1`, tenantID, examID, position).Scan(&slotID)
 	return slotID, err
 }
