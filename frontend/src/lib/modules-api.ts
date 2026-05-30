@@ -1573,3 +1573,28 @@ export function updateCurriculumCPReference(id: string, data: { subjectName?: st
 export function updateCurriculumCPElement(id: string, data: { name?: string; content?: string; sortOrder?: number }) {
   return patch<{ id: string; status: string }>(`/api/v1/curriculum/cp-elements/${id}`, data);
 }
+
+export interface AgentActionPlanSummaryResponse {
+  planId: string;
+  status: string;
+  summary: {
+    planId: string;
+    goal: string;
+    status: string;
+    currentBatchIndex: number;
+    totalBatches: number;
+    progressPercent: number;
+    nextBatchIndex: number;
+    nextBatchStatus: string;
+  } | null;
+  domainSummary: Record<string, unknown>;
+  batches: unknown[];
+}
+
+export function getAgentActionPlanSummary(examId: string) {
+  return get<AgentActionPlanSummaryResponse>(`/api/v1/ai/action-plans/current/summary?examId=${encodeURIComponent(examId)}`);
+}
+
+export function runNextAgentActionPlanBatch(planId: string) {
+  return post<{ planId: string; batchIndex: number; result: unknown }>(`/api/v1/ai/action-plans/${planId}/run-next`, {});
+}

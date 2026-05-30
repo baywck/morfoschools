@@ -65,6 +65,7 @@ import { questionTypeLabel } from "@/lib/question-labels";
 import { tenantEnabledPhases } from "@/lib/tenant-education";
 import { gradeOptionsForPhases, phaseForGrade } from "@/lib/grade-options";
 import { MerdekaKisiKisiFields } from "@/components/blueprint/merdeka-kisi-kisi-fields";
+import { ExamKisiActionPlanBanner } from "@/components/exams/exam-kisi-action-plan-banner";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -636,6 +637,7 @@ function KisiKisiManagerPanel({
         <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--accent)] p-8 text-center"><Sparkles size={24} className="mx-auto mb-2 text-[var(--muted-foreground)]" /><p className="text-[13px] font-bold text-[var(--foreground)]">Kisi-kisi aktif, tapi belum ada blueprint</p><p className="mt-1 text-[11px] text-[var(--muted-foreground)]">Load template atau gunakan AI reverse-flow dari soal yang sudah ada.</p>{canWrite && <div className="mt-4 flex justify-center gap-2"><button type="button" onClick={onLoadTemplate} className="h-8 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)]">Load Template</button><button type="button" onClick={onGenerateFromQuestions} className="h-8 rounded-lg border border-[var(--border)] px-3 text-[12px] font-semibold text-[var(--foreground)]">Generate dari soal</button></div>}</div>
       ) : (
         <>
+          <ExamKisiActionPlanBanner examId={exam.id} onPlanFinished={() => { window.dispatchEvent(new Event("morfoschools:data-changed")); }} />
           <div className="grid gap-3 md:grid-cols-4">
             <SummaryCard label="Slot kisi-kisi" value={String(total)} />
             <SummaryCard label="Soal terhubung" value={`${filled}/${exam.questionCount}`} />
