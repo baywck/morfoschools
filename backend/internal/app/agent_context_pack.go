@@ -61,6 +61,14 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 		pack.ExamID = strings.TrimSpace(active["examId"])
 	}
 	scopeKey := deriveScopeKey(active)
+	if pack.ExamID == "" {
+		if scopedExamID, scopedKey := a.examIDFromAgentSessionScope(ctx, sessionID); scopedExamID != "" {
+			pack.ExamID = scopedExamID
+			if scopeKey == "global" {
+				scopeKey = scopedKey
+			}
+		}
+	}
 	pack.Memory = a.loadAgentSessionMemory(ctx, tenantID, sessionID, scopeKey)
 	pack.QualityRubric = agentBlueprintQualityRubric()
 	pack.Recent = a.loadAgentRecentMessages(ctx, sessionID, 16, 2200)
@@ -77,6 +85,22 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 		}
 	}
 	return pack
+}
+
+func (a *App) examIDFromAgentSessionScope(ctx context.Context, sessionID string) (string, string) {
+	if a.db == nil || strings.TrimSpace(sessionID) == "" {
+		return "", ""
+	}
+	var scopeKey string
+	if err := a.db.QueryRowContext(ctx, `SELECT scope_key FROM ai_sessions WHERE id=$1`, sessionID).Scan(&scopeKey); err != nil {
+		return "", ""
+	}
+	scopeKey = strings.TrimSpace(scopeKey)
+	if !strings.HasPrefix(scopeKey, "exam:") {
+		return "", scopeKey
+	}
+	examID := strings.TrimSpace(strings.TrimPrefix(scopeKey, "exam:"))
+	return examID, scopeKey
 }
 
 func agentBlueprintQualityRubric() []string {

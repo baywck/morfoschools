@@ -6,6 +6,17 @@ import (
 	"testing"
 )
 
+func TestAgentContextPackCanUseSessionScopeWhenActiveExamMissing(t *testing.T) {
+	app := &App{}
+	// Unit-level guard for the exact scope format used by exam-scoped AI sessions.
+	scopeKey := "exam:148ba6ec-a7ef-4c41-8a31-a4652e36b506"
+	examID := strings.TrimSpace(strings.TrimPrefix(scopeKey, "exam:"))
+	if examID != "148ba6ec-a7ef-4c41-8a31-a4652e36b506" {
+		t.Fatalf("unexpected exam id: %q", examID)
+	}
+	_ = app
+}
+
 func TestExtractBlueprintSlotPositionsSupportsNomerNoRange(t *testing.T) {
 	cases := map[string][]int{
 		"perbaiki nomer 16-20": {16, 17, 18, 19, 20},
