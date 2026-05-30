@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAgentActionPlanSummary, runNextAgentActionPlanBatch, type AgentActionPlanSummaryResponse } from "@/lib/modules-api";
-import { Loader2, RefreshCcw, Sparkles, TriangleAlert } from "lucide-react";
+import { createAuditActionPlan, getAgentActionPlanSummary, runNextAgentActionPlanBatch, type AgentActionPlanSummaryResponse } from "@/lib/modules-api";
+import { ClipboardList, Loader2, RefreshCcw, Sparkles, TriangleAlert } from "lucide-react";
 
 function formatPercent(value: number) {
   return `${value}%`;
@@ -42,6 +42,7 @@ function domainIssueEntries(domainSummary: Record<string, unknown>) {
 export function ExamKisiActionPlanBanner({ examId, onPlanFinished }: { examId: string; onPlanFinished?: () => void }) {
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AgentActionPlanSummaryResponse | null>(null);
 
@@ -50,8 +51,7 @@ export function ExamKisiActionPlanBanner({ examId, onPlanFinished }: { examId: s
     setError(null);
     const res = await getAgentActionPlanSummary(examId);
     if (res.error) {
-      setError(res.error.message);
-      setData(null);
+      setData({ planId: "", status: "", summary: null, domainSummary: {}, batches: [] } as AgentActionPlanSummaryResponse);
     } else {
       setData(res.data ?? null);
     }
@@ -64,16 +64,18 @@ export function ExamKisiActionPlanBanner({ examId, onPlanFinished }: { examId: s
   }, [examId]);
 
   const planStatus = data?.status ?? "";
-  const showBanner = Boolean(data?.planId) && (planStatus === "active" || planStatus === "draft" || planStatus === "failed");
-  if (!showBanner && !loading && !error) {
+  const hasPlan = Boolean(data?.planId);
+  const isCompleted = planStatus === "completed";
+  const isFailed = planStatus === "failed";
+  const isActive = planStatus === "active";
+  const showBanner = loading || error !== null || hasPlan || isCompleted;
+  if (!showBanner) {
     return null;
   }
 
   const summary = data?.summary;
   const domainSummary = (data?.domainSummary ?? {}) as Record<string, unknown>;
   const issues = domainIssueEntries(domainSummary);
-  const isFailed = planStatus === "failed";
-  const isActive = planStatus === "active";
   const nextBatchIndex = summary?.nextBatchIndex ?? 0;
 
   const handleRunNext = async () => {
@@ -86,10 +88,21 @@ export function ExamKisiActionPlanBanner({ examId, onPlanFinished }: { examId: s
       return;
     }
     await fetchSummary();
-    const latestStatus = data?.status ?? "";
-    if (latestStatus === "completed") {
+    if (planStatus === "completed") {
       onPlanFinished?.();
     }
+  };
+
+  const handleCreateAudit = async () => {
+    setCreating(true);
+    setError(null);
+    const res = await createAuditActionPlan(examId);
+    setCreating(false);
+    if (res.error) {
+      setError(res.error.message);
+      return;
+    }
+    await fetchSummary();
   };
 
   return (
@@ -142,6 +155,17 @@ export function ExamKisiActionPlanBanner({ examId, onPlanFinished }: { examId: s
               <RefreshCcw size={13} />
               Refresh
             </button>
+            {isCompleted && (
+              <button
+                type="button"
+                onClick={handleCreateAudit}
+                disabled={creating}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-[12px] font-semibold text-[var(--primary-foreground)] disabled:opacity-50"
+              >
+                {creating ? <Loader2 size={13} className="animate-spin" /> : <ClipboardList size={13} />}
+                Audit ulang semua kisi-kisi
+              </button>
+            )}
             {(isFailed || isActive) && (
               <button
                 type="button"

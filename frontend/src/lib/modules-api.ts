@@ -1598,3 +1598,13 @@ export function getAgentActionPlanSummary(examId: string) {
 export function runNextAgentActionPlanBatch(planId: string) {
   return post<{ planId: string; batchIndex: number; result: unknown }>(`/api/v1/ai/action-plans/${planId}/run-next`, {});
 }
+
+export function createAuditActionPlan(examId: string) {
+  return post<{ planId: string }>(`/api/v1/ai/action-plans`, {
+    message: "Audit semua kisi-kisi yang tersedia",
+    scopeType: "exam",
+    source: "audit",
+    goal: "Audit semua kisi-kisi yang tersedia",
+    examId,
+  });
+}
