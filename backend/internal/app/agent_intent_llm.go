@@ -9,7 +9,7 @@ import (
 
 func (a *App) extractAgentIntent(ctx context.Context, tenantID, userID string, roles []string, sessionID string, req aiChatRequest) (agentIntentResponse, error) {
 	subjects := a.agentSubjectCatalog(ctx, tenantID)
-	conversationContext := a.agentContextPackJSON(ctx, tenantID, sessionID, req.Shadow.ActiveEntities)
+	conversationContext := a.agentContextPackJSONForTurn(ctx, tenantID, sessionID, req.Shadow.ActiveEntities, req.Message)
 	prompt := `Kamu adalah intent extractor. Balas JSON valid saja, tanpa markdown dan tanpa penjelasan.
 Intent/workflow yang didukung sekarang: create_exam, edit_exam, create_exam_section, discussion, unsupported.
 WAJIB pilih create_exam jika user meminta buat/create/bikin exam/ujian/tes/kuis baru.

@@ -48,10 +48,10 @@ func (a *App) agentTurnClassifierPrompt(ctx context.Context, tenantID, sessionID
 	b.WriteString("Kamu adalah classifier intent untuk AI Agent Morfoschools. Balas JSON object valid saja. Jangan markdown. ")
 	b.WriteString("Tugasmu HANYA menentukan mode percakapan, bukan membuat konten dan bukan menjalankan aksi. ")
 	b.WriteString("Mode valid: discussion, planning, clarification, proposal_request, unsupported. ")
-	b.WriteString("Workflow valid saat proposal_request: create_exam, edit_exam, create_exam_section, create_blueprint_slots. ")
+	b.WriteString("Workflow valid saat proposal_request: create_exam, edit_exam, create_exam_section, create_blueprint_slots, edit_blueprint_slot, edit_blueprint_slots. ")
 	b.WriteString("Aturan penting: kamu adalah orkestrator utama. Backend tidak boleh menebak planning vs proposal dari keyword; keputusanmu menentukan routing. Planning/diskusi kisi-kisi bukan proposal. Kalimat seperti 'aku ingin membuat kisi-kisi', 'kita akan membuat 40 soal, sudah ada 5, kurang 35', 'aku berencana membuat 50 soal', 'bantu aku membuat kisi-kisi', 'ayo diskusi kisi-kisi' => planning/clarification, workflow kosong. ")
 	b.WriteString("Proposal_request hanya jika user eksplisit meminta aksi eksekusi/proposal sekarang, misalnya 'buatkan proposal 5 slot', 'langsung buat 5 slot sekarang', 'simpan draft ini', atau lanjutan konteks yang jelas seperti 'mari kita buat 5 dulu' setelah membahas kisi-kisi. Kata 'simpan', 'save', 'ok simpan', 'simpan dulu' setelah assistant memberi draft kisi-kisi/soal berarti proposal_request untuk menyimpan draft tersebut, bukan discussion. ")
-	b.WriteString("PENTING khusus halaman kisi-kisi: jika route mengandung 'kisi-kisi' dan ada examId aktif, perintah eksekusi membuat slot kisi-kisi (mis. 'buatkan 10 slot', 'buat 10 kisi-kisi', 'langsung buatkan 10', 'buatkan saja 10 sekaligus', 'tidak usah preview, buat 10') WAJIB mode=proposal_request dengan workflow=create_blueprint_slots. Jangan pernah membalas daftar slot sebagai teks diskusi; pembuatan slot HARUS lewat proposal. ")
+	b.WriteString("PENTING khusus halaman kisi-kisi: jika route mengandung 'kisi-kisi' dan ada examId aktif, perintah eksekusi membuat slot kisi-kisi (mis. 'buatkan 10 slot', 'buat 10 kisi-kisi', 'langsung buatkan 10', 'buatkan saja 10 sekaligus', 'tidak usah preview, buat 10') WAJIB mode=proposal_request dengan workflow=create_blueprint_slots. Jika user meminta perbaiki/ubah/edit slot/nomor/nomer/no existing atau range posisi seperti 16-20, itu proposal_request workflow=edit_blueprint_slots; gunakan requestedSlots dari AgentContextPack sebagai data before. Jangan pernah membalas daftar slot sebagai teks diskusi untuk aksi tulis; aksi HARUS lewat proposal. ")
 	b.WriteString("Angka jumlah soal dalam kalimat rencana tidak cukup untuk proposal. Jumlah menjadi proposal hanya jika ada perintah eksekusi sekarang. ")
 	b.WriteString("Jika user minta delete/hapus exam, mode unsupported. ")
 	b.WriteString("Output shape: {\"mode\":\"discussion|planning|clarification|proposal_request|unsupported\",\"workflow\":\"\",\"args\":{},\"confidence\":0.0,\"reason\":\"...\",\"needsClarification\":false}. ")
@@ -60,7 +60,7 @@ func (a *App) agentTurnClassifierPrompt(ctx context.Context, tenantID, sessionID
 	b.WriteString(" Active entities: ")
 	b.WriteString(activeEntitiesJSON(req.Shadow.ActiveEntities))
 	b.WriteString(" AgentContextPack JSON: ")
-	b.WriteString(a.agentContextPackJSON(ctx, tenantID, sessionID, req.Shadow.ActiveEntities))
+	b.WriteString(a.agentContextPackJSONForTurn(ctx, tenantID, sessionID, req.Shadow.ActiveEntities, req.Message))
 	if examID := strings.TrimSpace(req.Shadow.ActiveEntities["examId"]); examID != "" {
 		ctxResp, err := a.ensureExamCurriculumContext(ctx, tenantID, examID)
 		if err == nil {

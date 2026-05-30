@@ -20,7 +20,7 @@ func (a *App) generateBlueprintSlotsDraft(ctx context.Context, tenantID, userID 
 	if ctxResp.Status != "ready" {
 		warnings = append(warnings, "CP resmi belum siap; kisi-kisi wajib diverifikasi manual sebelum dipakai.")
 	}
-	contextPack := a.agentContextPackJSON(ctx, tenantID, strings.TrimSpace(req.SessionID), req.Shadow.ActiveEntities)
+	contextPack := a.agentContextPackJSONForTurn(ctx, tenantID, strings.TrimSpace(req.SessionID), req.Shadow.ActiveEntities, req.Message)
 	prompt := a.blueprintSlotPrompt(req.Message, count, ctxResp)
 	prompt += " AgentContextPack JSON berikut adalah memori kerja wajib. Gunakan untuk memahami target, draft sebelumnya, distribusi existing, dan menghindari duplikasi. Jangan membuat slot yang bertentangan dengan draft yang sudah disetujui user. " + contextPack
 	prompt += " Jika user meminta 'lanjut' / 'lanjut 5 slot lainnya', lanjutkan rencana distribusi yang sudah disepakati di percakapan dan perhatikan existing blueprint stats. Jangan mengulang materi/indikator yang sudah ada. Jaga kualitas pedagogis lintas mapel: materi harus sesuai CP, fase/kelas, dan tingkat asesmen; indikator harus menguji pemahaman/aplikasi/penalaran sesuai level kognitif yang dipilih, bukan sekadar trivia/hafalan dangkal kecuali distribusi memang membutuhkan C1. Setiap batch harus menjaga keseimbangan elemen CP, level kognitif, dan questionType menuju target akhir. "

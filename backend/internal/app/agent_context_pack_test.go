@@ -6,6 +6,25 @@ import (
 	"testing"
 )
 
+func TestExtractBlueprintSlotPositionsSupportsNomerNoRange(t *testing.T) {
+	cases := map[string][]int{
+		"perbaiki nomer 16-20": {16, 17, 18, 19, 20},
+		"cek no. 3-4":          {3, 4},
+		"ubah nomor 7":         {7},
+	}
+	for input, want := range cases {
+		got := extractBlueprintSlotPositions(input)
+		if len(got) != len(want) {
+			t.Fatalf("%q expected %v, got %v", input, want, got)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("%q expected %v, got %v", input, want, got)
+			}
+		}
+	}
+}
+
 func TestStaleBlueprintContextClaimDetected(t *testing.T) {
 	for _, content := range []string{
 		"existingSlotCount: 0",

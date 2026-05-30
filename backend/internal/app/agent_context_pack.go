@@ -32,6 +32,7 @@ type agentContextBlueprint struct {
 	ByCognitiveLevel       map[string]int            `json:"byCognitiveLevel,omitempty"`
 	ByQuestionType         map[string]int            `json:"byQuestionType,omitempty"`
 	Slots                  []agentContextSlotSummary `json:"slots,omitempty"`
+	RequestedSlots         []agentContextSlotSummary `json:"requestedSlots,omitempty"`
 	RecentMaterials        []string                  `json:"recentMaterials,omitempty"`
 	RecentIndicators       []string                  `json:"recentIndicators,omitempty"`
 	PotentialDuplicateHint []string                  `json:"potentialDuplicateHints,omitempty"`
@@ -54,7 +55,7 @@ type agentContextMessage struct {
 	Content string `json:"content"`
 }
 
-func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID string, active map[string]string) agentContextPack {
+func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID string, active map[string]string, userMessage ...string) agentContextPack {
 	pack := agentContextPack{SessionID: sessionID}
 	if active != nil {
 		pack.ExamID = strings.TrimSpace(active["examId"])
@@ -71,6 +72,9 @@ func (a *App) buildAgentContextPack(ctx context.Context, tenantID, sessionID str
 			}
 		}
 		pack.Blueprint = a.loadAgentBlueprintContext(ctx, tenantID, pack.ExamID)
+		if len(userMessage) > 0 {
+			pack.Blueprint.RequestedSlots = a.loadRequestedBlueprintSlots(ctx, tenantID, pack.ExamID, userMessage[0])
+		}
 	}
 	return pack
 }
@@ -90,6 +94,10 @@ func agentBlueprintQualityRubric() []string {
 
 func (a *App) agentContextPackJSON(ctx context.Context, tenantID, sessionID string, active map[string]string) string {
 	return mustJSON(a.buildAgentContextPack(ctx, tenantID, sessionID, active))
+}
+
+func (a *App) agentContextPackJSONForTurn(ctx context.Context, tenantID, sessionID string, active map[string]string, userMessage string) string {
+	return mustJSON(a.buildAgentContextPack(ctx, tenantID, sessionID, active, userMessage))
 }
 
 func mustJSON(v any) string {
@@ -129,6 +137,49 @@ func truncateNullStringForPrompt(value sql.NullString, maxChars int) string {
 		return ""
 	}
 	return truncateForPrompt(strings.TrimSpace(value.String), maxChars)
+}
+
+func (a *App) loadRequestedBlueprintSlots(ctx context.Context, tenantID, examID, message string) []agentContextSlotSummary {
+	positions := extractBlueprintSlotPositions(message)
+	if len(positions) == 0 || a.db == nil || examID == "" {
+		return nil
+	}
+	out := make([]agentContextSlotSummary, 0, len(positions))
+	for _, position := range positions {
+		slot, ok := a.loadAgentBlueprintSlotSummaryByPosition(ctx, tenantID, examID, position)
+		if ok {
+			out = append(out, slot)
+		}
+	}
+	return out
+}
+
+func (a *App) loadAgentBlueprintSlotSummaryByPosition(ctx context.Context, tenantID, examID string, position int) (agentContextSlotSummary, bool) {
+	var slot agentContextSlotSummary
+	var cp, tp, material, indicator sql.NullString
+	err := a.db.QueryRowContext(ctx, `
+		SELECT s.position,
+		       COALESCE(NULLIF(TRIM(s.elemen_cp), ''), 'unknown') AS elemen_cp,
+		       COALESCE(NULLIF(TRIM(s.cognitive_level), ''), 'unknown') AS cognitive_level,
+		       COALESCE(NULLIF(TRIM(s.question_type), ''), 'unknown') AS question_type,
+		       NULLIF(TRIM(COALESCE(s.materi_pokok, s.materi, '')), '') AS materi,
+		       NULLIF(TRIM(COALESCE(s.indikator_soal, s.indikator, '')), '') AS indikator,
+		       NULLIF(TRIM(s.capaian_pembelajaran), '') AS capaian_pembelajaran,
+		       NULLIF(TRIM(s.tujuan_pembelajaran), '') AS tujuan_pembelajaran,
+		       s.question_id IS NOT NULL AS connected
+		FROM exam_blueprint_slots s
+		JOIN exam_blueprints b ON b.id = s.exam_blueprint_id
+		WHERE ($1 = '' OR b.tenant_id=$1) AND b.exam_id=$2 AND s.position=$3
+		LIMIT 1
+	`, tenantID, examID, position).Scan(&slot.Position, &slot.ElemenCP, &slot.CognitiveLevel, &slot.QuestionType, &material, &indicator, &cp, &tp, &slot.Connected)
+	if err != nil {
+		return agentContextSlotSummary{}, false
+	}
+	slot.CapaianPembelajaran = truncateNullStringForPrompt(cp, 360)
+	slot.TujuanPembelajaran = truncateNullStringForPrompt(tp, 280)
+	slot.MateriPokok = truncateNullStringForPrompt(material, 160)
+	slot.IndikatorSoal = truncateNullStringForPrompt(indicator, 320)
+	return slot, true
 }
 
 func (a *App) loadAgentBlueprintContext(ctx context.Context, tenantID, examID string) agentContextBlueprint {
