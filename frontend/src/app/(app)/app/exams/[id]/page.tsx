@@ -667,7 +667,7 @@ function KisiKisiManagerPanel({
               <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-[var(--muted)] text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
                   <tr>
-                    <th className="w-[6%] border-b border-[var(--border)] px-2 py-2 text-center">Soal</th>
+                    <th className="w-[6%] border-b border-[var(--border)] px-2 py-2 text-center">No. Kisi-kisi</th>
                     <th className="w-[20%] border-b border-[var(--border)] px-2 py-2">CP / Elemen</th>
                     <th className="w-[20%] border-b border-[var(--border)] px-2 py-2">Tujuan Pembelajaran</th>
                     <th className="w-[12%] border-b border-[var(--border)] px-2 py-2">Materi</th>
@@ -682,7 +682,7 @@ function KisiKisiManagerPanel({
                   ) : slots.map((slot) => (
                     <tr key={slot.id} className="align-top odd:bg-[var(--background)] even:bg-[var(--accent)]/40">
                       <td className="border-t border-[var(--border)] px-2 py-2 text-center">
-                        {slot.question ? <QuestionNumberBadge questionNumber={Math.max(1, (slot.question.sortOrder ?? 0) + 1)} content={slot.question.content} /> : <span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">-</span>}
+                        <KisiKisiNumberBadge slotNumber={slot.position} connected={Boolean(slot.question)} questionContent={slot.question?.content} />
                       </td>
                       <td className="break-words border-t border-[var(--border)] px-2 py-2"><p className="font-semibold text-[var(--foreground)]">{slot.elemenCp || "-"}</p><p className="mt-1 line-clamp-3 text-[var(--muted-foreground)]">{slot.capaianPembelajaran || "-"}</p></td>
                       <td className="break-words border-t border-[var(--border)] px-2 py-2 text-[var(--foreground)]">{slot.tujuanPembelajaran || "-"}</td>
@@ -717,7 +717,7 @@ function KisiKisiManagerPanel({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      {slot.question ? <QuestionNumberBadge questionNumber={Math.max(1, (slot.question.sortOrder ?? 0) + 1)} content={slot.question.content} /> : <span className="rounded-md bg-[var(--warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">Belum ada soal</span>}
+                      <KisiKisiNumberBadge slotNumber={slot.position} connected={Boolean(slot.question)} questionContent={slot.question?.content} />
                       <span className="rounded-md bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted-foreground)]">{slot.cognitiveLevel || "-"}</span>
                       <span className="rounded-md bg-[var(--brand-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand)]">{questionTypeLabel(slot.questionType)}</span>
                     </div>
@@ -917,26 +917,34 @@ function KisiActionButton({ icon, label, onClick }: { icon: React.ReactNode; lab
   );
 }
 
-function QuestionNumberBadge({ questionNumber, content }: { questionNumber: number; content: string }) {
+function KisiKisiNumberBadge({ slotNumber, connected, questionContent }: { slotNumber: number; connected: boolean; questionContent?: string }) {
   const tooltipId = useId();
 
   return (
     <span className="group relative inline-flex overflow-visible">
       <button
         type="button"
-        aria-describedby={tooltipId}
-        className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--brand-soft)] px-2 text-[11px] font-bold text-[var(--brand)] transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/40"
+        aria-describedby={connected && questionContent ? tooltipId : undefined}
+        title={connected ? "Terhubung ke soal" : "Belum terhubung ke soal"}
+        className={cn(
+          "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[11px] font-bold text-white shadow-sm transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2",
+          connected
+            ? "bg-[var(--success)] focus-visible:ring-[var(--success)]/40"
+            : "bg-[var(--destructive)] focus-visible:ring-[var(--destructive)]/40"
+        )}
       >
-        {questionNumber}
+        {slotNumber}
       </button>
-      <span
-        id={tooltipId}
-        role="tooltip"
-        className="pointer-events-none absolute left-full top-1/2 z-[100] ml-2 hidden w-[min(420px,calc(100vw-48px))] -translate-y-1/2 rounded-xl border border-slate-700 bg-slate-950 p-3 text-left shadow-2xl group-hover:block group-focus-within:block"
-      >
-        <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-slate-700 bg-slate-950" />
-        <RenderedContent html={content} className="relative max-h-64 overflow-auto whitespace-normal break-words text-[12px] leading-relaxed text-slate-50 [&_*]:text-slate-50" />
-      </span>
+      {connected && questionContent && (
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className="pointer-events-none absolute left-full top-1/2 z-[100] ml-2 hidden w-[min(420px,calc(100vw-48px))] -translate-y-1/2 rounded-xl border border-slate-700 bg-slate-950 p-3 text-left shadow-2xl group-hover:block group-focus-within:block"
+        >
+          <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-slate-700 bg-slate-950" />
+          <RenderedContent html={questionContent} className="relative max-h-64 overflow-auto whitespace-normal break-words text-[12px] leading-relaxed text-slate-50 [&_*]:text-slate-50" />
+        </span>
+      )}
     </span>
   );
 }
