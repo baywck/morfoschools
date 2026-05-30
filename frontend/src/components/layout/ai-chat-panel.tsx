@@ -175,6 +175,11 @@ function AttachMenu() {
 // --- Message Renderer ---
 
 function renderMessageContent(content: string) {
+  const blueprint = splitBlueprintSlotBlocks(content);
+  if (blueprint.blocks.length >= 2) {
+    return <BlueprintSlotCards header={blueprint.header} blocks={blueprint.blocks} footer={blueprint.footer} />;
+  }
+
   const lines = content.split("\n");
   const elements: React.ReactNode[] = [];
   let listItems: string[] = [];
@@ -321,6 +326,132 @@ function renderInline(text: string): React.ReactNode {
   }
 
   return parts.length > 0 ? <>{parts}</> : text;
+}
+
+type BlueprintSlotBlock = {
+  number: string;
+  element: string;
+  level: string;
+  questionType: string;
+  materi?: string;
+  tp?: string;
+  indikator?: string;
+  misc: string[];
+};
+
+function cleanSlotMarkdown(line: string) {
+  return line.trim().replace(/\*\*/g, "").replace(/__/g, "").replace(/\s+$/g, "");
+}
+
+function isBlueprintSlotHeader(line: string) {
+  return cleanSlotMarkdown(line).match(/^(?:slot\s*)?(\d+)\s*[·\-–—:]\s*(.+)$/i);
+}
+
+function splitBlueprintSlotBlocks(text: string) {
+  const lines = text.split("\n");
+  const header: string[] = [];
+  const blocks: string[] = [];
+  const footer: string[] = [];
+  let current: string[] | null = null;
+  let seenBlock = false;
+
+  for (const raw of lines) {
+    if (isBlueprintSlotHeader(raw)) {
+      if (current) blocks.push(current.join("\n"));
+      current = [raw];
+      seenBlock = true;
+      continue;
+    }
+    if (current) {
+      current.push(raw);
+    } else if (!seenBlock) {
+      header.push(raw);
+    } else {
+      footer.push(raw);
+    }
+  }
+  if (current) blocks.push(current.join("\n"));
+  return { header: header.join("\n").trim(), blocks, footer: footer.join("\n").trim() };
+}
+
+function parseBlueprintSlotBlock(block: string): BlueprintSlotBlock {
+  const lines = block.split("\n");
+  const header = isBlueprintSlotHeader(lines[0] || "");
+  const parts = (header?.[2] || "").split("·").map((p) => p.trim()).filter(Boolean);
+  const out: BlueprintSlotBlock = {
+    number: header?.[1] || "",
+    element: parts[0] || "Elemen",
+    level: parts.find((p) => /^C[1-6]$/i.test(p)) || "",
+    questionType: parts.find((p) => !/^C[1-6]$/i.test(p) && p !== parts[0]) || "",
+    misc: [],
+  };
+
+  for (const raw of lines.slice(1)) {
+    const line = cleanSlotMarkdown(raw);
+    if (!line || /^-{3,}$/.test(line)) continue;
+    const match = line.match(/^(Materi|TP|Indikator)\s*:\s*(.*)$/i);
+    if (match) {
+      const key = match[1].toLowerCase();
+      const value = match[2].trim();
+      if (key === "materi") out.materi = value;
+      else if (key === "tp") out.tp = value;
+      else if (key === "indikator") out.indikator = value;
+      continue;
+    }
+    if (!/^(ABCD|A\s*:|B\s*:|C\s*:|D\s*:|Penjelasan ABCD|Catatan)/i.test(line)) {
+      out.misc.push(line);
+    }
+  }
+  return out;
+}
+
+function BlueprintSlotCards({ header, blocks, footer }: { header?: string; blocks: string[]; footer?: string }) {
+  return (
+    <div className="space-y-2">
+      {header && <div className="text-[11px] leading-relaxed text-[var(--shell-muted)]">{renderMessageContent(header)}</div>}
+      <div className="space-y-2">
+        {blocks.map((block, index) => {
+          const slot = parseBlueprintSlotBlock(block);
+          return <BlueprintSlotCard key={`${slot.number}-${index}`} slot={slot} />;
+        })}
+      </div>
+      {footer && <div className="text-[11px] leading-relaxed text-[var(--shell-muted)]">{renderMessageContent(footer)}</div>}
+    </div>
+  );
+}
+
+function BlueprintSlotCard({ slot }: { slot: BlueprintSlotBlock }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--shell-input-border)] bg-[var(--shell-elevated,var(--card))]/75 shadow-sm">
+      <div className="flex items-start gap-2.5 border-b border-[var(--shell-input-border)] bg-[var(--shell-input-bg)]/55 px-3 py-2.5">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-[10px] font-bold text-white">
+          {slot.number || "•"}
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full bg-[var(--brand)]/10 px-2 py-0.5 text-[9px] font-bold text-[var(--brand)]">{slot.element}</span>
+            {slot.level && <span className="rounded-full border border-[var(--shell-input-border)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--shell-foreground)]">{slot.level}</span>}
+            {slot.questionType && <span className="rounded-full border border-[var(--shell-input-border)] bg-[var(--shell-input-bg)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--shell-muted)]">{slot.questionType}</span>}
+          </div>
+          {slot.materi && <div className="text-[11px] font-semibold leading-snug text-[var(--shell-foreground)]">{slot.materi}</div>}
+        </div>
+      </div>
+      <div className="space-y-2 px-3 py-2.5">
+        {slot.tp && <BlueprintField label="TP" value={slot.tp} tone="brand" />}
+        {slot.indikator && <BlueprintField label="Indikator" value={slot.indikator} tone="success" />}
+        {slot.misc.length > 0 && <div className="text-[10px] leading-relaxed text-[var(--shell-muted)]">{slot.misc.join(" ")}</div>}
+      </div>
+    </div>
+  );
+}
+
+function BlueprintField({ label, value, tone }: { label: string; value: string; tone: "brand" | "success" }) {
+  return (
+    <div className="rounded-xl border border-[var(--shell-input-border)] bg-[var(--shell-input-bg)]/45 p-2">
+      <div className={cn("mb-1 text-[9px] font-bold uppercase tracking-[0.16em]", tone === "brand" ? "text-[var(--brand)]" : "text-[var(--success)]")}>{label}</div>
+      <div className="text-[11px] leading-relaxed text-[var(--shell-foreground)]">{renderInline(value)}</div>
+    </div>
+  );
 }
 
 function splitProposalBlocks(text: string) {
