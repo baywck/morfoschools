@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -16,7 +17,10 @@ type agentIntentResponse struct {
 func (a *App) tryCreateAgentProposalFromIntent(w http.ResponseWriter, r *http.Request, tenantID, userID, sessionID string, req aiChatRequest) bool {
 	lower := strings.ToLower(req.Message)
 	if isAgentExamDeleteIntent(lower) {
-		content := "Saya tidak punya izin untuk menghapus ujian lewat chat. Penghapusan ujian harus dilakukan langsung oleh pengguna yang berwenang dari halaman Exams. Jika Anda punya akses owner/admin, buka daftar Exams, pilih ujian yang ingin dihapus, lalu gunakan menu hapus/arsipkan di sana."
+		content := a.askLLMForErrorMessage(r.Context(), tenantID, userID, "User ingin menghapus ujian melalui chat", "AI tidak memiliki izin untuk menghapus ujian. Penghapusan harus dilakukan langsung oleh user dari halaman Exams.")
+		if content == "" {
+			content = "Saya tidak bisa menghapus ujian lewat chat. Silakan hapus langsung dari halaman Exams."
+		}
 		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 		return true
@@ -92,7 +96,10 @@ func (a *App) createAgentProposalFromIntentResponse(w http.ResponseWriter, r *ht
 		return false
 	}
 	if len(intent.MissingFields) > 0 {
-		content := "Saya butuh info berikut dulu sebelum membuat proposal: " + strings.Join(intent.MissingFields, ", ")
+		content := a.askLLMForErrorMessage(r.Context(), tenantID, userID, "User ingin membuat proposal tapi informasi belum lengkap", fmt.Sprintf("Field yang dibutuhkan: %s", strings.Join(intent.MissingFields, ", ")))
+		if content == "" {
+			content = "Saya butuh info berikut dulu sebelum membuat proposal: " + strings.Join(intent.MissingFields, ", ")
+		}
 		_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 		writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 		return true
@@ -246,7 +253,7 @@ func (a *App) handleAgentPlanRequestFromIntent(w http.ResponseWriter, r *http.Re
 		writeErrorJSON(w, http.StatusInternalServerError, "plan_failed", "Gagal menyimpan rencana eksekusi kisi-kisi.", r)
 		return true
 	}
-	content := a.summarizeAgentActionPlanCreation(detail)
+	content := a.summarizeAgentActionPlanCreation(r.Context(), tenantID, userID, sessionID, detail)
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message":   map[string]string{"role": "assistant", "content": content},

@@ -120,9 +120,13 @@ func (a *App) createAgentActionPlanFromLLM(ctx context.Context, tenantID, userID
 	return a.loadAgentActionPlan(ctx, planID)
 }
 
-func (a *App) summarizeAgentActionPlanCreation(detail agentActionPlanDetail) string {
+func (a *App) summarizeAgentActionPlanCreation(ctx context.Context, tenantID, userID, sessionID string, detail agentActionPlanDetail) string {
+	msg := a.askLLMForActionPlanMessage(ctx, tenantID, userID, sessionID, "plan_created", detail, "User akan menjalankan batch pertama. Jelaskan rencana dan cara memulai.")
+	if msg != "" {
+		return msg
+	}
+	// Fallback to structural summary if LLM fails
 	var b strings.Builder
-	b.WriteString("Saya siap menjalankan rencana bertahap ini.\n")
 	b.WriteString(planPreview(detail, 5))
 	b.WriteString("\n\nKetik `jalankan batch berikutnya` untuk mulai batch 1.")
 	return b.String()

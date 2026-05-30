@@ -30,7 +30,10 @@ func (a *App) tryCreateChatBlueprintSlotEditProposal(w http.ResponseWriter, r *h
 	for _, position := range positions {
 		slotID, err := a.findExamBlueprintSlotIDByPosition(r.Context(), tenantID, examID, position)
 		if err != nil || slotID == "" {
-			content := fmt.Sprintf("Saya tidak menemukan slot %d pada kisi-kisi exam aktif.", position)
+			content := a.askLLMForErrorMessage(r.Context(), tenantID, userID, fmt.Sprintf("Slot %d tidak ditemukan di kisi-kisi exam aktif", position), "Slot mungkin belum dibuat atau posisi salah.")
+			if content == "" {
+				content = fmt.Sprintf("Slot %d tidak ditemukan di kisi-kisi exam aktif.", position)
+			}
 			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 			return true
@@ -42,21 +45,27 @@ func (a *App) tryCreateChatBlueprintSlotEditProposal(w http.ResponseWriter, r *h
 		after, err := a.generateBlueprintSlotEditDraft(r.Context(), tenantID, userID, slotID, req.Message, before)
 		if err != nil {
 			a.logger.Error("chat AI blueprint slot edit failed", "error", err, "slot", position)
-			content := fmt.Sprintf("AI belum bisa membuat perubahan untuk slot %d karena respons model tidak valid/terpotong. Coba ulangi atau pecah instruksi menjadi range lebih kecil, misalnya `perbaiki slot %d dulu`.", position, position)
+			content := a.askLLMForErrorMessage(r.Context(), tenantID, userID, fmt.Sprintf("Gagal generate draft edit untuk slot %d", position), "Response model tidak valid atau terpotong. Coba instruksi lebih pendek atau pecah jadi range kecil.")
+			if content == "" {
+				content = fmt.Sprintf("Gagal membuat draft edit untuk slot %d. Coba instruksi lebih pendek.", position)
+			}
 			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 			return true
 		}
 		merged := mergeSlotPayload(before, after)
 		if errs := a.validateTenantKisiKisiPayload(r.Context(), tenantID, merged); len(errs) > 0 {
-			content := buildAgentProposalValidationMessage(errs)
+			content := a.buildAgentProposalValidationMessageWithLLM(r.Context(), tenantID, userID, errs)
 			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0, "mutated": false, "validation": errs})
 			return true
 		}
 		diff := buildBlueprintSlotAIDiff(before, merged)
 		if len(diff) == 0 {
-			content := fmt.Sprintf("AI belum menghasilkan perubahan bermakna untuk slot %d. Coba instruksi lebih spesifik.", position)
+			content := a.askLLMForErrorMessage(r.Context(), tenantID, userID, fmt.Sprintf("Tidak ada perubahan bermakna untuk slot %d", position), "AI menghasilkan draft yang sama dengan data existing. Minta instruksi lebih spesifik.")
+			if content == "" {
+				content = fmt.Sprintf("Tidak ada perubahan bermakna untuk slot %d. Coba instruksi lebih spesifik.", position)
+			}
 			_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 			writeJSON(w, http.StatusOK, map[string]any{"message": map[string]string{"role": "assistant", "content": content}, "sessionId": sessionID, "tokens": 0})
 			return true

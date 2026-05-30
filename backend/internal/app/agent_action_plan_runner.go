@@ -120,34 +120,52 @@ func planPreview(detail agentActionPlanDetail, maxBatches int) string {
 	return b.String()
 }
 
-func summarizeActionPlanBatchResult(batch agentActionPlanBatch, result agentWorkflowResult) string {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("✅ Batch %d selesai.", batch.BatchIndex))
+// summarizeActionPlanBatchResult creates a structural summary of batch result data.
+// This is used as context for LLM to generate user-facing messages.
+func summarizeActionPlanBatchResultData(batch agentActionPlanBatch, result agentWorkflowResult) map[string]any {
+	data := map[string]any{
+		"batchIndex": batch.BatchIndex,
+		"workflow":   batch.Workflow,
+		"preview":    batch.Preview,
+	}
 	if result.Data != nil {
-		if examID, ok := result.Data["examId"].(string); ok && examID != "" {
-			b.WriteString("\nexamId=")
-			b.WriteString(examID)
+		for k, v := range result.Data {
+			data[k] = v
+		}
+	}
+	return data
+}
+
+// summarizeActionPlanBatchResultWithLLM generates user-facing message about batch completion via LLM.
+func (a *App) summarizeActionPlanBatchResultWithLLM(ctx context.Context, tenantID, userID string, batch agentActionPlanBatch, result agentWorkflowResult) string {
+	resultData := summarizeActionPlanBatchResultData(batch, result)
+	resultJSON := mustJSON(resultData)
+
+	prompt := "Kamu adalah AI assistant untuk sistem LMS. Sebuah batch eksekusi rencana sudah selesai. " +
+		"Buat pesan singkat dalam Bahasa Indonesia yang menjelaskan hasilnya. " +
+		"Gunakan data yang tersedia. Maksimal 3-4 baris. Jangan emoji berlebihan."
+	userCtx := fmt.Sprintf("Batch result: %s", resultJSON)
+	msg := a.askLLMForMessage(ctx, tenantID, userID, prompt, userCtx)
+	if msg != "" {
+		return msg
+	}
+	// Fallback to structural summary
+	return summarizeActionPlanBatchResultFallback(batch, result)
+}
+
+// summarizeActionPlanBatchResultFallback is the minimal structural fallback.
+func summarizeActionPlanBatchResultFallback(batch agentActionPlanBatch, result agentWorkflowResult) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Batch %d selesai.", batch.BatchIndex))
+	if result.Data != nil {
+		if totalSlots, ok := result.Data["totalSlots"]; ok {
+			b.WriteString(fmt.Sprintf(" totalSlots=%v", totalSlots))
 		}
 		if updated, ok := result.Data["updatedSlots"]; ok {
-			b.WriteString(fmt.Sprintf("\nupdatedSlots=%v", updated))
+			b.WriteString(fmt.Sprintf(" updatedSlots=%v", updated))
 		}
 		if created, ok := result.Data["createdSlots"]; ok {
-			b.WriteString(fmt.Sprintf("\ncreatedSlots=%v", created))
-		}
-		if totalSlots, ok := result.Data["totalSlots"]; ok {
-			b.WriteString(fmt.Sprintf("\ntotalSlots=%v", totalSlots))
-		}
-		if missingTP, ok := result.Data["missingTP"]; ok {
-			b.WriteString(fmt.Sprintf("\nmissingTP=%v", missingTP))
-		}
-		if missingMateri, ok := result.Data["missingMateri"]; ok {
-			b.WriteString(fmt.Sprintf("\nmissingMateri=%v", missingMateri))
-		}
-		if missingIndikator, ok := result.Data["missingIndikator"]; ok {
-			b.WriteString(fmt.Sprintf("\nmissingIndikator=%v", missingIndikator))
-		}
-		if disconnected, ok := result.Data["disconnected"]; ok {
-			b.WriteString(fmt.Sprintf("\ndisconnected=%v", disconnected))
+			b.WriteString(fmt.Sprintf(" createdSlots=%v", created))
 		}
 	}
 	return b.String()

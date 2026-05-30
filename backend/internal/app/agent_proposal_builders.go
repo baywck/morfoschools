@@ -34,7 +34,7 @@ func (a *App) handleBlueprintSlotsProposalRequest(w http.ResponseWriter, r *http
 	}
 	args = appendBlueprintSlotQualityWarnings(args)
 	if fields := a.validateAgentCreateBlueprintSlotsArgs(r.Context(), tenantID, userID, args); len(fields) > 0 {
-		content := buildAgentProposalValidationMessage(fields)
+		content := a.buildAgentProposalValidationMessageWithLLM(r.Context(), tenantID, userID, fields)
 		if r.Context().Err() != nil {
 			return true
 		}
@@ -170,13 +170,22 @@ func (a *App) handleLargeBlueprintSlotsRequest(w http.ResponseWriter, r *http.Re
 			b.TargetIDs, b.ArgsJSON, b.Preview)
 	}
 
-	// Return message to user
-	content := fmt.Sprintf("📦 Request %d slot terlalu besar untuk 1 kali generate. Saya buat rencana %d batch (masing-masing %d slot).\n\n", totalRequested, batchCount, batchSize)
-	content += fmt.Sprintf("Action plan: %s\nBatch: 0/%d\n", goal, batchCount)
+	// Build plan preview for LLM context
+	var batchList strings.Builder
 	for _, b := range batches {
-		content += fmt.Sprintf("Batch %d [%s] %s\n", b.BatchIndex, "pending", b.Preview)
+		batchList.WriteString(fmt.Sprintf("- Batch %d: %s\n", b.BatchIndex, b.Preview))
 	}
-	content += "\nKetik `jalankan batch berikutnya` untuk mulai."
+
+	// Ask LLM to generate the message
+	llmPrompt := "Kamu adalah AI assistant untuk sistem LMS. User meminta generate kisi-kisi dalam jumlah besar. " +
+		"Sistem sudah membuat rencana batch otomatis. Buat pesan singkat dalam Bahasa Indonesia yang menjelaskan: " +
+		"1) Kenapa dipecah jadi batch, 2) Daftar batch yang tersedia, 3) Cara memulai. Maksimal 5-6 baris. Jangan emoji berlebihan."
+	llmCtx := fmt.Sprintf("User minta %d slot. Dipecah jadi %d batch (masing-masing %d slot).\nBatch list:\n%s", totalRequested, batchCount, batchSize, batchList.String())
+	content := a.askLLMForMessage(r.Context(), tenantID, userID, llmPrompt, llmCtx)
+	if content == "" {
+		// Fallback: structural summary
+		content = fmt.Sprintf("Request %d slot dipecah jadi %d batch (%d slot/batch).\n%s\nKetik 'jalankan batch berikutnya' untuk mulai.", totalRequested, batchCount, batchSize, batchList.String())
+	}
 
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, sessionID, content)
 	writeJSON(w, http.StatusOK, map[string]any{

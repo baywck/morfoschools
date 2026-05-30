@@ -103,7 +103,7 @@ func (a *App) handleCreateAgentActionPlan(w http.ResponseWriter, r *http.Request
 		writeErrorJSON(w, http.StatusInternalServerError, "plan_failed", "Could not create action plan", r)
 		return
 	}
-	content := a.summarizeAgentActionPlanCreation(detail)
+	content := a.summarizeAgentActionPlanCreation(r.Context(), tenantID, auth.UserID, req.SessionID, detail)
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, req.SessionID, content)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message":   map[string]string{"role": "assistant", "content": content},
@@ -236,7 +236,7 @@ func (a *App) handleRunNextAgentActionPlanBatch(w http.ResponseWriter, r *http.R
 		writeErrorJSON(w, http.StatusInternalServerError, "plan_reload_failed", "Could not reload action plan", r)
 		return
 	}
-	content := summarizeActionPlanBatchResult(*nextBatch, result)
+	content := a.summarizeActionPlanBatchResultWithLLM(r.Context(), tenantID, auth.UserID, *nextBatch, result)
 	_, _ = a.db.ExecContext(r.Context(), `INSERT INTO ai_messages (session_id, role, content, tokens_used) VALUES ($1, 'assistant', $2, 0)`, plan.SessionID, content)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"message":    map[string]string{"role": "assistant", "content": content},
