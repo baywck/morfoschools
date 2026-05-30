@@ -29,7 +29,8 @@ func isBlueprintSlotPlanningQuestion(lower string) bool {
 	}
 	markers := []string{
 		"aku ingin", "saya ingin", "aku mau", "saya mau", "aku berencana", "saya berencana",
-		"dapatkah", "bisakah", "bisa bantu", "bantu aku", "mohon bantu", "bagaimana", "gimana", "apakah",
+		"kita akan", "akan membuat", "akan bikin", "rencana", "sudah membuat", "sudah buat", "masih kurang", "kurang",
+		"dapatkah", "bisakah", "bisa bantu", "bantu aku", "bantu kau", "bantu saya", "mohon bantu", "bagaimana", "gimana", "apakah",
 	}
 	for _, m := range markers {
 		if strings.Contains(lower, m) {
@@ -42,7 +43,7 @@ func isBlueprintSlotPlanningQuestion(lower string) bool {
 func isBlueprintSlotCreateCommand(lower string) bool {
 	lower = strings.ToLower(strings.TrimSpace(lower))
 	// Planning / intention phrasing must never be treated as a command.
-	planningMarkers := []string{"aku ingin", "saya ingin", "aku mau", "saya mau", "aku berencana", "saya berencana", "rencana", "bagaimana", "gimana", "bantu aku", "tolong jelaskan", "diskusi"}
+	planningMarkers := []string{"aku ingin", "saya ingin", "aku mau", "saya mau", "aku berencana", "saya berencana", "kita akan", "akan membuat", "akan bikin", "rencana", "sudah membuat", "sudah buat", "masih kurang", "kurang", "bagaimana", "gimana", "bantu aku", "bantu kau", "bantu saya", "tolong jelaskan", "diskusi"}
 	for _, m := range planningMarkers {
 		if strings.Contains(lower, m) {
 			return false

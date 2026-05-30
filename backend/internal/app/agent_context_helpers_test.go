@@ -32,6 +32,7 @@ func TestIsBlueprintSlotPlanningQuestion(t *testing.T) {
 		want bool
 	}{
 		{"aku ingin menambah 10 slot kisi-kisi lagi, dapatkah kamu membantuku?", true},
+		{"Ya, bantu kau menambahkan slot kisi-kisi, kita akan membuat 40 soal, dan kita sudah membuat 5 saat ini, masih kurang 35 lagi", true},
 		{"apakah 5 slot itu distribusinya sudah baik?", true},
 		{"bagaimana rencana 35 kisi-kisi lagi?", true},
 		{"buatkan proposal 5 slot", false},
@@ -53,6 +54,7 @@ func TestIsBlueprintSlotCreateCommand(t *testing.T) {
 		{"buatkan 10 slot", true},
 		{"buat 10 kisi-kisi", true},
 		{"langsung buatkan 10 sekaligus", true},
+		{"Ya, bantu kau menambahkan slot kisi-kisi, kita akan membuat 40 soal, dan kita sudah membuat 5 saat ini, masih kurang 35 lagi", false},
 		{"tidak usah preview, buat 10 slot sekaligus", true},
 		{"generate 5 slot kisi-kisi", true},
 		{"susun 8 kisi-kisi", true},
