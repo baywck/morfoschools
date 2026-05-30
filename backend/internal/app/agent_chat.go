@@ -168,10 +168,6 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID
 	return out, resp.Usage.TotalTokens, nil
 }
 
-func normalizeForComparison(s string) string {
-	return strings.TrimSpace(strings.ToLower(s))
-}
-
 func staleBlueprintContextClaim(content string) bool {
 	lower := strings.ToLower(content)
 	return strings.Contains(lower, "existingslotcount: 0") ||
