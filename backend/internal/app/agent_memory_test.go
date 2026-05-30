@@ -2,6 +2,24 @@ package app
 
 import "testing"
 
+func TestExtractBlueprintDraftSlotsKeepsCPLine(t *testing.T) {
+	content := `21 · Bhinneka Tunggal Ika · C5 · Esai
+Materi: Solusi konflik berbasis kearifan lokal
+TP: Peserta didik dapat mengevaluasi efektivitas pendekatan kearifan lokal dengan menyertakan minimal dua kriteria.
+Indikator: Disajikan studi kasus konflik, peserta didik dapat mengevaluasi efektivitas pendekatan kearifan lokal.
+CP: Peserta didik mampu menganalisis potensi konflik dan bersama-sama memberi solusi yang berkeadilan terhadap permasalahan keberagaman di masyarakat.`
+	slots := extractBlueprintDraftSlotsFromText(content)
+	if len(slots) != 1 {
+		t.Fatalf("expected 1 slot, got %d: %#v", len(slots), slots)
+	}
+	if slots[0].CapaianPembelajaran == "" {
+		t.Fatalf("expected CP to be parsed: %#v", slots[0])
+	}
+	if slots[0].CapaianPembelajaran != "Peserta didik mampu menganalisis potensi konflik dan bersama-sama memberi solusi yang berkeadilan terhadap permasalahan keberagaman di masyarakat." {
+		t.Fatalf("unexpected CP: %q", slots[0].CapaianPembelajaran)
+	}
+}
+
 func TestExtractBlueprintDraftSlotsFromNarrativeFormat(t *testing.T) {
 	content := `**Slot 16** · UUD 1945 · C5 · Esai
 

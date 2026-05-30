@@ -192,6 +192,14 @@ func extractBlueprintDraftSlotsFromText(content string) []agentBlueprintSlotDraf
 			current.IndikatorSoal = cleanDraftValue(trimmed[len("Indikator:"):])
 			continue
 		}
+		if strings.HasPrefix(lower, "cp:") || strings.HasPrefix(lower, "capaian pembelajaran:") {
+			if strings.HasPrefix(lower, "cp:") {
+				current.CapaianPembelajaran = cleanDraftValue(trimmed[len("CP:"):])
+			} else {
+				current.CapaianPembelajaran = cleanDraftValue(trimmed[len("Capaian Pembelajaran:"):])
+			}
+			continue
+		}
 	}
 	flush()
 	for i := range slots {
