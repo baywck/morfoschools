@@ -143,7 +143,7 @@ func slotPayloadFromBlueprintDraft(slot agentBlueprintSlotDraft) slotPayload {
 		ElemenCP:            strPtrIfNotEmpty(slot.ElemenCP),
 		TujuanPembelajaran:  strPtrIfNotEmpty(slot.TujuanPembelajaran),
 		MateriPokok:         strPtrIfNotEmpty(slot.MateriPokok),
-		Kelas:               strPtrIfNotEmpty(slot.KelasSemester),
+		Kelas:               safeGradeLevelPtr(slot.KelasSemester),
 		CognitiveLevel:      strPtrIfNotEmpty(normalizeCognitiveLevel(slot.CognitiveLevel)),
 		QuestionType:        strPtrIfNotEmpty(normalizeQuestionType(slot.QuestionType)),
 		Points:              &points,
@@ -154,6 +154,17 @@ func slotPayloadFromBlueprintDraft(slot agentBlueprintSlotDraft) slotPayload {
 func strPtrIfNotEmpty(value string) *string {
 	v := strings.TrimSpace(value)
 	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func safeGradeLevelPtr(value string) *string {
+	v := strings.TrimSpace(value)
+	if v == "" {
+		return nil
+	}
+	if gradeLevelToPhase(v) == "" {
 		return nil
 	}
 	return &v

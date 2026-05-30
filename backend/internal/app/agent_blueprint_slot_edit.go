@@ -128,6 +128,7 @@ func (a *App) executeAgentEditBlueprintSlot(ctx context.Context, tenantID, userI
 		return agentWorkflowResult{}, fmt.Errorf("exam write access required")
 	}
 	if errs := a.validateTenantKisiKisiPayload(ctx, tenantID, args.After); len(errs) > 0 {
+		a.logger.Error("executeAgentEditBlueprintSlot rejected payload", "slotID", args.SlotID, "errors", errs, "after", args.After)
 		return agentWorkflowResult{}, fmt.Errorf("invalid kisi-kisi update")
 	}
 	q, qArgs := buildSlotUpdateSQL("exam_blueprint_slots", args.SlotID, args.After)
