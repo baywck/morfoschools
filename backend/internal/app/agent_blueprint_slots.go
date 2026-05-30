@@ -116,15 +116,36 @@ func (a *App) executeAgentCreateBlueprintSlots(ctx context.Context, tenantID, us
 	if err != nil {
 		return agentWorkflowResult{}, err
 	}
-	var nextPosition int
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(position),0)+1 FROM exam_blueprint_slots WHERE exam_blueprint_id=$1`, blueprintID).Scan(&nextPosition); err != nil {
+	usedPositions := map[int]bool{}
+	rows, err := tx.QueryContext(ctx, `SELECT position FROM exam_blueprint_slots WHERE exam_blueprint_id=$1`, blueprintID)
+	if err != nil {
 		return agentWorkflowResult{}, err
 	}
+	for rows.Next() {
+		var position int
+		if err := rows.Scan(&position); err == nil && position > 0 {
+			usedPositions[position] = true
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return agentWorkflowResult{}, err
+	}
+	nextPosition := 1
+	for usedPositions[nextPosition] {
+		nextPosition++
+	}
 	created := 0
-	for i, slot := range args.Slots {
+	for _, slot := range args.Slots {
 		position := slot.Position
-		if position <= 0 {
-			position = nextPosition + i
+		if position <= 0 || usedPositions[position] {
+			position = nextPosition
+		}
+		for usedPositions[position] {
+			position++
+		}
+		usedPositions[position] = true
+		for usedPositions[nextPosition] {
+			nextPosition++
 		}
 		points := float64(slot.Points)
 		if points <= 0 {
