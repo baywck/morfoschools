@@ -144,8 +144,12 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID
 		{Role: "system", Content: "AgentContextPack JSON (gunakan sebagai memori kerja dan konteks nyata; jangan abaikan draft/keputusan sebelumnya): " + mustJSON(pack)},
 	}
 	for _, m := range pack.Recent {
+		if len(pack.Blueprint.Slots) > 0 && m.Role == "assistant" && staleBlueprintContextClaim(m.Content) {
+			continue
+		}
 		messages = append(messages, llmMessage{Role: m.Role, Content: m.Content})
 	}
+	messages = append(messages, llmMessage{Role: "system", Content: "Current AgentContextPack JSON di atas adalah sumber kebenaran terbaru dan mengalahkan recentMessages. Jika recentMessages berisi klaim lama seperti existingSlotCount=0, tidak punya akses langsung, data tidak termuat, atau meminta user menyalin slot, abaikan sebagai stale/invalid. Untuk slot kisi-kisi aktif, gunakan current AgentContextPack.blueprint.slots."})
 	if len(pack.Recent) == 0 || pack.Recent[len(pack.Recent)-1].Role != "user" || strings.TrimSpace(pack.Recent[len(pack.Recent)-1].Content) != strings.TrimSpace(userMessage) {
 		messages = append(messages, llmMessage{Role: "user", Content: userMessage})
 	}
@@ -161,6 +165,17 @@ func (a *App) callDiscussionLLM(ctx context.Context, sessionID, tenantID, userID
 		return "", resp.Usage.TotalTokens, fmt.Errorf("empty LLM response")
 	}
 	return strings.TrimSpace(resp.Choices[0].Message.Content), resp.Usage.TotalTokens, nil
+}
+
+func staleBlueprintContextClaim(content string) bool {
+	lower := strings.ToLower(content)
+	return strings.Contains(lower, "existingslotcount: 0") ||
+		strings.Contains(lower, "tidak memiliki akses langsung") ||
+		strings.Contains(lower, "tidak punya akses langsung") ||
+		strings.Contains(lower, "data tidak termuat") ||
+		strings.Contains(lower, "tampilkan dulu slot") ||
+		strings.Contains(lower, "mengetikkan data slot") ||
+		strings.Contains(lower, "menyalin data slot")
 }
 
 func (a *App) discussionSystemPrompt(ctx context.Context, tenantID string, active map[string]string) string {
