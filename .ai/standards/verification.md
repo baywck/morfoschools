@@ -52,6 +52,7 @@ After backend changes that affect API:
 1. Rebuild: `docker compose up -d --build backend`
 2. Check: `curl http://127.0.0.1:8080/readyz`
 3. Test endpoint with authenticated session
+4. For kisi-kisi execution planner smoke test: run `backend/scripts/action-plan-smoke.sh`
 
 After frontend changes:
 1. Check typecheck: `npx tsc --noEmit`

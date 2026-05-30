@@ -37,8 +37,10 @@ func (a *App) loadActiveAgentActionPlanForExam(ctx context.Context, examID strin
 	err := a.db.QueryRowContext(ctx, `
 		SELECT id::text
 		  FROM agent_action_plans
-		 WHERE exam_id=$1 AND status IN ('draft','active','paused')
-		 ORDER BY updated_at DESC
+		 WHERE exam_id=$1
+		 ORDER BY
+			CASE status WHEN 'active' THEN 0 WHEN 'draft' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END,
+			updated_at DESC
 		 LIMIT 1
 	`, examID).Scan(&planID)
 	if err != nil {

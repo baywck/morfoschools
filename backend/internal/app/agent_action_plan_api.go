@@ -66,8 +66,9 @@ func (a *App) handleCreateAgentActionPlan(w http.ResponseWriter, r *http.Request
 		tenantID = *auth.EffectiveTenantID
 	}
 	var req struct {
-		SessionID string `json:"sessionId"`
-		Message   string `json:"message"`
+		SessionID string              `json:"sessionId"`
+		Message   string              `json:"message"`
+		Planned   *agentPlannedAction `json:"planned,omitempty"`
 		agentActionPlanRequest
 	}
 	if err := readJSON(r, &req); err != nil {
@@ -84,11 +85,17 @@ func (a *App) handleCreateAgentActionPlan(w http.ResponseWriter, r *http.Request
 	if req.Source == "" {
 		req.Source = "chat"
 	}
-	planned, err := a.generateAgentActionPlanFromLLM(r.Context(), tenantID, auth.UserID, req.agentActionPlanRequest, req.Message)
-	if err != nil {
-		a.logger.Error("agent action plan generation failed", "error", err)
-		writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat rencana eksekusi. Coba permintaan lebih spesifik.", r)
-		return
+	var planned agentPlannedAction
+	if req.Planned != nil && len(req.Planned.Batches) > 0 {
+		planned = *req.Planned
+	} else {
+		generated, err := a.generateAgentActionPlanFromLLM(r.Context(), tenantID, auth.UserID, req.agentActionPlanRequest, req.Message)
+		if err != nil {
+			a.logger.Error("agent action plan generation failed", "error", err)
+			writeErrorJSON(w, http.StatusBadGateway, "ai_error", "AI belum bisa membuat rencana eksekusi. Coba permintaan lebih spesifik.", r)
+			return
+		}
+		planned = generated
 	}
 	detail, err := a.createAgentActionPlanFromLLM(r.Context(), tenantID, auth.UserID, req.SessionID, req.agentActionPlanRequest, planned)
 	if err != nil {

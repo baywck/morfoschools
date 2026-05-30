@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS agent_action_plan_batches (
     plan_id UUID NOT NULL REFERENCES agent_action_plans(id) ON DELETE CASCADE,
     batch_index INT NOT NULL,
     action_type TEXT NOT NULL DEFAULT 'update'
-        CHECK (action_type IN ('analyze', 'create', 'update', 'repair', 'merge', 'link', 'generate', 'finalize')),
+        CHECK (action_type IN ('analyze', 'audit', 'create', 'update', 'repair', 'merge', 'link', 'generate', 'finalize')),
     workflow TEXT NOT NULL DEFAULT '',
     target_type TEXT NOT NULL DEFAULT 'generic'
         CHECK (target_type IN ('blueprint_slot', 'question', 'exam', 'section', 'question_set', 'generic')),
