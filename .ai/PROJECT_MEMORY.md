@@ -95,6 +95,7 @@ Production-grade LMS SaaS untuk sekolah Indonesia. Multi-tenant, role-based, exa
 - Multi-tenant isolation mandatory
 - httpOnly secure cookies for browser sessions
 - No secrets in AI memory or logs
+- Kisi-kisi execution planner is now a supported backend capability: plan-first actions with batch execution, progress summary, and retry handling
 
 ## Reference
 
